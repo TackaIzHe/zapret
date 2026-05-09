@@ -23,15 +23,18 @@ class ThemeSubscriptionManager:
         source: str = "api",
     ) -> None:
         """Добавляет или скрывает отдельную Premium-метку в верхней панели."""
-        badge = self._ensure_subscription_title_badge()
-        if badge is None:
-            log(f"Premium-метка не обновлена: titleBar недоступен (source: {source})", "WARNING")
-            return
-
         if not is_premium:
+            badge = getattr(self, "_subscription_title_badge", None)
+            if badge is None:
+                return
             if badge.isVisible():
                 badge.hide()
                 log(f"Premium-метка скрыта (source: {source})", "DEBUG")
+            return
+
+        badge = self._ensure_subscription_title_badge()
+        if badge is None:
+            log(f"Premium-метка не обновлена: titleBar недоступен (source: {source})", "WARNING")
             return
 
         if badge.text() != PREMIUM_TITLE_BADGE_TEXT:
