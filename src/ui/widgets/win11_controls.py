@@ -29,6 +29,13 @@ from qfluentwidgets import (
     CaptionLabel as _CaptionLabel,
 )
 
+_HAS_INFO_BADGE = InfoBadge is not None and _InfoLevel is not None
+
+
+def _should_use_info_badge(info_badge_cls=InfoBadge, info_level_cls=_InfoLevel) -> bool:
+    return bool(_HAS_INFO_BADGE and info_badge_cls is not None and info_level_cls is not None)
+
+
 def _build_theme_refresh_key(tokens) -> tuple[str, str, str]:
     return (str(tokens.theme_name), str(tokens.accent_hex), str(tokens.font_family_qss))
 
@@ -198,7 +205,7 @@ class Win11RadioOption(QWidget):
         title_layout.addWidget(title_label)
 
         if recommended:
-            if _HAS_INFO_BADGE:
+            if _should_use_info_badge():
                 self._badge_label = InfoBadge(recommended_badge, level=_InfoLevel.ATTENTION)
             else:
                 self._badge_label = QLabel(recommended_badge)

@@ -37,6 +37,7 @@ class ProfileListPayload:
 class ProfileSetupPayload:
     item: ProfileListItem
     strategy_entries: dict[str, StrategyEntry]
+    strategy_states: dict[str, ProfileStrategyState]
     raw_profile_text: str
     raw_strategy_text: str
     match_summary: str

@@ -3,6 +3,7 @@ from __future__ import annotations
 import time as _time
 
 from main.runtime_state import log_startup_metric as emit_startup_metric
+from ui.window_adapter import show_page
 from ui.window_notification_center import WindowNotificationCenter
 
 
@@ -13,7 +14,8 @@ def attach_window_notifications(window, features) -> None:
         startup_state=window.startup_state,
         runtime_feature=features.runtime,
         show_tray_notification=features.tray.show_notification_if_available,
-        show_page=lambda page_name, *, allow_internal=False: window.show_page(
+        show_page=lambda page_name, *, allow_internal=False: show_page(
+            window,
             page_name,
             allow_internal=allow_internal,
         ),

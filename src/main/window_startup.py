@@ -6,6 +6,7 @@ from config.window_metrics import HEIGHT, WIDTH
 from log.log import log
 
 from main.runtime_state import (
+    log_startup_metric as emit_startup_metric,
     startup_elapsed_ms,
 )
 from main.window_close_state import WindowCloseState

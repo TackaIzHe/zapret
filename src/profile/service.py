@@ -98,9 +98,15 @@ class ProfilePresetService:
         catalogs = load_strategy_catalogs(self._app_paths, self._engine)
         strategy_entries = dict(_basic_strategy_entries(profile, catalogs))
         winws2_editable = read_winws2_editable_settings(profile) if self._engine == ENGINE_WINWS2 else Winws2EditableSettings()
+        strategy_states = {
+            strategy_id: self._state_store.get_strategy_state(profile.persistent_key, strategy_id)
+            for strategy_id in strategy_entries
+            if profile.persistent_key
+        }
         return ProfileSetupPayload(
             item=item,
             strategy_entries=strategy_entries,
+            strategy_states=strategy_states,
             raw_profile_text=_profile_raw_text(profile),
             raw_strategy_text="\n".join(getattr(profile.strategy, "strategy_lines", ()) or ()),
             match_summary=_match_summary(profile),

@@ -7,12 +7,15 @@ from main.startup_coordinator import StartupCoordinator, StartupWindowShell
 from main.window_startup_services import init_theme_manager
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class WindowStartupRuntime:
-    continue_deferred_init: object
+    continue_deferred_init: object | None = None
+    startup_coordinator: StartupCoordinator | None = None
 
 
 def attach_startup_deps_to_window(window, features) -> WindowStartupRuntime:
+    startup_runtime = WindowStartupRuntime()
+
     def _start_background_init() -> None:
         if window.startup_state.background_init_started:
             return
@@ -54,6 +57,7 @@ def attach_startup_deps_to_window(window, features) -> WindowStartupRuntime:
 
         features.premium.prepare_subscription()
         coordinator = _build_startup_coordinator()
+        startup_runtime.startup_coordinator = coordinator
         log(f"⏱ Startup: startup bootstrap {(_time.perf_counter() - bootstrap_started_at) * 1000:.0f}ms", "DEBUG")
 
         coordinator.run_async_init()
@@ -61,7 +65,8 @@ def attach_startup_deps_to_window(window, features) -> WindowStartupRuntime:
 
         window.finalize_ui_bootstrap_requested.emit()
 
-    return WindowStartupRuntime(continue_deferred_init=_continue_deferred_init)
+    startup_runtime.continue_deferred_init = _continue_deferred_init
+    return startup_runtime
 
 
 __all__ = ["attach_startup_deps_to_window"]

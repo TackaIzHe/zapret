@@ -21,6 +21,7 @@ from ui.workflows.mode import (
     apply_launch_method_changed_ui,
     show_active_mode_control_page,
 )
+from ui.window_adapter import show_page
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,7 +56,8 @@ def build_window_page_actions(*, window, appearance_actions) -> WindowPageAction
         request_exit=window.request_exit,
         open_connection_test=window.open_connection_test,
         open_folder=window.open_folder,
-        show_page=lambda page_name, *, allow_internal=False: window.show_page(
+        show_page=lambda page_name, *, allow_internal=False: show_page(
+            window,
             page_name,
             allow_internal=allow_internal,
         ),

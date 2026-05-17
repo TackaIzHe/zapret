@@ -73,6 +73,147 @@ class StartupRuntimeSetupTests(unittest.TestCase):
 
         self.assertTrue(callable(dns_feature.apply_dns_on_startup_async))
 
+    def test_window_startup_metrics_are_imported_for_interactive_ready(self) -> None:
+        import main.window_startup as window_startup
+
+        class Signal:
+            def __init__(self) -> None:
+                self.emitted: list[str] = []
+
+            def emit(self, value: str) -> None:
+                self.emitted.append(value)
+
+        window = object.__new__(window_startup.WindowStartupMixin)
+        window.startup_state = SimpleNamespace(
+            interactive_logged=False,
+            interactive_ms=None,
+            ttff_ms=None,
+        )
+        window.startup_interactive_ready = Signal()
+
+        with patch.object(window_startup, "emit_startup_metric") as metric:
+            window.mark_startup_interactive("test_ready")
+
+        metric.assert_called_once_with("StartupInteractive", "test_ready")
+        self.assertEqual(window.startup_interactive_ready.emitted, ["test_ready"])
+
+    def test_window_page_actions_route_pages_through_adapter(self) -> None:
+        from app.page_names import PageName
+        from main import window_page_actions
+        from main.window_page_actions import build_window_page_actions
+
+        window = SimpleNamespace(
+            set_status=Mock(),
+            window_notification_center=SimpleNamespace(notify=Mock()),
+            request_exit=Mock(),
+            open_connection_test=Mock(),
+            open_folder=Mock(),
+        )
+        appearance_actions = SimpleNamespace(
+            set_garland_enabled=Mock(),
+            set_snowflakes_enabled=Mock(),
+            set_window_opacity=Mock(),
+        )
+
+        with patch.object(window_page_actions, "show_page", return_value=True) as routed_show_page:
+            actions = build_window_page_actions(
+                window=window,
+                appearance_actions=appearance_actions,
+            )
+            self.assertTrue(actions.show_page(PageName.ABOUT, allow_internal=True))
+
+        routed_show_page.assert_called_once_with(window, PageName.ABOUT, allow_internal=True)
+
+    def test_window_notifications_route_pages_through_adapter(self) -> None:
+        from app.page_names import PageName
+        from main import window_notifications_setup
+        from main.window_notifications_setup import attach_window_notifications
+
+        captured: dict[str, object] = {}
+
+        class NotificationCenter:
+            def __init__(self, *_args, show_page, **_kwargs) -> None:
+                captured["show_page"] = show_page
+                self.notify = Mock()
+
+            def register_global_error_notifier(self) -> None:
+                pass
+
+        window = SimpleNamespace(
+            startup_state=object(),
+            isVisible=Mock(return_value=True),
+            isMinimized=Mock(return_value=False),
+            log_startup_metric=Mock(),
+        )
+        features = SimpleNamespace(
+            runtime=SimpleNamespace(configure_notifications=Mock()),
+            tray=SimpleNamespace(
+                show_notification_if_available=Mock(),
+                configure=Mock(),
+            ),
+        )
+
+        with (
+            patch.object(window_notifications_setup, "WindowNotificationCenter", NotificationCenter),
+            patch.object(window_notifications_setup, "show_page", return_value=True) as routed_show_page,
+        ):
+            attach_window_notifications(window, features)
+            self.assertTrue(captured["show_page"](PageName.SERVERS, allow_internal=True))
+
+        routed_show_page.assert_called_once_with(window, PageName.SERVERS, allow_internal=True)
+
+    def test_win11_radio_option_recommended_badge_does_not_require_global_flag(self) -> None:
+        import ui.widgets.win11_controls as win11_controls
+
+        class Badge:
+            def __init__(self, *_args, **_kwargs) -> None:
+                pass
+
+        self.assertTrue(hasattr(win11_controls, "_HAS_INFO_BADGE"))
+
+        with patch.object(win11_controls, "_HAS_INFO_BADGE", True):
+            self.assertTrue(win11_controls._should_use_info_badge(Badge, object()))
+
+        with patch.object(win11_controls, "_HAS_INFO_BADGE", False):
+            self.assertFalse(win11_controls._should_use_info_badge(Badge, object()))
+
+    def test_startup_runtime_keeps_coordinator_alive_for_queued_phase_two(self) -> None:
+        from main import startup_coordinator
+        from main.window_startup_setup import attach_startup_deps_to_window
+
+        signal = SimpleNamespace(emit=Mock())
+        window = SimpleNamespace(
+            start_in_tray=False,
+            set_status=Mock(),
+            mark_startup_interactive=Mock(),
+            mark_startup_core_ready=Mock(),
+            mark_startup_post_init_done=Mock(),
+            log_startup_metric=Mock(),
+            finalize_ui_bootstrap_requested=signal,
+        )
+        features = SimpleNamespace(
+            premium=SimpleNamespace(prepare_subscription=Mock()),
+            runtime=SimpleNamespace(
+                init_launch_runtime_api=Mock(),
+                init_launch_runtime=Mock(),
+                init_process_monitor=Mock(),
+                init_core_startup=Mock(),
+            ),
+            tray=SimpleNamespace(
+                init=Mock(),
+                is_initialized=Mock(return_value=False),
+            ),
+        )
+
+        runtime = attach_startup_deps_to_window(window, features)
+
+        with patch.object(startup_coordinator, "run_queued", side_effect=lambda _callback: None):
+            runtime.continue_deferred_init()
+
+        self.assertIsNotNone(runtime.startup_coordinator)
+        self.assertIsInstance(runtime.startup_coordinator, startup_coordinator.StartupCoordinator)
+        signal.emit.assert_called_once()
+
 
 class EarlyStartupCrashTests(unittest.TestCase):
     def test_early_startup_exception_hook_writes_crash_file_near_executable(self) -> None:

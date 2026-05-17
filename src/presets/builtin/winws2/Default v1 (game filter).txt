@@ -100,7 +100,7 @@
 --hostlist=lists/googlevideo.txt
 --payload=tls_client_hello
 --out-range=-d8
---lua-desync=multidisorder:pos=1,host+2,sld+2,sld+5,sniext+1,sniext+2,endhost-2:seqovl=1
+--lua-desync=multidisorder:seqovl=700:seqovl_pattern=tls_google:tcp_flags_unset=ack
 
 --new
 
