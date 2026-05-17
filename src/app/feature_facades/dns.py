@@ -6,6 +6,7 @@ from typing import Callable
 
 @dataclass(frozen=True, slots=True)
 class DnsFeature:
+    apply_dns_on_startup_async: Callable
     load_page_data: Callable
     refresh_dns_info: Callable
     apply_auto_dns: Callable
@@ -27,6 +28,7 @@ def build_dns_feature() -> DnsFeature:
     from dns import public as dns_public
 
     return DnsFeature(
+        apply_dns_on_startup_async=dns_public.apply_dns_on_startup_async,
         load_page_data=dns_public.load_page_data,
         refresh_dns_info=dns_public.refresh_dns_info,
         apply_auto_dns=dns_public.apply_auto_dns,

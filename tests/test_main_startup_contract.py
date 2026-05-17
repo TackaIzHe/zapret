@@ -66,6 +66,13 @@ class StartupRuntimeSetupTests(unittest.TestCase):
             ],
         )
 
+    def test_dns_feature_exposes_startup_dns_entrypoint(self) -> None:
+        from app.feature_facades.dns import build_dns_feature
+
+        dns_feature = build_dns_feature()
+
+        self.assertTrue(callable(dns_feature.apply_dns_on_startup_async))
+
 
 class EarlyStartupCrashTests(unittest.TestCase):
     def test_early_startup_exception_hook_writes_crash_file_near_executable(self) -> None:
