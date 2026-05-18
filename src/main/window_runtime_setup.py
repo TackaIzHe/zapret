@@ -13,6 +13,8 @@ from main.window_startup_signal_setup import (
 
 def attach_app_runtime_to_window(window, app_runtime, *, page_actions_factory) -> None:
     features = app_runtime.features
+    if hasattr(window, "bind_status_message_sink"):
+        window.bind_status_message_sink(app_runtime.state.ui.set_last_status_message)
     attach_window_lifecycle(window, features)
     attach_window_notifications(window, features)
     page_actions = page_actions_factory(window)

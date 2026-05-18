@@ -6,6 +6,7 @@ from PyQt6.QtCore import QThread, QTimer
 
 import diagnostics.page_plans as connection_page_plans
 from app.text_catalog import tr as tr_catalog
+from ui.fluent_widgets import set_tooltip
 
 
 def apply_interaction_state(
@@ -298,21 +299,24 @@ def apply_connection_language(
     start_btn.setText(tr_catalog("page.connection.button.start", language=language, default="Запустить тест"))
     stop_btn.setText(tr_catalog("page.connection.button.stop", language=language, default="Стоп"))
     send_log_btn.setText(tr_catalog("page.connection.button.send_log", language=language, default="Подготовить обращение"))
-    start_btn.setToolTip(
+    set_tooltip(
+        start_btn,
         tr_catalog(
             "page.connection.action.start.description",
             language=language,
             default="Запустить выбранный сценарий диагностики для Discord и YouTube.",
         )
     )
-    stop_btn.setToolTip(
+    set_tooltip(
+        stop_btn,
         tr_catalog(
             "page.connection.action.stop.description",
             language=language,
             default="Остановить текущий тест, если он уже запущен.",
         )
     )
-    send_log_btn.setToolTip(
+    set_tooltip(
+        send_log_btn,
         tr_catalog(
             "page.connection.action.support.description",
             language=language,

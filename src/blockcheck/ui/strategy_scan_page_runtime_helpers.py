@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from ui.fluent_widgets import InfoBarHelper
+from ui.fluent_widgets import InfoBarHelper, set_tooltip
 from app.text_catalog import tr as tr_catalog
 
 
@@ -69,14 +69,16 @@ def apply_language_plan_ui(
         actions_title_label.setText(
             tr_catalog("page.blockcheck_public.actions.title", language=language, default="Действия")
         )
-    start_btn.setToolTip(
+    set_tooltip(
+        start_btn,
         tr_catalog(
             "page.blockcheck_public.action.start.description",
             language=language,
             default="Запустить автоматический перебор стратегий обхода DPI для выбранной цели.",
         )
     )
-    stop_btn.setToolTip(
+    set_tooltip(
+        stop_btn,
         tr_catalog(
             "page.blockcheck_public.action.stop.description",
             language=language,
@@ -95,7 +97,7 @@ def apply_language_plan_ui(
         games_scope_combo.setItemText(1, plan.udp_scope_items[1])
     if quick_domain_btn is not None:
         quick_domain_btn.setText(plan.quick_domains_text)
-        quick_domain_btn.setToolTip(plan.quick_domains_tooltip)
+        set_tooltip(quick_domain_btn, plan.quick_domains_tooltip)
 
 
 def set_support_status(label, text: str) -> None:

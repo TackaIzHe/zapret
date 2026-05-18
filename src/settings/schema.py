@@ -222,6 +222,19 @@ def default_blobs() -> dict[str, Any]:
     }
 
 
+def default_folders() -> dict[str, Any]:
+    from folders.defaults import build_default_preset_folders, build_default_profile_folders
+
+    return {
+        "version": 1,
+        "presets": {
+            "winws2": build_default_preset_folders(),
+            "winws1": build_default_preset_folders(),
+        },
+        "profiles": build_default_profile_folders(),
+    }
+
+
 def build_default_settings() -> dict[str, Any]:
     return {
         "version": SETTINGS_VERSION,
@@ -240,4 +253,5 @@ def build_default_settings() -> dict[str, Any]:
         "blockcheck": default_blockcheck(),
         "preset_library": default_preset_library(),
         "blobs": default_blobs(),
+        "folders": default_folders(),
     }

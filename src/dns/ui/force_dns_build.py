@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ui.fluent_widgets import set_tooltip
+
 
 @dataclass(slots=True)
 class ForceDnsCardWidgets:
@@ -81,7 +83,8 @@ def build_force_dns_card_ui(
     )
     force_dns_reset_dhcp_btn.setFixedHeight(30)
     force_dns_reset_dhcp_btn.clicked.connect(on_confirm_reset)
-    force_dns_reset_dhcp_btn.setToolTip(
+    set_tooltip(
+        force_dns_reset_dhcp_btn,
         tr_fn(
             "page.network.force_dns.reset.description",
             "Отключить Force DNS и вернуть получение DNS через DHCP для всех адаптеров.",

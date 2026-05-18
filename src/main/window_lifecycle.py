@@ -8,6 +8,7 @@ from log.log import log
 from main.window_lifecycle_cleanup import (
     release_input_interaction_states,
 )
+from main.window_native_commands import handle_native_minimize_command
 from main.runtime_state import (
     log_startup_metric as emit_startup_metric,
     startup_elapsed_ms,
@@ -72,6 +73,11 @@ class WindowLifecycleMixin:
         """Скрывает окно в трей (без выхода из GUI)."""
         return self._require_application_lifecycle().close_to_tray()
 
+    def nativeEvent(self, event_type, message):  # noqa: N802 (Qt override)
+        if handle_native_minimize_command(self, message):
+            return (True, 0)
+        return super().nativeEvent(event_type, message)
+
     def changeEvent(self, event):
         event_type = event.type()
 
@@ -86,14 +92,6 @@ class WindowLifecycleMixin:
             geometry_runtime = self._get_window_geometry_runtime()
             if geometry_runtime is not None:
                 geometry_runtime.on_window_state_change()
-
-            try:
-                from settings.store import get_hide_to_tray_on_minimize_close
-
-                if get_hide_to_tray_on_minimize_close() and self.isMinimized():
-                    self.close_to_tray()
-            except Exception as e:
-                log(f"Не удалось скрыть окно в трей при сворачивании: {e}", "DEBUG")
 
             try:
                 visual_state = self._get_visual_state()

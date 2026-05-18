@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from PyQt6.QtWidgets import QWidget, QHBoxLayout
 
-from ui.fluent_widgets import QuickActionsBar, SettingsCard
+from ui.fluent_widgets import QuickActionsBar, SettingsCard, set_tooltip
 from diagnostics.ui.components import ConnectionStatusBadge, ScrollBlockingConnectionTextEdit
 from ui.log_limits import DIAGNOSTICS_LOG_VIEW_MAX_LINES, apply_text_line_limit
 from ui.theme import get_themed_qta_icon
@@ -126,7 +126,8 @@ def build_connection_controls(
     start_btn = push_button_cls()
     start_btn.setText(tr_fn("page.connection.button.start", "Запустить тест"))
     start_btn.setIcon(get_themed_qta_icon("fa5s.play", color="#4CAF50"))
-    start_btn.setToolTip(
+    set_tooltip(
+        start_btn,
         tr_fn(
             "page.connection.action.start.description",
             "Запустить выбранный сценарий диагностики для Discord и YouTube.",
@@ -138,7 +139,8 @@ def build_connection_controls(
     stop_btn = push_button_cls()
     stop_btn.setText(tr_fn("page.connection.button.stop", "Стоп"))
     stop_btn.setIcon(get_themed_qta_icon("fa5s.stop", color="#ff9800"))
-    stop_btn.setToolTip(
+    set_tooltip(
+        stop_btn,
         tr_fn(
             "page.connection.action.stop.description",
             "Остановить текущий тест, если он уже запущен.",
@@ -151,7 +153,8 @@ def build_connection_controls(
     send_log_btn = push_button_cls()
     send_log_btn.setText(tr_fn("page.connection.button.send_log", "Подготовить обращение"))
     send_log_btn.setIcon(get_themed_qta_icon("fa5b.github", color="#60cdff"))
-    send_log_btn.setToolTip(
+    set_tooltip(
+        send_log_btn,
         tr_fn(
             "page.connection.action.support.description",
             "Собрать архив логов и открыть готовое обращение в GitHub Discussions.",

@@ -11,7 +11,7 @@ from PyQt6.QtGui import QFont, QTextCursor
 
 from ui.pages.base_page import BasePage, ScrollBlockingTextEdit
 import dns.dns_check_plans as dns_check_page_plans
-from ui.fluent_widgets import QuickActionsBar, SettingsCard
+from ui.fluent_widgets import QuickActionsBar, SettingsCard, set_tooltip
 from ui.theme import get_cached_qta_pixmap, get_theme_tokens, get_themed_qta_icon
 from ui.theme_semantic import get_semantic_palette
 from app.text_catalog import tr as tr_catalog
@@ -139,7 +139,8 @@ class DNSCheckPage(BasePage):
         self.check_button = PushButton()
         self.check_button.setText(tr_catalog("page.dns_check.button.start", language=self._ui_language, default="Начать проверку"))
         self.check_button.setIcon(get_themed_qta_icon("fa5s.play", color="#4CAF50"))
-        self.check_button.setToolTip(
+        set_tooltip(
+            self.check_button,
             tr_catalog(
                 "page.dns_check.action.start.description",
                 language=self._ui_language,
@@ -152,7 +153,8 @@ class DNSCheckPage(BasePage):
         self.quick_check_button = PushButton()
         self.quick_check_button.setText(tr_catalog("page.dns_check.button.quick", language=self._ui_language, default="Быстрая проверка"))
         self.quick_check_button.setIcon(get_themed_qta_icon("fa5s.bolt", color="#60cdff"))
-        self.quick_check_button.setToolTip(
+        set_tooltip(
+            self.quick_check_button,
             tr_catalog(
                 "page.dns_check.action.quick.description",
                 language=self._ui_language,
@@ -165,7 +167,8 @@ class DNSCheckPage(BasePage):
         self.save_button = PushButton()
         self.save_button.setText(tr_catalog("page.dns_check.button.save", language=self._ui_language, default="Сохранить результаты"))
         self.save_button.setIcon(get_themed_qta_icon("fa5s.save", color="#ff9800"))
-        self.save_button.setToolTip(
+        set_tooltip(
+            self.save_button,
             tr_catalog(
                 "page.dns_check.action.save.description",
                 language=self._ui_language,
@@ -438,21 +441,24 @@ class DNSCheckPage(BasePage):
         self.check_button.setText(tr_catalog("page.dns_check.button.start", language=self._ui_language, default="Начать проверку"))
         self.quick_check_button.setText(tr_catalog("page.dns_check.button.quick", language=self._ui_language, default="Быстрая проверка"))
         self.save_button.setText(tr_catalog("page.dns_check.button.save", language=self._ui_language, default="Сохранить результаты"))
-        self.check_button.setToolTip(
+        set_tooltip(
+            self.check_button,
             tr_catalog(
                 "page.dns_check.action.start.description",
                 language=self._ui_language,
                 default="Полностью проверить DNS-резолвинг через разные серверы и собрать расширенный отчёт.",
             )
         )
-        self.quick_check_button.setToolTip(
+        set_tooltip(
+            self.quick_check_button,
             tr_catalog(
                 "page.dns_check.action.quick.description",
                 language=self._ui_language,
                 default="Сделать быстрый тест только текущего системного DNS без полного сценария.",
             )
         )
-        self.save_button.setToolTip(
+        set_tooltip(
+            self.save_button,
             tr_catalog(
                 "page.dns_check.action.save.description",
                 language=self._ui_language,

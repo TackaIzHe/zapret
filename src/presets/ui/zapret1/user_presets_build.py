@@ -12,6 +12,7 @@ from ui.presets_menu.delegate import PresetListDelegate
 from ui.presets_menu.model import PresetListModel
 from ui.presets_menu.toolbar import PresetsToolbarLayout
 from ui.presets_menu.view import LinkedWheelListView
+from ui.widgets.fluent_scrollbar import install_fluent_scrollbars
 
 
 @dataclass(slots=True)
@@ -55,6 +56,7 @@ def build_user_presets_page_shell(
     on_move_preset_by_step,
     on_item_dropped,
     on_preset_context_requested,
+    on_folder_context_requested,
     on_preset_list_action,
     ui_language: str,
 ):
@@ -173,6 +175,7 @@ def build_user_presets_page_shell(
     presets_list.preset_move_requested.connect(on_move_preset_by_step)
     presets_list.item_dropped.connect(on_item_dropped)
     presets_list.preset_context_requested.connect(on_preset_context_requested)
+    presets_list.folder_context_requested.connect(on_folder_context_requested)
     presets_list.setDragEnabled(True)
     presets_list.setAcceptDrops(True)
     presets_list.setDropIndicatorShown(True)
@@ -188,6 +191,7 @@ def build_user_presets_page_shell(
     presets_list.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
     presets_list.setFrameShape(QFrame.Shape.NoFrame)
     presets_list.verticalScrollBar().setSingleStep(28)
+    install_fluent_scrollbars(presets_list, vertical=True, horizontal=False)
 
     return UserPresetsPageBuildWidgets(
         configs_card=configs_card,

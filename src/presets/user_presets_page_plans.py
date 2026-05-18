@@ -18,10 +18,13 @@ def build_preset_rows_plan(
     active_file_name: str,
     language: str,
     hierarchy,
+    folder_state: dict[str, object] | None = None,
+    folder_scope: str = "winws2",
     empty_not_found_key: str,
     empty_none_key: str,
 ) -> UserPresetListPlan:
     from presets.icon_color import normalize_preset_icon_color
+    from presets.folders import build_preset_folder_rows, load_preset_folder_state
     from app.text_catalog import tr as tr_catalog
 
     normalized_query = str(query or "").strip().lower()
@@ -45,32 +48,24 @@ def build_preset_rows_plan(
             }
         )
 
-    ordered_names = hierarchy.list_presets_flat(
-        visible_entries,
-        is_builtin_resolver=lambda file_name: builtin_by_file.get(str(file_name or ""), False),
-    )
+    effective_folder_state = folder_state if folder_state is not None else load_preset_folder_state(folder_scope)
 
-    for file_name in ordered_names:
-        preset = all_presets.get(file_name)
-        if not preset:
-            continue
-        display_name = str(preset.get("display_name") or file_name).strip()
-        is_builtin = builtin_by_file.get(file_name, False)
-        meta = hierarchy.get_preset_meta(file_name)
-        rows.append(
-            {
-                "kind": "preset",
-                "name": display_name,
-                "file_name": file_name,
-                "description": str(preset.get("description") or ""),
-                "date": str(preset.get("modified_display") or ""),
-                "is_active": bool(file_name and file_name == str(active_file_name or "").strip()),
-                "is_builtin": is_builtin,
-                "icon_color": normalize_preset_icon_color(str(preset.get("icon_color") or "")),
-                "depth": 0,
-                "is_pinned": bool(meta.get("pinned", False)),
-                "rating": int(meta.get("rating", 0) or 0),
-            }
+    if visible_entries:
+        rows.extend(
+            build_preset_folder_rows(
+                all_presets={
+                    file_name: {
+                        **meta,
+                        "icon_color": normalize_preset_icon_color(str(meta.get("icon_color") or "")),
+                    }
+                    for file_name, meta in all_presets.items()
+                },
+                visible_entries=visible_entries,
+                hierarchy=hierarchy,
+                active_file_name=active_file_name,
+                folder_state=effective_folder_state,
+                query=normalized_query,
+            )
         )
 
     if not rows:

@@ -7,7 +7,6 @@ from ui.pages.base_page import BasePage
 from settings.mode import EXE_NAME_WINWS1, ZAPRET1_MODE
 from presets.ui.control.zapret1.build import (
     build_winws1_pages_management_section,
-    build_winws1_presets_section,
     build_winws1_pages_status_section,
 )
 from presets.ui.control.zapret1.deferred_build import (
@@ -21,12 +20,13 @@ from presets.ui.control.zapret1.runtime_helpers import (
     save_wssize_enabled,
     set_toggle_checked,
 )
+from presets.ui.control.shared_builders import build_last_status_message_card_common
 import presets.ui.control.control_runtime as control_runtime
+from presets.ui.control.control_page_runtime_shared import apply_last_status_message
 from presets.ui.control.windows_features.runtime import ControlPageWindowsFeatureMixin
 from ui.fluent_widgets import (
     ActionButton,
     PrimaryActionButton,
-    set_tooltip,
 )
 from app.state_store import AppUiState, MainWindowStateStore
 from presets.ui.control.control_page_shared import (
@@ -119,6 +119,10 @@ class Zapret1ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
         self.blobs_open_btn = None
         self.advanced_card = None
         self.advanced_notice = None
+        self.last_status_message_card = None
+        self.last_status_message_dot = None
+        self.last_status_message_title = None
+        self.last_status_message_label = None
         self.extra_card = None
         self.test_btn = None
         self.folder_btn = None
@@ -126,19 +130,9 @@ class Zapret1ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
         self.test_card = None
         self.folder_card = None
         self.docs_card = None
-        self.preset_setup_card = None
-        self.preset_setup_open_btn = None
         self._build_ui()
         self.bind_ui_state_store(ui_state_store)
-        try:
-            preset_name_text, preset_name_tooltip = self._load_preset_name()
-            if preset_name_text:
-                self.preset_name_label.setText(preset_name_text)
-                set_tooltip(self.preset_name_label, preset_name_tooltip)
-                if self.top_summary is not None:
-                    self.top_summary.set_preset(preset_name_text)
-        except Exception:
-            pass
+        self._refresh_preset_name()
         self.run_when_page_ready(self._run_deferred_show_work)
 
     def _open_docs(self) -> None:
@@ -222,20 +216,6 @@ class Zapret1ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
         self.loading_label = management_widgets.loading_label
         self.add_widget(management_widgets.card)
 
-        self.add_spacing(16)
-
-        # ── Ветка пресета: выбор пресета отдельно от настройки его профилей ──
-        self.add_section_title(text_key="page.winws1_control.section.presets")
-        preset_widgets = build_winws1_presets_section(
-            tr_fn=lambda key, default: tr_catalog(key, language=self._ui_language, default=default),
-            push_setting_card_cls=PushSettingCard,
-            on_open_presets=self._open_presets_callback,
-        )
-        self.preset_name_label = preset_widgets.title_label
-        self.preset_caption_label = preset_widgets.caption_label
-        self.presets_btn = preset_widgets.button
-        self.add_widget(preset_widgets.card)
-
     def _build_deferred_sections(self) -> None:
         self.add_spacing(8)
         from ui.widgets.win11_controls import Win11ToggleRow
@@ -247,7 +227,6 @@ class Zapret1ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
             push_setting_card_cls=PushSettingCard,
             setting_card_group_cls=SettingCardGroup,
             win11_toggle_row_cls=Win11ToggleRow,
-            on_open_preset_setup_page=self._open_preset_setup_page,
             on_auto_dpi_toggled=self._on_auto_dpi_toggled,
             on_hide_to_tray_toggled=self._on_hide_to_tray_toggled,
             on_defender_toggled=self._on_defender_toggled,
@@ -260,11 +239,6 @@ class Zapret1ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
             on_open_folder=self._open_folder,
             on_open_docs=self._open_docs,
         )
-        self.preset_setup_card = deferred_widgets.preset_setup_card
-        self.preset_setup_open_btn = deferred_widgets.preset_setup_open_btn
-        self.add_widget(self.preset_setup_card)
-
-        self.add_spacing(16)
         self.program_settings_section_label = deferred_widgets.program_settings_section_label
         self.program_settings_card = deferred_widgets.program_settings_card
         self.auto_dpi_toggle = deferred_widgets.auto_dpi_toggle
@@ -282,6 +256,19 @@ class Zapret1ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
         self.blobs_action_card = deferred_widgets.blobs_action_card
         self.blobs_open_btn = deferred_widgets.blobs_open_btn
         self.add_widget(self.advanced_card)
+
+        self.add_spacing(16)
+        last_message_widgets = build_last_status_message_card_common(
+            tr_fn=lambda key, default: tr_catalog(key, language=self._ui_language, default=default),
+            strong_body_label_cls=StrongBodyLabel,
+            caption_label_cls=CaptionLabel,
+        )
+        self.last_status_message_card = last_message_widgets.card
+        self.last_status_message_dot = last_message_widgets.dot
+        self.last_status_message_title = last_message_widgets.title_label
+        self.last_status_message_label = last_message_widgets.message_label
+        self.add_widget(self.last_status_message_card)
+        self._refresh_last_status_message()
 
         self.add_spacing(16)
         self.extra_card = deferred_widgets.extra_card
@@ -387,9 +374,7 @@ class Zapret1ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
             pass
 
     def _refresh_preset_name(self) -> None:
-        text, tooltip = self._load_preset_name()
-        self.preset_name_label.setText(text)
-        set_tooltip(self.preset_name_label, tooltip)
+        text, _tooltip = self._load_preset_name()
         if self.top_summary is not None:
             self.top_summary.set_preset(text)
 
@@ -474,6 +459,7 @@ class Zapret1ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
                 "launch_busy",
                 "launch_busy_text",
                 "launch_last_error",
+                "last_status_message",
                 "current_strategy_summary",
                 "active_preset_revision",
                 "preset_content_revision",
@@ -504,11 +490,34 @@ class Zapret1ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
         ):
             self._refresh_top_summary(state)
         self.set_loading(bool(state.launch_busy), str(state.launch_busy_text or ""))
+        if not changed or "last_status_message" in changed:
+            self._refresh_last_status_message(state)
         self.update_status(
             state.launch_phase or ("running" if state.launch_running else "stopped"),
             str(state.launch_last_error or ""),
         )
         self.update_strategy(str(state.current_strategy_summary or ""))
+
+    def _refresh_last_status_message(self, state: AppUiState | None = None) -> None:
+        if self.last_status_message_label is None or self.last_status_message_dot is None:
+            return
+        if state is None:
+            store = self._ui_state_store
+            try:
+                state = store.snapshot() if store is not None else None
+            except Exception:
+                state = None
+        message = getattr(state, "last_status_message", "") if state is not None else ""
+        apply_last_status_message(
+            str(message or ""),
+            message_label=self.last_status_message_label,
+            message_dot=self.last_status_message_dot,
+            empty_text=tr_catalog(
+                "page.control.last_message.empty",
+                language=self._ui_language,
+                default="Пока нет новых сообщений",
+            ),
+        )
 
     def _get_current_dpi_runtime_state(self) -> tuple[str, str]:
         """Берёт текущую фазу DPI из общего store, а не из видимости кнопок."""
@@ -557,15 +566,20 @@ class Zapret1ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
         if self.top_summary is not None:
             self.top_summary.set_language(self._ui_language)
             self._refresh_top_summary()
+        if self.last_status_message_title is not None:
+            self.last_status_message_title.setText(
+                tr_catalog(
+                    "page.control.last_message.title",
+                    language=self._ui_language,
+                    default="Последнее сообщение",
+                )
+            )
+            self._refresh_last_status_message()
         apply_winws1_pages_language(
             language=self._ui_language,
             start_btn=self.start_btn,
             stop_winws_btn=self.stop_winws_btn,
             stop_and_exit_btn=self.stop_and_exit_btn,
-            presets_btn=self.presets_btn,
-            preset_setup_open_btn=self.preset_setup_open_btn,
-            preset_caption_label=self.preset_caption_label,
-            preset_setup_card=self.preset_setup_card,
             program_settings_card=self.program_settings_card,
             auto_dpi_toggle=self.auto_dpi_toggle,
             hide_to_tray_toggle=self.hide_to_tray_toggle,

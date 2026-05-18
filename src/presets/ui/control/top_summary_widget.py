@@ -1,20 +1,25 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtWidgets import QSizePolicy, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QLabel, QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
 
 from qfluentwidgets import CaptionLabel, FlowLayout, StrongBodyLabel, SubtitleLabel
 
 from app.text_catalog import tr as tr_catalog
 from presets.ui.control.top_summary_plan import build_premium_summary, build_profiles_value
+from ui.theme import get_cached_qta_pixmap, get_theme_tokens
+from ui.theme_refresh import ThemeRefreshBinding
 
 
 class ControlTopSummaryItem(QWidget):
     clicked = pyqtSignal()
 
-    def __init__(self, *, prominent: bool = False, clickable: bool = False, parent=None):
+    def __init__(self, *, icon_name: str, prominent: bool = False, clickable: bool = False, parent=None):
         super().__init__(parent)
+        self._icon_name = str(icon_name or "fa5s.circle")
         self._clickable = bool(clickable)
+        self._icon_label = QLabel(self)
+        self._icon_label.setFixedSize(24, 24)
         self._caption_label = CaptionLabel(self)
         self._value_label = SubtitleLabel(self) if prominent else StrongBodyLabel(self)
         self._details_label = CaptionLabel(self)
@@ -24,14 +29,22 @@ class ControlTopSummaryItem(QWidget):
         if self._clickable:
             self.setCursor(Qt.CursorShape.PointingHandCursor)
 
-        layout = QVBoxLayout(self)
+        layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(2)
-        layout.addWidget(self._caption_label)
-        layout.addWidget(self._value_label)
-        layout.addWidget(self._details_label)
+        layout.setSpacing(10)
+        layout.addWidget(self._icon_label, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        text_layout = QVBoxLayout()
+        text_layout.setContentsMargins(0, 0, 0, 0)
+        text_layout.setSpacing(2)
+        text_layout.addWidget(self._caption_label)
+        text_layout.addWidget(self._value_label)
+        text_layout.addWidget(self._details_label)
+        layout.addLayout(text_layout, 1)
 
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        self._theme_refresh = ThemeRefreshBinding(self, self._apply_theme_refresh)
+        self._refresh_icon()
 
     def set_texts(self, *, caption: str, value: str, details: str = "") -> None:
         self._caption_label.setText(str(caption or ""))
@@ -44,6 +57,16 @@ class ControlTopSummaryItem(QWidget):
         if self._clickable and event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit()
         super().mousePressEvent(event)
+
+    def _refresh_icon(self, tokens=None) -> None:
+        theme_tokens = tokens or get_theme_tokens()
+        self._icon_label.setPixmap(
+            get_cached_qta_pixmap(self._icon_name, color=theme_tokens.accent_hex, size=22)
+        )
+
+    def _apply_theme_refresh(self, tokens=None, force: bool = False) -> None:
+        _ = force
+        self._refresh_icon(tokens)
 
 
 class ControlTopSummaryWidget(QWidget):
@@ -60,10 +83,26 @@ class ControlTopSummaryWidget(QWidget):
         self._is_premium = False
         self._premium_days: int | None = None
 
-        self.preset_item = ControlTopSummaryItem(prominent=True, clickable=True, parent=self)
-        self.profiles_item = ControlTopSummaryItem(clickable=True, parent=self)
-        self.mode_item = ControlTopSummaryItem(parent=self)
-        self.premium_item = ControlTopSummaryItem(clickable=True, parent=self)
+        self.preset_item = ControlTopSummaryItem(
+            icon_name="fa5s.folder-open",
+            prominent=True,
+            clickable=True,
+            parent=self,
+        )
+        self.profiles_item = ControlTopSummaryItem(
+            icon_name="fa5s.list-ul",
+            clickable=True,
+            parent=self,
+        )
+        self.mode_item = ControlTopSummaryItem(
+            icon_name="fa5s.shield-alt",
+            parent=self,
+        )
+        self.premium_item = ControlTopSummaryItem(
+            icon_name="fa5s.star",
+            clickable=True,
+            parent=self,
+        )
 
         self.preset_item.clicked.connect(self.presetClicked.emit)
         self.profiles_item.clicked.connect(self.profilesClicked.emit)

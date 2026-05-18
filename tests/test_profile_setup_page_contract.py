@@ -47,8 +47,18 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         self.assertIn("_ROLE_VISUAL_ICON_NAME", set_rows)
         self.assertIn("_ROLE_VISUAL_LABEL_TEXT", set_rows)
         self.assertIn("_ROLE_VISUAL_DESCRIPTION", set_rows)
+        self.assertIn("_ROLE_TOOLTIP_TEXT", set_rows)
         self.assertIn("visual.label", set_rows)
         self.assertIn("get_cached_qta_pixmap", paint)
+        self.assertNotIn("set" + "ToolTip", set_rows)
+
+    def test_strategy_list_uses_fluent_item_tooltip(self) -> None:
+        delegate_init = inspect.getsource(ProfileStrategyListDelegate.__init__)
+        help_event = inspect.getsource(ProfileStrategyListDelegate.helpEvent)
+
+        self.assertIn("FluentItemToolTipController", delegate_init)
+        self.assertIn("_ROLE_TOOLTIP_TEXT", help_event)
+        self.assertIn("show_text", help_event)
 
     def test_strategy_and_preset_lists_share_hover_row_painter(self) -> None:
         strategy_paint = inspect.getsource(ProfileStrategyListDelegate.paint)
@@ -58,6 +68,24 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         self.assertIn("profile_hover_row_rect", strategy_paint)
         self.assertIn("paint_profile_hover_row", preset_paint)
         self.assertIn("profile_hover_row_rect", preset_paint)
+
+    def test_strategy_list_uses_shared_fluent_scrollbar(self) -> None:
+        init = inspect.getsource(ProfileStrategyListWidget.__init__)
+
+        self.assertIn("install_fluent_scrollbars", init)
+        self.assertIn("ScrollPerPixel", init)
+
+    def test_profile_detail_header_is_compact_and_tooltipped(self) -> None:
+        build = inspect.getsource(ProfileSetupPageBase._build_content)
+        tooltips = inspect.getsource(ProfileSetupPageBase._install_profile_tooltips)
+
+        self.assertNotIn("TitleLabel", build)
+        self.assertNotIn("Настройки профиля", build)
+        self.assertIn("header_layout.addWidget(self._summary, 1)", build)
+        self.assertIn("header_layout.addWidget(self._enabled_checkbox", build)
+        self.assertIn("Краткое условие profile", tooltips)
+        self.assertIn("--in-range", tooltips)
+        self.assertIn("--out-range", tooltips)
 
     def test_clicking_active_strategy_applies_without_opening_detail_page(self) -> None:
         page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)

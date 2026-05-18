@@ -789,6 +789,28 @@ class UserPresetsPageRuntime:
         if source_kind != "preset":
             return False
 
+        from presets.folders import move_preset_before, move_preset_to_end, move_preset_to_folder
+
+        if destination_kind == "folder" and destination_id:
+            return move_preset_to_folder(self._config.hierarchy_scope, source_id, destination_id)
+
+        if destination_kind == "preset" and destination_id:
+            return move_preset_before(self._config.hierarchy_scope, source_id, destination_id)
+
+        return move_preset_to_end(self._config.hierarchy_scope, source_id)
+
+    def _move_preset_on_drop_legacy(
+        self,
+        *,
+        source_kind: str,
+        source_id: str,
+        destination_kind: str,
+        destination_id: str,
+        cached_metadata: dict[str, dict[str, object]] | None = None,
+    ) -> bool:
+        if source_kind != "preset":
+            return False
+
         hierarchy = self.get_hierarchy_store()
         all_names = self.list_preset_entries_light()
 
@@ -824,6 +846,7 @@ class UserPresetsPageRuntime:
             active_file_name=active_file_name,
             language=language,
             hierarchy=self.get_hierarchy_store(),
+            folder_scope=self._config.hierarchy_scope,
             empty_not_found_key=self._config.empty_not_found_key,
             empty_none_key=self._config.empty_none_key,
         )

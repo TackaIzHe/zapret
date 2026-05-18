@@ -312,6 +312,15 @@ def set_blobs_settings(values: dict[str, Any]) -> dict[str, Any]:
     return copy.deepcopy(updated["blobs"])
 
 
+def get_folders_settings() -> dict[str, Any]:
+    return copy.deepcopy(read_settings()["folders"])
+
+
+def set_folders_settings(values: dict[str, Any]) -> dict[str, Any]:
+    updated = _update_settings(lambda data: _set_path_value(data, ("folders",), _as_dict(values)))
+    return copy.deepcopy(updated["folders"])
+
+
 def get_orchestra_settings() -> dict[str, Any]:
     return copy.deepcopy(read_settings()["orchestra"]["settings"])
 
@@ -1151,6 +1160,7 @@ __all__ = [
     "get_editor_smooth_scroll_enabled",
     "get_follow_windows_accent",
     "get_force_dns_enabled",
+    "get_folders_settings",
     "get_garland_enabled",
     "get_gui_autostart_enabled",
     "get_hosts_bootstrap_signature",
@@ -1235,6 +1245,7 @@ __all__ = [
     "set_editor_smooth_scroll_enabled",
     "set_follow_windows_accent",
     "set_force_dns_enabled",
+    "set_folders_settings",
     "set_garland_enabled",
     "set_gui_autostart_enabled",
     "set_hosts_bootstrap_signature",

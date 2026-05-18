@@ -4,6 +4,8 @@ import sys
 import tempfile
 import types
 import unittest
+from ctypes import addressof
+from ctypes import wintypes
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -232,6 +234,30 @@ class StartupRuntimeSetupTests(unittest.TestCase):
         with patch.object(win11_controls, "_HAS_INFO_BADGE", False):
             self.assertFalse(win11_controls._should_use_info_badge(Badge, object()))
 
+    def test_hide_window_hides_without_changing_window_state(self) -> None:
+        from PyQt6.QtCore import Qt
+        from ui.window_adapter import hide_window
+
+        calls: list[str] = []
+
+        class Window:
+            def windowState(self):
+                return Qt.WindowState.WindowMinimized | Qt.WindowState.WindowMaximized
+
+            def setWindowState(self, state) -> None:
+                calls.append(f"state:{int(state.value)}")
+                self.state = state
+
+            def hide(self) -> None:
+                calls.append("hide")
+
+        window = Window()
+
+        hide_window(window)
+
+        self.assertEqual(calls, ["hide"])
+        self.assertFalse(hasattr(window, "state"))
+
     def test_startup_runtime_keeps_coordinator_alive_for_queued_phase_two(self) -> None:
         from main import startup_coordinator
         from main.window_startup_setup import attach_startup_deps_to_window
@@ -295,6 +321,10 @@ class EarlyStartupCrashTests(unittest.TestCase):
 
 
 class _BaseWindowEvents:
+    def nativeEvent(self, event_type, message):
+        self.calls.append("base_native")
+        return (False, 123)
+
     def changeEvent(self, event) -> None:
         self.calls.append("base_change")
 
@@ -364,30 +394,57 @@ class WindowLifecycleEarlyEventTests(unittest.TestCase):
         window.window_notification_center.schedule_startup_notification_queue.assert_called_once_with(0)
         self.assertTrue(window.startup_state.ttff_logged)
 
-    def test_minimize_hides_to_tray_when_window_setting_is_enabled(self) -> None:
-        from PyQt6.QtCore import QEvent
-
+    def test_native_minimize_command_hides_to_tray_when_window_setting_is_enabled(self) -> None:
+        from main.window_native_commands import SC_MINIMIZE, WM_SYSCOMMAND
         from main.window_lifecycle import WindowLifecycleMixin
 
         class Window(WindowLifecycleMixin, _BaseWindowEvents):
             def __init__(self) -> None:
                 self.calls: list[str] = []
-                self.window_geometry_runtime = SimpleNamespace(on_window_state_change=Mock())
-                self.visual_state = SimpleNamespace(holiday_effects=None)
-                self.close_to_tray = Mock(return_value=True)
+                self.close_to_tray = Mock(side_effect=self._close_to_tray)
 
-            def isMinimized(self) -> bool:
+            def _close_to_tray(self) -> bool:
+                self.calls.append("hide_to_tray")
                 return True
 
-        event = SimpleNamespace(type=Mock(return_value=QEvent.Type.WindowStateChange))
+        msg = wintypes.MSG()
+        msg.message = WM_SYSCOMMAND
+        msg.wParam = SC_MINIMIZE
         window = Window()
 
-        with patch("settings.store.get_hide_to_tray_on_minimize_close", return_value=True, create=True):
-            window.changeEvent(event)
+        with (
+            patch("settings.store.get_hide_to_tray_on_minimize_close", return_value=True, create=True),
+            patch("main.window_native_commands.sys.platform", "win32"),
+        ):
+            result = window.nativeEvent(b"windows_generic_MSG", int(addressof(msg)))
 
-        window.window_geometry_runtime.on_window_state_change.assert_called_once()
+        self.assertEqual(result, (True, 0))
         window.close_to_tray.assert_called_once()
-        self.assertEqual(window.calls, ["base_change"])
+        self.assertEqual(window.calls, ["hide_to_tray"])
+
+    def test_native_minimize_command_uses_normal_window_flow_when_setting_is_disabled(self) -> None:
+        from main.window_native_commands import SC_MINIMIZE, WM_SYSCOMMAND
+        from main.window_lifecycle import WindowLifecycleMixin
+
+        class Window(WindowLifecycleMixin, _BaseWindowEvents):
+            def __init__(self) -> None:
+                self.calls: list[str] = []
+                self.close_to_tray = Mock(return_value=True)
+
+        msg = wintypes.MSG()
+        msg.message = WM_SYSCOMMAND
+        msg.wParam = SC_MINIMIZE
+        window = Window()
+
+        with (
+            patch("settings.store.get_hide_to_tray_on_minimize_close", return_value=False, create=True),
+            patch("main.window_native_commands.sys.platform", "win32"),
+        ):
+            result = window.nativeEvent(b"windows_generic_MSG", int(addressof(msg)))
+
+        self.assertEqual(result, (False, 123))
+        window.close_to_tray.assert_not_called()
+        self.assertEqual(window.calls, ["base_native"])
 
 
 class WindowsSessionShutdownTests(unittest.TestCase):

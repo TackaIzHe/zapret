@@ -9,7 +9,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
 from qfluentwidgets import BodyLabel, CaptionLabel, LineEdit, PrimaryPushButton, PushButton
 
-from ui.fluent_widgets import SettingsCard, RefreshButton, QuickActionsBar
+from ui.fluent_widgets import SettingsCard, RefreshButton, QuickActionsBar, set_tooltip
 from ui.theme import get_themed_qta_icon
 
 
@@ -158,7 +158,8 @@ def build_premium_actions_section(
 ) -> PremiumActionsWidgets:
     refresh_btn = RefreshButton(tr("page.premium.button.refresh_status", "Обновить статус"))
     refresh_btn.clicked.connect(on_check_status)
-    refresh_btn.setToolTip(
+    set_tooltip(
+        refresh_btn,
         tr(
             "page.premium.action.refresh_status.description",
             "Повторно запросить Premium-статус и обновить данные устройства.",
@@ -171,7 +172,8 @@ def build_premium_actions_section(
     change_key_btn = PushButton()
     change_key_btn.setText(tr("page.premium.button.reset_activation", "Сбросить активацию"))
     change_key_btn.setIcon(get_themed_qta_icon("fa5s.exchange-alt", color="#ff9800"))
-    change_key_btn.setToolTip(
+    set_tooltip(
+        change_key_btn,
         tr(
             "page.premium.action.reset_activation.description",
             "Удалить токен устройства, офлайн-кэш и код привязки на этом компьютере.",
@@ -183,7 +185,8 @@ def build_premium_actions_section(
     test_btn = PushButton()
     test_btn.setText(tr("page.premium.button.test_connection", "Проверить соединение"))
     test_btn.setIcon(get_themed_qta_icon("fa5s.plug", color="#60cdff"))
-    test_btn.setToolTip(
+    set_tooltip(
+        test_btn,
         tr(
             "page.premium.action.test_connection.description",
             "Проверить доступность Premium backend и соединение с сервером.",
@@ -195,7 +198,8 @@ def build_premium_actions_section(
     extend_btn = PrimaryPushButton()
     extend_btn.setText(tr("page.premium.button.extend", "Продлить подписку"))
     extend_btn.setIcon(get_themed_qta_icon("fa5b.telegram", color="#229ED9"))
-    extend_btn.setToolTip(
+    set_tooltip(
+        extend_btn,
         tr(
             "page.premium.action.extend.description",
             "Открыть Telegram-бота для продления подписки или покупки Premium.",

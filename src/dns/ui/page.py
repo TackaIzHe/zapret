@@ -298,7 +298,8 @@ class NetworkPage(BasePage):
             self.force_dns_reset_dhcp_btn.setText(
                 self._tr("page.network.force_dns.reset.button", "Сбросить DNS на DHCP")
             )
-            self.force_dns_reset_dhcp_btn.setToolTip(
+            set_tooltip(
+                self.force_dns_reset_dhcp_btn,
                 self._tr(
                     "page.network.force_dns.reset.description",
                     "Отключить Force DNS и вернуть получение DNS через DHCP для всех адаптеров.",

@@ -61,6 +61,28 @@ def apply_status_plan(
     return plan.phase == "running"
 
 
+def status_message_dot_color(message: str) -> str:
+    text = str(message or "").lower()
+    if any(marker in text for marker in ("ошибка", "не удалось", "выключен", "останов")):
+        return "#f5c04d"
+    if any(marker in text for marker in ("успешно", "включена", "включен", "запущен", "готово")):
+        return "#4cc38a"
+    return "#8ab4f8"
+
+
+def apply_last_status_message(
+    message: str,
+    *,
+    message_label,
+    message_dot,
+    empty_text: str,
+) -> None:
+    text = str(message or "").strip() or str(empty_text or "")
+    message_label.setText(text)
+    message_dot.set_color(status_message_dot_color(text))
+    message_dot.stop_pulse()
+
+
 def run_confirmation_dialog(dialog_plan, *, message_box_cls, parent_widget, toggle=None) -> bool:
     box = message_box_cls(dialog_plan.title, dialog_plan.content, parent_widget)
     if box.exec():

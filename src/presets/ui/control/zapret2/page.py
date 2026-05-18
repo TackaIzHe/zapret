@@ -9,7 +9,6 @@ from ui.pages.base_page import BasePage
 from settings.mode import ZAPRET2_MODE
 from presets.ui.control.zapret2.build import (
     build_winws2_pages_management_section,
-    build_winws2_presets_section,
     build_winws2_pages_status_section,
 )
 from presets.ui.control.zapret2.deferred_build import (
@@ -23,11 +22,11 @@ from presets.ui.control.zapret2.runtime_helpers import (
     set_toggle_checked,
     sync_profile_ui_mode_label,
 )
+from presets.ui.control.shared_builders import build_last_status_message_card_common
 from ui.fluent_widgets import (
     ActionButton,
     PrimaryActionButton,
     enable_setting_card_group_auto_height,
-    set_tooltip,
 )
 from app.state_store import AppUiState, MainWindowStateStore
 from presets.ui.control.control_page_shared import (
@@ -35,6 +34,7 @@ from presets.ui.control.control_page_shared import (
     bind_control_ui_state_store,
     cleanup_control_page_subscriptions,
 )
+from presets.ui.control.control_page_runtime_shared import apply_last_status_message
 from app.text_catalog import tr as tr_catalog
 from presets.ui.control.windows_features.runtime import ControlPageWindowsFeatureMixin
 from presets.ui.control.top_summary_widget import ControlTopSummaryWidget
@@ -219,7 +219,6 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
         self.profile_ui_mode_label = None
         self.profile_ui_mode_caption = None
         self.top_summary = None
-        self.preset_setup_open_btn = None
         self.profile_ui_mode_btn = None
         self.program_settings_card = None
         self.auto_dpi_toggle = None
@@ -234,6 +233,10 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
         self.blobs_open_btn = None
         self.advanced_card = None
         self.advanced_notice = None
+        self.last_status_message_card = None
+        self.last_status_message_dot = None
+        self.last_status_message_title = None
+        self.last_status_message_label = None
         self.extra_section_label = None
         self.extra_card = None
         self.test_card = None
@@ -294,15 +297,11 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
         )
 
         try:
-            preset_name_text, preset_name_tooltip = self._load_selected_preset_name()
+            preset_name_text, _preset_name_tooltip = self._load_selected_preset_name()
         except Exception:
             preset_name_text = ""
-            preset_name_tooltip = ""
 
         text = str(preset_name_text or "").strip() or default_text
-        tooltip = str(preset_name_tooltip or "").strip()
-        self.preset_name_label.setText(text)
-        set_tooltip(self.preset_name_label, tooltip)
         if self.top_summary is not None:
             self.top_summary.set_preset(text)
 
@@ -433,23 +432,6 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
         self.add_widget(management_widgets.card)
         _log_startup_winws2_control_metric("_build_ui.control_card", (_time.perf_counter() - _t_control) * 1000)
 
-        self.add_spacing(16)
-
-        # ── Ветка пресета: выбор пресета отдельно от настройки его профилей ──
-        _t_preset = _time.perf_counter()
-        preset_widgets = build_winws2_presets_section(
-            add_section_title=self.add_section_title,
-            tr_fn=lambda key, default: tr_catalog(key, language=self._ui_language, default=default),
-            push_setting_card_cls=PushSettingCard,
-            on_open_presets=self._open_presets_callback,
-        )
-        self.preset_section_label = preset_widgets.section_label
-        self.preset_card = preset_widgets.card
-        self.preset_name_label = preset_widgets.preset_name_label
-        self.current_preset_caption = preset_widgets.current_preset_caption
-        self.presets_btn = preset_widgets.presets_btn
-        self.add_widget(preset_widgets.card)
-        _log_startup_winws2_control_metric("_build_ui.preset_card", (_time.perf_counter() - _t_preset) * 1000)
         _log_startup_winws2_control_metric("_build_ui.total", (_time.perf_counter() - _t_total) * 1000)
 
     def _build_deferred_sections(self) -> None:
@@ -463,7 +445,6 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
             setting_card_group_cls=SettingCardGroup,
             push_setting_card_cls=PushSettingCard,
             win11_toggle_row_cls=Win11ToggleRow,
-            on_open_preset_setup_page=self._open_preset_setup_page,
             on_open_profile_ui_mode_dialog=self._open_profile_ui_mode_dialog,
             on_auto_dpi_toggled=self._on_auto_dpi_toggled,
             on_hide_to_tray_toggled=self._on_hide_to_tray_toggled,
@@ -478,13 +459,9 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
             on_open_docs=self._open_docs,
         )
 
-        self.preset_setup_section_label = deferred_widgets.preset_setup_section_label
-        self.preset_setup_card = deferred_widgets.preset_setup_card
         self.profile_ui_mode_label = deferred_widgets.profile_ui_mode_label
         self.profile_ui_mode_caption = deferred_widgets.profile_ui_mode_caption
-        self.preset_setup_open_btn = deferred_widgets.preset_setup_open_btn
         self.profile_ui_mode_btn = deferred_widgets.profile_ui_mode_btn
-        self.add_widget(self.preset_setup_card)
 
         self.program_settings_section_label = deferred_widgets.program_settings_section_label
         self.program_settings_card = deferred_widgets.program_settings_card
@@ -508,6 +485,20 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
         self.add_spacing(16)
         self.add_widget(self.advanced_card)
 
+        self.add_spacing(16)
+        last_message_widgets = build_last_status_message_card_common(
+            tr_fn=lambda key, default: tr_catalog(key, language=self._ui_language, default=default),
+            strong_body_label_cls=StrongBodyLabel,
+            caption_label_cls=CaptionLabel,
+        )
+        self.last_status_message_card = last_message_widgets.card
+        self.last_status_message_dot = last_message_widgets.dot
+        self.last_status_message_title = last_message_widgets.title_label
+        self.last_status_message_label = last_message_widgets.message_label
+        self.add_widget(self.last_status_message_card)
+        self._refresh_last_status_message()
+
+        self.add_spacing(16)
         self.extra_section_label = deferred_widgets.extra_section_label
         self.extra_card = deferred_widgets.extra_card
         self.test_card = deferred_widgets.test_card
@@ -660,6 +651,7 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
                 "launch_busy",
                 "launch_busy_text",
                 "launch_last_error",
+                "last_status_message",
                 "current_strategy_summary",
                 "active_preset_revision",
                 "preset_content_revision",
@@ -695,12 +687,35 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
                 self._schedule_advanced_settings_reload(force=True)
             else:
                 self.run_when_page_ready(self._apply_pending_mode_refresh_if_ready)
+        if not changed or "last_status_message" in changed:
+            self._refresh_last_status_message(state)
         self.set_loading(bool(state.launch_busy), str(state.launch_busy_text or ""))
         self.update_status(
             state.launch_phase or ("running" if state.launch_running else "stopped"),
             str(state.launch_last_error or ""),
         )
         self.update_strategy(str(state.current_strategy_summary or ""))
+
+    def _refresh_last_status_message(self, state: AppUiState | None = None) -> None:
+        if self.last_status_message_label is None or self.last_status_message_dot is None:
+            return
+        if state is None:
+            store = self._ui_state_store
+            try:
+                state = store.snapshot() if store is not None else None
+            except Exception:
+                state = None
+        message = getattr(state, "last_status_message", "") if state is not None else ""
+        apply_last_status_message(
+            str(message or ""),
+            message_label=self.last_status_message_label,
+            message_dot=self.last_status_message_dot,
+            empty_text=tr_catalog(
+                "page.control.last_message.empty",
+                language=self._ui_language,
+                default="Пока нет новых сообщений",
+            ),
+        )
 
     def update_status(self, state: str | bool, last_error: str = ""):
         plan = zapret2_page_runtime.build_status_plan(
@@ -728,18 +743,24 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
         if self.top_summary is not None:
             self.top_summary.set_language(self._ui_language)
             self._refresh_top_summary()
+        if self.last_status_message_title is not None:
+            self.last_status_message_title.setText(
+                tr_catalog(
+                    "page.control.last_message.title",
+                    language=self._ui_language,
+                    default="Последнее сообщение",
+                )
+            )
+            self._refresh_last_status_message()
         apply_profile_language(
             language=self._ui_language,
             start_btn=self.start_btn,
             stop_and_exit_btn=self.stop_and_exit_btn,
-            presets_btn=self.presets_btn,
-            preset_setup_open_btn=self.preset_setup_open_btn,
             profile_ui_mode_btn=self.profile_ui_mode_btn,
             blobs_open_btn=self.blobs_open_btn,
             test_card=self.test_card,
             folder_card=self.folder_card,
             docs_card=self.docs_card,
-            current_preset_caption=self.current_preset_caption,
             profile_ui_mode_caption=self.profile_ui_mode_caption,
             advanced_notice=self.advanced_notice,
             program_settings_card=self.program_settings_card,

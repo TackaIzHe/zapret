@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from PyQt6.QtWidgets import QWidget, QVBoxLayout
 
-from ui.fluent_widgets import QuickActionsBar, RefreshButton
+from ui.fluent_widgets import QuickActionsBar, RefreshButton, set_tooltip
 from ui.theme import get_theme_tokens, get_themed_qta_icon
 from qfluentwidgets import BodyLabel, PushButton, PrimaryPushButton
 
@@ -57,7 +57,8 @@ def build_profile_shell(
     )
     request_btn.setIcon(get_themed_qta_icon("fa5b.github", color=get_theme_tokens().accent_hex))
     request_btn.clicked.connect(on_open_profile_request_form)
-    request_btn.setToolTip(
+    set_tooltip(
+        request_btn,
         tr_fn(
             request_hint_key,
             f"Хотите добавить новый сайт или сервис в {engine_label}? Откройте готовую форму на GitHub и опишите, что нужно добавить в hostlist или ipset.",
@@ -67,7 +68,8 @@ def build_profile_shell(
 
     reload_btn = RefreshButton()
     reload_btn.clicked.connect(on_reload)
-    reload_btn.setToolTip(
+    set_tooltip(
+        reload_btn,
         tr_fn(
             _toolbar_key("reload.description"),
             "Обновить список профилей и выбранных готовых стратегий.",
@@ -79,7 +81,8 @@ def build_profile_shell(
     expand_btn.setText(tr_fn(_toolbar_key("expand"), "Развернуть"))
     expand_btn.setIcon(get_themed_qta_icon("fa5s.expand-alt", color="#4CAF50"))
     expand_btn.clicked.connect(on_expand_all)
-    expand_btn.setToolTip(
+    set_tooltip(
+        expand_btn,
         tr_fn(
             _toolbar_key("expand.description"),
             "Развернуть все группы профилей в списке.",
@@ -91,7 +94,8 @@ def build_profile_shell(
     collapse_btn.setText(tr_fn(_toolbar_key("collapse"), "Свернуть"))
     collapse_btn.setIcon(get_themed_qta_icon("fa5s.compress-alt", color="#ff9800"))
     collapse_btn.clicked.connect(on_collapse_all)
-    collapse_btn.setToolTip(
+    set_tooltip(
+        collapse_btn,
         tr_fn(
             _toolbar_key("collapse.description"),
             "Свернуть все группы профилей в списке.",
@@ -103,7 +107,8 @@ def build_profile_shell(
     info_btn.setText(tr_fn(_toolbar_key("info"), "Что это такое?"))
     info_btn.setIcon(get_themed_qta_icon("fa5s.question-circle", color="#60cdff"))
     info_btn.clicked.connect(on_show_info_popup)
-    info_btn.setToolTip(
+    set_tooltip(
+        info_btn,
         tr_fn(
             _toolbar_key("info.description"),
             f"Показать краткое объяснение по работе режима профилей {engine_label}.",

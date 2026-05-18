@@ -9,9 +9,10 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QHBoxLayout, QHeaderView
 from qfluentwidgets import CaptionLabel
 
-from ui.fluent_widgets import ActionButton, QuickActionsBar, SettingsCard
+from ui.fluent_widgets import ActionButton, QuickActionsBar, SettingsCard, set_tooltip
 from ui.log_limits import BLOCKCHECK_LOG_VIEW_MAX_LINES, apply_text_line_limit
 from ui.pages.base_page import ScrollBlockingTextEdit
+from ui.widgets.fluent_item_tooltip import install_fluent_item_tooltips
 
 
 @dataclass(slots=True)
@@ -146,7 +147,8 @@ def build_strategy_scan_control_section(
         tr_fn("page.strategy_scan.quick_domains", "Быстрый выбор"),
         icon_name="fa5s.list",
     )
-    quick_domain_btn.setToolTip(
+    set_tooltip(
+        quick_domain_btn,
         tr_fn("page.strategy_scan.quick_domains_hint", "Выберите домен из готового списка")
     )
     quick_domain_btn.clicked.connect(on_show_quick_domains_menu)
@@ -180,7 +182,8 @@ def build_strategy_scan_control_section(
     start_btn = push_button_cls()
     start_btn.setText(tr_fn("page.strategy_scan.start", "Начать сканирование"))
     start_btn.setIcon(get_themed_qta_icon("fa5s.search", color="#4CAF50"))
-    start_btn.setToolTip(
+    set_tooltip(
+        start_btn,
         tr_fn(
             "page.strategy_scan.action.start.description",
             "Запустить автоматический перебор стратегий обхода DPI для выбранной цели.",
@@ -192,7 +195,8 @@ def build_strategy_scan_control_section(
     stop_btn = push_button_cls()
     stop_btn.setText(tr_fn("page.strategy_scan.stop", "Остановить"))
     stop_btn.setIcon(get_themed_qta_icon("fa5s.stop", color="#ff9800"))
-    stop_btn.setToolTip(
+    set_tooltip(
+        stop_btn,
         tr_fn(
             "page.strategy_scan.action.stop.description",
             "Остановить текущее сканирование стратегий и вернуть страницу в обычный режим.",
@@ -240,6 +244,7 @@ def build_strategy_scan_results_section(*, tr_fn, table_cls) -> StrategyScanResu
     table.setSelectionBehavior(table_cls.SelectionBehavior.SelectRows)
     table.setMinimumHeight(250)
     table.verticalHeader().setVisible(False)
+    install_fluent_item_tooltips(table)
 
     try:
         header = table.horizontalHeader()

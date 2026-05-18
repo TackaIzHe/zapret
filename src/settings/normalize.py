@@ -507,6 +507,22 @@ def normalize_blobs(data: object) -> dict[str, Any]:
     return {"user_blobs": user_blobs}
 
 
+def normalize_folders(data: object) -> dict[str, Any]:
+    from folders.defaults import build_default_preset_folders, build_default_profile_folders
+    from folders.store import normalize_folder_state
+
+    raw = as_dict(data)
+    raw_presets = as_dict(raw.get("presets"))
+    return {
+        "version": 1,
+        "presets": {
+            "winws2": normalize_folder_state(raw_presets.get("winws2"), build_default_preset_folders()),
+            "winws1": normalize_folder_state(raw_presets.get("winws1"), build_default_preset_folders()),
+        },
+        "profiles": normalize_folder_state(raw.get("profiles"), build_default_profile_folders()),
+    }
+
+
 def normalize_settings(data: object) -> dict[str, Any]:
     raw = as_dict(data)
     return {
@@ -526,4 +542,5 @@ def normalize_settings(data: object) -> dict[str, Any]:
         "blockcheck": normalize_blockcheck(raw.get("blockcheck")),
         "preset_library": normalize_preset_library(raw.get("preset_library")),
         "blobs": normalize_blobs(raw.get("blobs")),
+        "folders": normalize_folders(raw.get("folders")),
     }

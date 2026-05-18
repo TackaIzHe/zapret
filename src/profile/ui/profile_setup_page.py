@@ -36,18 +36,24 @@ from qfluentwidgets import (
     PlainTextEdit,
     SearchLineEdit,
     SegmentedWidget,
-    TitleLabel,
     PushButton,
 )
 from settings.mode import ZAPRET1_MODE, ZAPRET2_MODE, is_zapret2_launch_method
 from ui.pages.base_page import BasePage
+from ui.fluent_widgets import set_tooltip
 from app.text_catalog import tr as tr_catalog
 from ui.theme import get_cached_qta_pixmap, get_theme_tokens, to_qcolor
+from ui.widgets.fluent_item_tooltip import FluentItemToolTipController
+from ui.widgets.fluent_scrollbar import install_fluent_scrollbars
 from ui.widgets.hover_row import paint_profile_hover_row, profile_hover_row_rect
 
 
 class ProfileStrategyListDelegate(QStyledItemDelegate):
     """Рисует готовые стратегии как единый текстовый список."""
+
+    def __init__(self, view: QListWidget):
+        super().__init__(view)
+        self._tooltip = FluentItemToolTipController(view.viewport())
 
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:
         painter.save()
@@ -142,6 +148,15 @@ class ProfileStrategyListDelegate(QStyledItemDelegate):
         _ = (option, index)
         return QSize(0, 31)
 
+    def helpEvent(self, event, view, option, index: QModelIndex) -> bool:  # noqa: N802
+        _ = (view, option)
+        text = str(index.data(ProfileStrategyListWidget._ROLE_TOOLTIP_TEXT) or "").strip()
+        if not text:
+            self._tooltip.hide()
+            return True
+        self._tooltip.show_text(text, event.globalPos())
+        return True
+
 
 class ProfileStrategyListWidget(QWidget):
     """Большой список готовых стратегий для profile."""
@@ -156,6 +171,7 @@ class ProfileStrategyListWidget(QWidget):
     _ROLE_VISUAL_COLOR = int(Qt.ItemDataRole.UserRole) + 6
     _ROLE_VISUAL_LABEL_TEXT = int(Qt.ItemDataRole.UserRole) + 7
     _ROLE_VISUAL_DESCRIPTION = int(Qt.ItemDataRole.UserRole) + 8
+    _ROLE_TOOLTIP_TEXT = int(Qt.ItemDataRole.UserRole) + 9
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -174,10 +190,18 @@ class ProfileStrategyListWidget(QWidget):
 
         self._search = SearchLineEdit(self)
         self._search.setPlaceholderText("Поиск по готовым стратегиям")
+        set_tooltip(
+            self._search,
+            "Поиск по названию, параметрам --lua-desync и описанию готовой стратегии.",
+        )
         self._search.textChanged.connect(self._apply_filter)
         top_layout.addWidget(self._search, 1)
 
         self._summary = BodyLabel("")
+        set_tooltip(
+            self._summary,
+            "Сколько готовых стратегий сейчас показано после фильтра поиска.",
+        )
         top_layout.addWidget(self._summary)
         layout.addWidget(top_row)
 
@@ -191,6 +215,9 @@ class ProfileStrategyListWidget(QWidget):
         self._list.setSizeAdjustPolicy(QAbstractScrollArea.SizeAdjustPolicy.AdjustIgnored)
         self._list.setMinimumHeight(520)
         self._list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self._list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self._list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._list.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self._list.itemActivated.connect(self._on_item_activated)
         self._list.itemClicked.connect(self._on_item_clicked)
         self._list.setStyleSheet(
@@ -200,6 +227,7 @@ class ProfileStrategyListWidget(QWidget):
             "QListWidget::item:selected { background: transparent; }"
             "QListWidget::item:hover { background: transparent; }"
         )
+        self._scrollbars = install_fluent_scrollbars(self._list, vertical=True, horizontal=False)
         layout.addWidget(self._list, 1)
 
     def set_rows(self, *, entries, states, current_strategy_id: str) -> None:
@@ -254,7 +282,7 @@ class ProfileStrategyListWidget(QWidget):
             item.setData(self._ROLE_VISUAL_LABEL_TEXT, visual_label)
             item.setData(self._ROLE_VISUAL_DESCRIPTION, visual_description)
             tooltip_parts = [visual_description.strip(), args]
-            item.setToolTip("\n\n".join(part for part in tooltip_parts if part))
+            item.setData(self._ROLE_TOOLTIP_TEXT, "\n\n".join(part for part in tooltip_parts if part))
             item.setSizeHint(QSize(0, 31))
             if is_current:
                 current_item = item
@@ -336,7 +364,6 @@ class ProfileSetupPageBase(BasePage):
         self._profile_key = ""
         self._loading = False
         self._payload = None
-        self._settings_title = None
         self._settings_container = None
         self._work_button = None
         self._notwork_button = None
@@ -358,24 +385,18 @@ class ProfileSetupPageBase(BasePage):
         self._breadcrumb.currentItemChanged.connect(self._on_breadcrumb_item_changed)
         self.layout.addWidget(self._breadcrumb)
 
-        self._title = TitleLabel("Профиль")
-        self.layout.addWidget(self._title)
-
+        header = QWidget(self)
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(12)
         self._summary = BodyLabel("")
         self._summary.setWordWrap(True)
-        self.layout.addWidget(self._summary)
-
-        controls = QWidget(self)
-        controls_layout = QHBoxLayout(controls)
-        controls_layout.setContentsMargins(0, 0, 0, 0)
-        controls_layout.setSpacing(12)
+        header_layout.addWidget(self._summary, 1)
 
         self._enabled_checkbox = CheckBox("Включён")
         self._enabled_checkbox.stateChanged.connect(self._on_enabled_changed)
-        controls_layout.addWidget(self._enabled_checkbox)
-        controls_layout.addStretch(1)
-
-        self.layout.addWidget(controls)
+        header_layout.addWidget(self._enabled_checkbox, 0, Qt.AlignmentFlag.AlignRight)
+        self.layout.addWidget(header)
 
         self._settings_container = QWidget(self)
         settings_layout = QHBoxLayout(self._settings_container)
@@ -394,9 +415,10 @@ class ProfileSetupPageBase(BasePage):
         settings_layout.addWidget(self._filter_value, 1)
 
         self._in_range_mode = ComboBox()
-        self._in_range_mode.setMinimumWidth(86)
+        self._in_range_mode.setMinimumWidth(150)
         self._fill_range_combo(self._in_range_mode)
-        settings_layout.addWidget(BodyLabel("--in-range"))
+        self._in_range_label = BodyLabel("--in-range")
+        settings_layout.addWidget(self._in_range_label)
         settings_layout.addWidget(self._in_range_mode)
 
         self._in_range_value = LineEdit()
@@ -405,9 +427,10 @@ class ProfileSetupPageBase(BasePage):
         settings_layout.addWidget(self._in_range_value)
 
         self._out_range_mode = ComboBox()
-        self._out_range_mode.setMinimumWidth(86)
+        self._out_range_mode.setMinimumWidth(150)
         self._fill_range_combo(self._out_range_mode)
-        settings_layout.addWidget(BodyLabel("--out-range"))
+        self._out_range_label = BodyLabel("--out-range")
+        settings_layout.addWidget(self._out_range_label)
         settings_layout.addWidget(self._out_range_mode)
 
         self._out_range_value = LineEdit()
@@ -426,14 +449,18 @@ class ProfileSetupPageBase(BasePage):
         self._in_range_value.textEdited.connect(lambda _text: self._schedule_settings_autosave())
         self._out_range_value.textEdited.connect(lambda _text: self._schedule_settings_autosave())
 
-        self._settings_title = self.add_section_title("Настройки профиля", return_widget=True)
         self.layout.addWidget(self._settings_container)
+        self._install_profile_tooltips()
 
         self._strategy_stack = QStackedWidget(self)
         self._strategy_tabs = SegmentedWidget()
         self._strategy_tabs.addItem("strategies", "Готовые стратегии", lambda: self._strategy_stack.setCurrentIndex(0))
         self._strategy_tabs.addItem("match", "Когда применяется", lambda: self._strategy_stack.setCurrentIndex(1))
         self._strategy_tabs.setCurrentItem("strategies")
+        set_tooltip(
+            self._strategy_tabs,
+            "Готовые стратегии меняют строки --lua-desync. Вкладка «Когда применяется» показывает условия profile и итоговый текст.",
+        )
         self.layout.addWidget(self._strategy_tabs)
 
         self._strategy_list = ProfileStrategyListWidget(self)
@@ -447,6 +474,10 @@ class ProfileSetupPageBase(BasePage):
         self._match_text = PlainTextEdit()
         self._match_text.setReadOnly(True)
         self._match_text.setMinimumHeight(520)
+        set_tooltip(
+            self._match_text,
+            "Подробности текущего profile: условия применения, выбранная готовая стратегия и строки, которые будут записаны в preset.",
+        )
         match_layout.addWidget(self._match_text)
 
         feedback_actions = QWidget(match_tab)
@@ -455,18 +486,34 @@ class ProfileSetupPageBase(BasePage):
         feedback_actions_layout.setSpacing(12)
 
         self._work_button = PushButton("Работает")
+        set_tooltip(
+            self._work_button,
+            "Пометить текущую готовую стратегию как рабочую для этого profile.",
+        )
         self._work_button.clicked.connect(lambda: self._set_current_strategy_feedback(rating="work"))
         feedback_actions_layout.addWidget(self._work_button)
 
         self._notwork_button = PushButton("Не работает")
+        set_tooltip(
+            self._notwork_button,
+            "Пометить текущую готовую стратегию как нерабочую для этого profile.",
+        )
         self._notwork_button.clicked.connect(lambda: self._set_current_strategy_feedback(rating="notwork"))
         feedback_actions_layout.addWidget(self._notwork_button)
 
         self._favorite_button = PushButton("В избранное")
+        set_tooltip(
+            self._favorite_button,
+            "Добавить текущую готовую стратегию в избранное или убрать её оттуда.",
+        )
         self._favorite_button.clicked.connect(self._toggle_current_strategy_favorite)
         feedback_actions_layout.addWidget(self._favorite_button)
 
         self._clear_feedback_button = PushButton("Убрать оценку")
+        set_tooltip(
+            self._clear_feedback_button,
+            "Очистить вашу оценку для текущей готовой стратегии.",
+        )
         self._clear_feedback_button.clicked.connect(lambda: self._set_current_strategy_feedback(rating=""))
         feedback_actions_layout.addWidget(self._clear_feedback_button)
         feedback_actions_layout.addStretch(1)
@@ -477,11 +524,98 @@ class ProfileSetupPageBase(BasePage):
         self.layout.addWidget(self._strategy_stack, 1)
 
     def _fill_range_combo(self, combo: ComboBox) -> None:
-        combo.addItem("a", userData="a")
-        combo.addItem("x", userData="x")
-        combo.addItem("n", userData="n")
-        combo.addItem("d", userData="d")
-        combo.addItem("своё", userData="custom")
+        combo.addItem("a — всегда", userData="a")
+        combo.addItem("x — никогда", userData="x")
+        combo.addItem("n — номер пакета", userData="n")
+        combo.addItem("d — пакет с данными", userData="d")
+        combo.addItem("своё выражение", userData="custom")
+
+    def _range_mode_description(self, mode: str) -> str:
+        descriptions = {
+            "a": "a — всегда. Этот range не ограничивает пакеты.",
+            "x": "x — никогда. Следующие --lua-desync не будут применяться для этого направления.",
+            "n": "n — номер пакета в соединении. Например, n8 означает восьмой пакет.",
+            "d": "d — номер пакета с данными. Служебные пакеты без данных не считаются.",
+            "custom": "своё выражение — ручной range winws2, например s1<d1 или -d8.",
+        }
+        return descriptions.get(str(mode or "").strip(), "Неизвестный режим range.")
+
+    def _update_range_tooltips(self, combo: ComboBox, value_edit: LineEdit, *, option_name: str, direction: str) -> None:
+        mode = str(combo.itemData(combo.currentIndex()) or "").strip()
+        mode_description = self._range_mode_description(mode)
+        set_tooltip(
+            combo,
+            f"{option_name} для {direction} пакетов.\n{mode_description}",
+        )
+        set_tooltip(
+            value_edit,
+            f"Значение для {option_name}.\n{mode_description}\n"
+            "Поле активно для n, d и своего выражения.",
+        )
+
+    def _update_all_range_tooltips(self) -> None:
+        self._update_range_tooltips(
+            self._in_range_mode,
+            self._in_range_value,
+            option_name="--in-range",
+            direction="входящих",
+        )
+        self._update_range_tooltips(
+            self._out_range_mode,
+            self._out_range_value,
+            option_name="--out-range",
+            direction="исходящих",
+        )
+
+    def _install_profile_tooltips(self) -> None:
+        range_hint = (
+            "Диапазон задаёт, на каких пакетах будут работать следующие --lua-desync внутри этого profile.\n"
+            "a — всегда, x — никогда, n — номер пакета, d — номер пакета с данными, своё — ручное выражение winws2."
+        )
+        set_tooltip(
+            self._breadcrumb,
+            "Хлебные крошки: показывают путь до текущего profile и позволяют вернуться к списку profile или управлению.",
+        )
+        set_tooltip(
+            self._summary,
+            "Краткое условие profile: протокол, порты и тип фильтра. По этой строке видно, когда этот profile применяется.",
+        )
+        set_tooltip(
+            self._enabled_checkbox,
+            "Включает или выключает этот profile в текущем preset. Если выключить, profile останется в preset, но не будет применяться.",
+        )
+        set_tooltip(
+            self._filter_combo,
+            "Тип фильтра profile. Hostlist — список доменов, ipset — список IP-адресов или подсетей.",
+        )
+        set_tooltip(
+            self._filter_value,
+            "Файл списка для текущего profile. Обычно это путь вида lists/youtube.txt или lists/ipset-youtube.txt.",
+        )
+        set_tooltip(
+            self._in_range_label,
+            "--in-range — диапазон для входящих пакетов. " + range_hint,
+        )
+        set_tooltip(
+            self._in_range_mode,
+            "Режим --in-range. Откройте меню, чтобы увидеть расшифровку a, x, n, d и своего выражения.",
+        )
+        set_tooltip(
+            self._in_range_value,
+            "Число или ручная часть --in-range. Поле активно, когда выбран режим n, d или своё выражение.",
+        )
+        set_tooltip(
+            self._out_range_label,
+            "--out-range — диапазон для исходящих пакетов. " + range_hint,
+        )
+        set_tooltip(
+            self._out_range_mode,
+            "Режим --out-range. Откройте меню, чтобы увидеть расшифровку a, x, n, d и своего выражения.",
+        )
+        set_tooltip(
+            self._out_range_value,
+            "Число или ручная часть --out-range. Поле активно, когда выбран режим n, d или своё выражение.",
+        )
 
     def _rebuild_breadcrumb(self) -> None:
         self._breadcrumb.blockSignals(True)
@@ -521,7 +655,8 @@ class ProfileSetupPageBase(BasePage):
             log(f"{self.__class__.__name__}: не удалось прочитать профиль {self._profile_key}: {exc}", "ERROR")
             payload = None
         if payload is None:
-            self._title.setText("Профиль не найден. Вернитесь к списку и нажмите «Обновить».")
+            self._summary.setText("Профиль не найден. Вернитесь к списку и нажмите «Обновить».")
+            self._enabled_checkbox.setEnabled(False)
             return
         self._payload = payload
         self._apply_payload(payload)
@@ -530,7 +665,6 @@ class ProfileSetupPageBase(BasePage):
         self._loading = True
         try:
             item = payload.item
-            self._title.setText(item.display_name)
             self._summary.setText(payload.match_summary)
             self._enabled_checkbox.setChecked(bool(item.enabled))
             self._enabled_checkbox.setEnabled(True)
@@ -567,8 +701,6 @@ class ProfileSetupPageBase(BasePage):
 
     def _apply_editable_settings(self, payload) -> None:
         is_winws2 = is_zapret2_launch_method(self.launch_method)
-        if self._settings_title is not None:
-            self._settings_title.setVisible(is_winws2)
         if self._settings_container is not None:
             self._settings_container.setVisible(is_winws2)
         if not is_winws2:
@@ -581,9 +713,14 @@ class ProfileSetupPageBase(BasePage):
         self._filter_value.setText(str(getattr(payload, "editable_filter_value", "") or ""))
         set_range_controls(self._in_range_mode, self._in_range_value, getattr(payload, "in_range", "") or "x")
         set_range_controls(self._out_range_mode, self._out_range_value, getattr(payload, "out_range", "") or "a")
+        self._update_all_range_tooltips()
 
     def _on_range_mode_changed(self, combo: ComboBox, value_edit: LineEdit) -> None:
         sync_range_value_enabled(combo, value_edit)
+        if combo is self._in_range_mode:
+            self._update_range_tooltips(combo, value_edit, option_name="--in-range", direction="входящих")
+        elif combo is self._out_range_mode:
+            self._update_range_tooltips(combo, value_edit, option_name="--out-range", direction="исходящих")
         self._schedule_settings_autosave()
 
     def _on_filter_kind_changed(self) -> None:

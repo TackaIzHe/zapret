@@ -4,20 +4,19 @@ from dataclasses import dataclass
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon, QPixmap
-from PyQt6.QtWidgets import QLabel, QHBoxLayout, QVBoxLayout
+from PyQt6.QtWidgets import QHBoxLayout, QVBoxLayout
 
 from qfluentwidgets import CardWidget
 
 from ui.fluent_widgets import PulsingDot
-from ui.theme import get_cached_qta_pixmap
 
 
 @dataclass(slots=True)
-class PresetEntryCardWidgets:
+class LastStatusMessageWidgets:
     card: object
+    dot: object
     title_label: object
-    caption_label: object
-    button: object
+    message_label: object
 
 
 def build_mode_status_section_common(
@@ -50,6 +49,45 @@ def build_mode_status_section_common(
     status_layout.addLayout(status_text, 1)
 
     return status_card, status_dot, status_title, status_desc
+
+
+def build_last_status_message_card_common(
+    *,
+    tr_fn,
+    strong_body_label_cls,
+    caption_label_cls,
+):
+    card = CardWidget()
+    layout = QHBoxLayout(card)
+    layout.setContentsMargins(16, 12, 16, 12)
+    layout.setSpacing(14)
+
+    dot = PulsingDot()
+    dot.set_color("#8ab4f8")
+    layout.addWidget(dot, 0, Qt.AlignmentFlag.AlignTop)
+
+    text_layout = QVBoxLayout()
+    text_layout.setContentsMargins(0, 0, 0, 0)
+    text_layout.setSpacing(2)
+
+    title_label = strong_body_label_cls(
+        tr_fn("page.control.last_message.title", "Последнее сообщение")
+    )
+    message_label = caption_label_cls(
+        tr_fn("page.control.last_message.empty", "Пока нет новых сообщений")
+    )
+    message_label.setWordWrap(True)
+
+    text_layout.addWidget(title_label)
+    text_layout.addWidget(message_label)
+    layout.addLayout(text_layout, 1)
+
+    return LastStatusMessageWidgets(
+        card=card,
+        dot=dot,
+        title_label=title_label,
+        message_label=message_label,
+    )
 
 
 def build_mode_management_section_common(
@@ -139,57 +177,3 @@ def build_push_setting_card_common(
     card.setProperty("noDrag", True)
     card.clicked.connect(on_click)
     return card
-
-
-def build_my_presets_card_common(
-    *,
-    tr_fn,
-    push_setting_card_cls,
-    button_key: str,
-    not_selected_key: str,
-    current_key: str,
-    on_open_presets,
-    parent=None,
-) -> PresetEntryCardWidgets:
-    card = build_push_setting_card_common(
-        push_setting_card_cls=push_setting_card_cls,
-        button_text=tr_fn(button_key, "Мои пресеты"),
-        icon=get_cached_qta_pixmap("fa5s.star", color="#ffc107", size=20),
-        title_text=tr_fn(not_selected_key, "Не выбран"),
-        content_text=tr_fn(current_key, "Текущий активный пресет"),
-        on_click=on_open_presets,
-        parent=parent,
-    )
-    return PresetEntryCardWidgets(
-        card=card,
-        title_label=card.titleLabel,
-        caption_label=card.contentLabel,
-        button=card.button,
-    )
-
-
-def build_preset_setup_open_card_common(
-    *,
-    tr_fn,
-    push_setting_card_cls,
-    button_key: str,
-    title_key: str,
-    desc_key: str,
-    on_open_preset_setup_page,
-    parent=None,
-) -> PresetEntryCardWidgets:
-    card = build_push_setting_card_common(
-        push_setting_card_cls=push_setting_card_cls,
-        button_text=tr_fn(button_key, "Открыть"),
-        icon=get_cached_qta_pixmap("fa5s.play", color="#60cdff", size=20),
-        title_text=tr_fn(title_key, "Настройка пресета"),
-        content_text=tr_fn(desc_key, "Открыть профили выбранного пресета и выбрать готовые стратегии"),
-        on_click=on_open_preset_setup_page,
-        parent=parent,
-    )
-    return PresetEntryCardWidgets(
-        card=card,
-        title_label=card.titleLabel,
-        caption_label=card.contentLabel,
-        button=card.button,
-    )

@@ -97,16 +97,16 @@ TEXTS: dict[str, dict[str, str]] = {
         "en": "About",
     },
     "nav.page.zapret2_mode": {
-        "ru": "Настройка пресета",
-        "en": "Preset setup",
+        "ru": "Профили пресета",
+        "en": "Preset profiles",
     },
     "nav.page.zapret2_user_presets": {
         "ru": "Мои пресеты",
         "en": "My Presets",
     },
     "nav.page.zapret1_mode": {
-        "ru": "Настройка пресета",
-        "en": "Preset setup",
+        "ru": "Профили пресета",
+        "en": "Preset profiles",
     },
     "nav.page.zapret1_user_presets": {
         "ru": "Мои пресеты",
@@ -183,6 +183,14 @@ TEXTS: dict[str, dict[str, str]] = {
     "page.control.status.press_start": {
         "ru": "Нажмите «Запустить» для активации",
         "en": "Press Start to activate",
+    },
+    "page.control.last_message.title": {
+        "ru": "Последнее сообщение",
+        "en": "Latest message",
+    },
+    "page.control.last_message.empty": {
+        "ru": "Пока нет новых сообщений",
+        "en": "No new messages yet",
     },
     "page.control.button.start": {
         "ru": "Запустить Zapret",

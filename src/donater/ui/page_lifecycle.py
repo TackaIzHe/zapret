@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from donater.premium_page_tasks import is_premium_task_running, stop_premium_worker_task
+from ui.fluent_widgets import set_tooltip
 
 
 def apply_subscription_snapshot_ui(
@@ -194,19 +195,22 @@ def apply_premium_language(
     refresh_btn.setText(tr_fn("page.premium.button.refresh_status", "Обновить статус"))
     change_key_btn.setText(tr_fn("page.premium.button.reset_activation", "Сбросить активацию"))
     extend_btn.setText(tr_fn("page.premium.button.extend", "Продлить подписку"))
-    refresh_btn.setToolTip(
+    set_tooltip(
+        refresh_btn,
         tr_fn(
             "page.premium.action.refresh_status.description",
             "Повторно запросить Premium-статус и обновить данные устройства.",
         )
     )
-    change_key_btn.setToolTip(
+    set_tooltip(
+        change_key_btn,
         tr_fn(
             "page.premium.action.reset_activation.description",
             "Удалить токен устройства, офлайн-кэш и код привязки на этом компьютере.",
         )
     )
-    extend_btn.setToolTip(
+    set_tooltip(
+        extend_btn,
         tr_fn(
             "page.premium.action.extend.description",
             "Открыть Telegram-бота для продления подписки или покупки Premium.",
@@ -217,7 +221,8 @@ def apply_premium_language(
         test_btn.setText(tr_fn("page.premium.button.test_connection.loading", "Проверка..."))
     else:
         test_btn.setText(tr_fn("page.premium.button.test_connection", "Проверить соединение"))
-    test_btn.setToolTip(
+    set_tooltip(
+        test_btn,
         tr_fn(
             "page.premium.action.test_connection.description",
             "Проверить доступность Premium backend и соединение с сервером.",

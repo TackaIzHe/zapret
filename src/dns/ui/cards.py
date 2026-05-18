@@ -20,7 +20,7 @@ from qfluentwidgets import (
     StrongBodyLabel,
 )
 
-from ui.fluent_widgets import SettingsCard
+from ui.fluent_widgets import SettingsCard, set_tooltip
 from ui.theme import get_cached_qta_pixmap, get_theme_tokens
 from ui.theme_refresh import ThemeRefreshBinding
 from app.text_catalog import tr as tr_catalog
@@ -142,7 +142,7 @@ class DNSProviderCard(SettingsCard):
                 "page.network.dns.doh_supported", default="DoH",
             ))
             self._doh_label = doh_label
-            doh_label.setToolTip("DNS over HTTPS — зашифрованный DNS")
+            set_tooltip(doh_label, "DNS over HTTPS — зашифрованный DNS")
             layout.addWidget(doh_label)
 
         layout.addStretch()

@@ -26,7 +26,7 @@
 --new
 --filter-tcp=443
 --hostlist=lists/googlevideo.txt
---hostlist=lists/russia-youtube.txt
+--hostlist=lists/youtube.txt
 --hostlist=lists/other.txt
 --hostlist=lists/discord.txt
 --hostlist=lists/other.txt

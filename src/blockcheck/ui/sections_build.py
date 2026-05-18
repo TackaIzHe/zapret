@@ -7,7 +7,9 @@ from dataclasses import dataclass
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QLabel
 
+from ui.fluent_widgets import set_tooltip
 from ui.theme import get_themed_qta_icon
+from ui.widgets.fluent_item_tooltip import install_fluent_item_tooltips
 
 
 @dataclass(slots=True)
@@ -47,7 +49,8 @@ def build_actions_section(
     start_btn = push_button_cls()
     start_btn.setText(tr_fn("page.blockcheck.start", "Запустить"))
     start_btn.setIcon(get_themed_qta_icon("fa5s.play", color="#4CAF50"))
-    start_btn.setToolTip(
+    set_tooltip(
+        start_btn,
         tr_fn(
             "page.blockcheck.action.start.description",
             "Запустить анализ блокировок и проверку DPI для выбранного режима.",
@@ -59,7 +62,8 @@ def build_actions_section(
     stop_btn = push_button_cls()
     stop_btn.setText(tr_fn("page.blockcheck.stop", "Остановить"))
     stop_btn.setIcon(get_themed_qta_icon("fa5s.stop", color="#ff9800"))
-    stop_btn.setToolTip(
+    set_tooltip(
+        stop_btn,
         tr_fn(
             "page.blockcheck.action.stop.description",
             "Остановить текущую проверку и вернуть страницу в обычный режим.",
@@ -112,6 +116,7 @@ def build_results_section(
     results_table.setSelectionBehavior(table_widget_cls.SelectionBehavior.SelectRows)
     results_table.setMinimumHeight(200)
     results_table.verticalHeader().setVisible(False)
+    install_fluent_item_tooltips(results_table)
 
     try:
         from PyQt6.QtWidgets import QHeaderView
@@ -144,6 +149,7 @@ def build_results_section(
     tcp_table.setSelectionBehavior(table_widget_cls.SelectionBehavior.SelectRows)
     tcp_table.setMinimumHeight(180)
     tcp_table.verticalHeader().setVisible(False)
+    install_fluent_item_tooltips(tcp_table)
 
     try:
         from PyQt6.QtWidgets import QHeaderView

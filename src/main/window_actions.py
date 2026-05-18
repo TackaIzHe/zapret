@@ -8,23 +8,32 @@ from utils.subproc import run_hidden
 
 
 class WindowActionsMixin:
+    def bind_status_message_sink(self, sink) -> None:
+        self._status_message_sink = sink if callable(sink) else None
+
     def set_status(self, text: str) -> None:
         """Пишет пользовательский статус в лог.
 
-        Раньше этот helper складывал текст в window-level UI store, но отдельного
-        глобального потребителя у такого канала больше нет. Оставляем единый
-        entry-point для вызовов, но без декоративной записи в неиспользуемое
-        состояние окна.
+        Текст также уходит в узкий status-message sink, если он подключён
+        при сборке приложения. Само окно не получает доступ к общему store.
         """
+        normalized_text = str(text or "")
         level = "INFO"
-        lower_text = text.lower()
+        lower_text = normalized_text.lower()
         if "работает" in lower_text or "запущен" in lower_text or "успешно" in lower_text:
             level = "INFO"
         elif "останов" in lower_text or "ошибка" in lower_text or "выключен" in lower_text:
             level = "WARNING"
         elif "внимание" in lower_text or "предупреждение" in lower_text:
             level = "WARNING"
-        log(str(text or ""), level)
+        log(normalized_text, level)
+
+        sink = getattr(self, "_status_message_sink", None)
+        if callable(sink):
+            try:
+                sink(normalized_text)
+            except Exception:
+                pass
 
     def open_folder(self) -> None:
         """Opens the DPI folder."""

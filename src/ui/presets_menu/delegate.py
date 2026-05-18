@@ -4,9 +4,10 @@ from typing import Optional
 
 from PyQt6.QtCore import QEvent, QModelIndex, QRect, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFontMetrics, QHelpEvent, QMouseEvent, QPainter, QTransform
-from PyQt6.QtWidgets import QListView, QStyledItemDelegate, QStyle, QStyleOptionViewItem, QToolTip
+from PyQt6.QtWidgets import QListView, QStyledItemDelegate, QStyle, QStyleOptionViewItem
 
 from ui.theme import get_theme_tokens
+from ui.widgets.fluent_item_tooltip import FluentItemToolTipController
 from ui.widgets.hover_row import paint_profile_hover_row, profile_hover_row_rect
 
 from .common import (
@@ -61,6 +62,7 @@ class PresetListDelegate(QStyledItemDelegate):
         self._pending_shake_rotation = 0
         self._pending_shake_timer = QTimer(self)
         self._pending_shake_timer.timeout.connect(self._advance_pending_shake)
+        self._tooltip = FluentItemToolTipController(view.viewport())
         self.set_ui_language("ru")
 
     def _tr(self, key: str, default: str, **kwargs) -> str:
@@ -113,7 +115,7 @@ class PresetListDelegate(QStyledItemDelegate):
 
     def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex) -> QSize:
         kind = index.data(PresetListModel.KindRole)
-        if kind == "section":
+        if kind in {"section", "folder"}:
             return QSize(0, self._SECTION_HEIGHT)
         if kind == "empty":
             return QSize(0, self._EMPTY_HEIGHT)
@@ -121,6 +123,10 @@ class PresetListDelegate(QStyledItemDelegate):
 
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex):
         kind = index.data(PresetListModel.KindRole)
+
+        if kind == "folder":
+            self._paint_folder_row(painter, option, index)
+            return
 
         if kind == "section":
             self._paint_section_row(painter, option, str(index.data(PresetListModel.TextRole) or ""))
@@ -135,6 +141,13 @@ class PresetListDelegate(QStyledItemDelegate):
     def editorEvent(self, event, model, option: QStyleOptionViewItem, index: QModelIndex):
         _ = model
         kind = str(index.data(PresetListModel.KindRole) or "")
+        if kind == "folder":
+            folder_key = str(index.data(PresetListModel.FolderKeyRole) or "")
+            if folder_key:
+                self.action_triggered.emit("toggle_folder", folder_key)
+                return True
+            return False
+
         if kind != "preset":
             return False
         if event.type() != QEvent.Type.MouseButtonRelease:
@@ -180,8 +193,9 @@ class PresetListDelegate(QStyledItemDelegate):
 
         tooltip = self._action_tooltips.get(action, "")
         if tooltip:
-            QToolTip.showText(event.globalPos(), tooltip, view)
+            self._tooltip.show_text(tooltip, event.globalPos())
             return True
+        self._tooltip.hide()
         return super().helpEvent(event, view, option, index)
 
     def _handle_action_click(self, name: str, action: str, _event: QMouseEvent):
@@ -279,6 +293,43 @@ class PresetListDelegate(QStyledItemDelegate):
             painter.setPen(to_qcolor(tokens.divider, "#5f6368"))
             painter.drawLine(left_end, line_y, rect.right(), line_y)
 
+        painter.restore()
+
+    def _paint_folder_row(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        rect = option.rect.adjusted(12, 0, -12, 0)
+        tokens = get_theme_tokens()
+
+        collapsed = bool(index.data(PresetListModel.CollapsedRole))
+        folder_key = str(index.data(PresetListModel.FolderKeyRole) or "")
+        text = str(index.data(PresetListModel.NameRole) or index.data(PresetListModel.TextRole) or "")
+        count = int(index.data(PresetListModel.CountRole) or 0)
+        if count > 0:
+            text = f"{text}  {count}"
+
+        hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
+        if hovered:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(to_qcolor(tokens.surface_bg_hover, "rgba(128,128,128,0.08)"))
+            painter.drawRoundedRect(option.rect.adjusted(4, 1, -4, -1), 4, 4)
+
+        icon_name = "fa5s.chevron-right" if collapsed else "fa5s.chevron-down"
+        icon_rect = QRect(rect.left(), rect.center().y() - 6, 12, 12)
+        self._paint_action_icon(painter, icon_name, tokens.fg_muted, icon_rect)
+
+        text_rect = QRect(icon_rect.right() + 8, rect.top(), max(0, rect.width() - 20), rect.height())
+        painter.setPen(to_qcolor(tokens.fg, "#f5f5f5"))
+        painter.drawText(text_rect, int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter), text)
+
+        line_y = rect.center().y()
+        text_width = painter.fontMetrics().horizontalAdvance(text)
+        left_end = text_rect.left() + text_width + 12
+        if left_end < rect.right():
+            painter.setPen(to_qcolor(tokens.divider, "#5f6368"))
+            painter.drawLine(left_end, line_y, rect.right(), line_y)
+
+        _ = folder_key
         painter.restore()
 
     def _paint_empty_row(self, painter: QPainter, option: QStyleOptionViewItem, text: str) -> None:

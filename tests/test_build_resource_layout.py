@@ -49,6 +49,7 @@ class BuildResourceLayoutTests(unittest.TestCase):
             r'Name: "{commondesktop}\{#ShortcutName}"; Filename: "{app}\Zapret.exe"; WorkingDir: "{app}"; Check: ShouldCreateDesktopIcon',
             iss,
         )
+        self.assertIn('Name: desktopicon; Description: "Создать ярлык на рабочем столе"; Flags: unchecked', iss)
         self.assertNotIn(
             r'Name: "{commondesktop}\{#ShortcutName}"; Filename: "{app}\Zapret.exe"; Tasks: desktopicon',
             iss,
