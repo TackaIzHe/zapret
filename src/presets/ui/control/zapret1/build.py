@@ -6,8 +6,6 @@ from dataclasses import dataclass
 
 from settings.mode import EXE_NAME_WINWS1
 from presets.ui.control.shared_builders import (
-    PresetEntryCardWidgets,
-    build_my_presets_card_common,
     build_mode_management_section_common,
     build_mode_status_section_common,
 )
@@ -94,20 +92,4 @@ def build_winws1_pages_management_section(
         stop_and_exit_btn=stop_and_exit_btn,
         progress_bar=progress_bar,
         loading_label=loading_label,
-    )
-
-
-def build_winws1_presets_section(
-    *,
-    tr_fn,
-    push_setting_card_cls,
-    on_open_presets,
-) -> PresetEntryCardWidgets:
-    return build_my_presets_card_common(
-        tr_fn=tr_fn,
-        push_setting_card_cls=push_setting_card_cls,
-        button_key="page.winws1_control.button.my_presets",
-        not_selected_key="page.winws1_control.preset.not_selected",
-        current_key="page.winws1_control.preset.current",
-        on_open_presets=on_open_presets,
     )

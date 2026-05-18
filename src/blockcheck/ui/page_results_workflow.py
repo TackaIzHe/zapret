@@ -13,6 +13,7 @@ from blockcheck.ui.helpers import (
     sort_results_by_family,
     truncate_detail,
 )
+from ui.widgets.fluent_item_tooltip import set_fluent_item_tooltip
 
 
 DPI_BADGE_COLORS = {
@@ -100,7 +101,7 @@ def set_status_cell(table, row: int, col: int, result) -> None:
         item = make_readonly_item(text)
         item.setForeground(QColor("#e05454"))
 
-    item.setToolTip(result.detail)
+    set_fluent_item_tooltip(item, result.detail)
     table.setItem(row, col, item)
 
 
@@ -140,7 +141,7 @@ def set_dualstack_status_cell(table, row: int, col: int, results: list) -> None:
         item = make_readonly_item(text)
         item.setForeground(QColor("#e05454"))
 
-    item.setToolTip(build_family_tooltip(sorted_results))
+    set_fluent_item_tooltip(item, build_family_tooltip(sorted_results))
     table.setItem(row, col, item)
 
 
@@ -200,7 +201,7 @@ def update_tcp_result_table(*, target_result, tcp_table, tcp_section_label) -> N
         status_text, color = tcp_status_text_and_color(test)
         status_item = make_readonly_item(status_text)
         status_item.setForeground(QColor(color))
-        status_item.setToolTip(format_result_detail(test))
+        set_fluent_item_tooltip(status_item, format_result_detail(test))
         tcp_table.setItem(row, 3, status_item)
 
         detail_text = format_result_detail(test)
@@ -209,7 +210,7 @@ def update_tcp_result_table(*, target_result, tcp_table, tcp_section_label) -> N
             detail_text += f" | {bytes_received}B"
         detail_item = make_readonly_item(truncate_detail(detail_text))
         detail_item.setForeground(QColor("#9aa0a6"))
-        detail_item.setToolTip(detail_text)
+        set_fluent_item_tooltip(detail_item, detail_text)
         tcp_table.setItem(row, 4, detail_item)
 
 
@@ -246,7 +247,7 @@ def update_target_result_table(*, target_result, table, tcp_table, tcp_section_l
             detail += "\nDPI блокирует SNI в TLS 1.2; сайт работает через TLS 1.3"
             item = make_readonly_item("DPI 1.2")
             item.setForeground(QColor("#e0a854"))
-            item.setToolTip(detail)
+            set_fluent_item_tooltip(item, detail)
             table.setItem(row, 2, item)
         else:
             set_dualstack_status_cell(table, row, 2, tls12)
@@ -285,5 +286,5 @@ def update_target_result_table(*, target_result, table, tcp_table, tcp_section_l
     detail_text = build_target_detail_text(tests)
     detail_cell = make_readonly_item(truncate_detail(detail_text))
     detail_cell.setForeground(QColor("#9aa0a6"))
-    detail_cell.setToolTip(detail_text)
+    set_fluent_item_tooltip(detail_cell, detail_text)
     table.setItem(row, 7, detail_cell)

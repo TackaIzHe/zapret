@@ -5,7 +5,7 @@ from PyQt6.QtCore import QTimer
 from log.log import log
 from profile.ui.profiles_list import ProfilesList
 from profile.ui.shell import build_profile_shell
-from qfluentwidgets import BodyLabel, BreadcrumbBar, MessageBox
+from qfluentwidgets import BodyLabel, MessageBox
 from settings.mode import ZAPRET1_MODE, ZAPRET2_MODE
 from ui.pages.base_page import BasePage
 from app.text_catalog import tr as tr_catalog
@@ -23,19 +23,14 @@ class PresetSetupPageBase(BasePage):
     request_hint_key = "page.winws2_pages.request.hint"
     loading_key = "page.winws2_pages.loading"
 
-    def __init__(self, parent=None, *, profile_feature, open_control, open_profile_setup):
+    def __init__(self, parent=None, *, profile_feature, open_profile_setup):
         super().__init__(
             title=self.page_title,
             parent=parent,
             title_key=self.title_key,
         )
         self._profile = profile_feature
-        self._open_control = open_control
         self._open_profile_setup = open_profile_setup
-        self._breadcrumb = BreadcrumbBar()
-        self._rebuild_breadcrumb()
-        self._breadcrumb.currentItemChanged.connect(self._on_breadcrumb_item_changed)
-        self.layout.insertWidget(0, self._breadcrumb)
 
         self._profiles_list: ProfilesList | None = None
         self._empty_state_label = None
@@ -51,22 +46,7 @@ class PresetSetupPageBase(BasePage):
         self._build_content()
         QTimer.singleShot(0, self.refresh_from_preset_switch)
 
-    def _rebuild_breadcrumb(self) -> None:
-        self._breadcrumb.blockSignals(True)
-        try:
-            self._breadcrumb.clear()
-            self._breadcrumb.addItem("control", tr_catalog(self.control_key, language=self._ui_language, default="Управление"))
-            self._breadcrumb.addItem("profiles", tr_catalog(self.title_key, language=self._ui_language, default=self.page_title))
-        finally:
-            self._breadcrumb.blockSignals(False)
-
-    def _on_breadcrumb_item_changed(self, key: str) -> None:
-        self._rebuild_breadcrumb()
-        if key == "control":
-            self._open_control()
-
     def on_page_activated(self) -> None:
-        self._rebuild_breadcrumb()
         self.refresh_from_preset_switch()
 
     def _build_content(self) -> None:

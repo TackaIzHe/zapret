@@ -463,21 +463,24 @@ class LogsPage(BasePage):
             self.copy_btn.setText(tr_catalog("page.logs.button.copy", language=self._ui_language, default="Копировать"))
             self.clear_btn.setText(tr_catalog("page.logs.button.clear", language=self._ui_language, default="Очистить"))
             self.folder_btn.setText(tr_catalog("page.logs.button.folder", language=self._ui_language, default="Папка"))
-            self.copy_btn.setToolTip(
+            set_tooltip(
+                self.copy_btn,
                 tr_catalog(
                     "page.logs.action.copy.description",
                     language=self._ui_language,
                     default="Скопировать содержимое текущего лога в буфер обмена.",
                 )
             )
-            self.clear_btn.setToolTip(
+            set_tooltip(
+                self.clear_btn,
                 tr_catalog(
                     "page.logs.action.clear.description",
                     language=self._ui_language,
                     default="Очистить только текущее окно просмотра, не удаляя файл лога.",
                 )
             )
-            self.folder_btn.setToolTip(
+            set_tooltip(
+                self.folder_btn,
                 tr_catalog(
                     "page.logs.action.folder.description",
                     language=self._ui_language,
@@ -533,14 +536,16 @@ class LogsPage(BasePage):
             self.open_logs_folder_btn.setText(
                 tr_catalog("page.logs.button.folder", language=self._ui_language, default="Папка")
             )
-            self.send_log_btn.setToolTip(
+            set_tooltip(
+                self.send_log_btn,
                 tr_catalog(
                     "page.logs.send.action.send.description",
                     language=self._ui_language,
                     default="Собрать ZIP из свежих логов, скопировать шаблон обращения и открыть GitHub Discussions.",
                 )
             )
-            self.open_logs_folder_btn.setToolTip(
+            set_tooltip(
+                self.open_logs_folder_btn,
                 tr_catalog(
                     "page.logs.send.action.folder.description",
                     language=self._ui_language,

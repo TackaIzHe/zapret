@@ -18,6 +18,11 @@ class PresetListModel(QAbstractListModel):
     DepthRole = Qt.ItemDataRole.UserRole + 10
     PinnedRole = Qt.ItemDataRole.UserRole + 11
     RatingRole = Qt.ItemDataRole.UserRole + 12
+    FolderKeyRole = Qt.ItemDataRole.UserRole + 13
+    CollapsedRole = Qt.ItemDataRole.UserRole + 14
+    CountRole = Qt.ItemDataRole.UserRole + 15
+    SystemRole = Qt.ItemDataRole.UserRole + 16
+    ServiceRole = Qt.ItemDataRole.UserRole + 17
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -167,6 +172,16 @@ class PresetListModel(QAbstractListModel):
             return bool(row.get("is_pinned", False))
         if role == self.RatingRole:
             return int(row.get("rating", 0) or 0)
+        if role == self.FolderKeyRole:
+            return row.get("folder_key", "")
+        if role == self.CollapsedRole:
+            return bool(row.get("is_collapsed", False))
+        if role == self.CountRole:
+            return int(row.get("count", 0) or 0)
+        if role == self.SystemRole:
+            return bool(row.get("is_system", False))
+        if role == self.ServiceRole:
+            return bool(row.get("is_service", False))
 
         return None
 

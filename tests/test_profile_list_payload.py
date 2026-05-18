@@ -62,7 +62,8 @@ class ProfileListPayloadTests(unittest.TestCase):
                 _app_paths=AppPaths(user_root=root, local_root=root),
             )
 
-            payload = ProfilePresetService(feature, "zapret2_mode").list_profiles()
+            with patch("settings.store.MAIN_DIRECTORY", str(root)):
+                payload = ProfilePresetService(feature, "zapret2_mode").list_profiles()
 
         self.assertEqual(len(payload.items), 2)
         youtube = next(item for item in payload.items if "youtube" in " ".join(item.match_lines).lower())
@@ -108,11 +109,59 @@ class ProfileListPayloadTests(unittest.TestCase):
                 _app_paths=AppPaths(user_root=root, local_root=root),
             )
 
-            payload = ProfilePresetService(feature, "zapret2_mode").list_profiles()
+            with patch("settings.store.MAIN_DIRECTORY", str(root)):
+                payload = ProfilePresetService(feature, "zapret2_mode").list_profiles()
 
         self.assertEqual(len(payload.items), 1)
         self.assertEqual(payload.items[0].list_type, "ipset")
         self.assertIn("--ipset=lists/ipset-youtube.txt", payload.items[0].match_lines)
+
+    def test_profile_folder_does_not_depend_on_preset_membership(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            templates_dir = root / "profile" / "templates"
+            templates_dir.mkdir(parents=True)
+            (templates_dir / "all_profiles.txt").write_text(
+                "\n".join(
+                    (
+                        "--filter-tcp=80,443",
+                        "--hostlist=lists/youtube.txt",
+                        "",
+                        "--new",
+                        "--filter-tcp=443",
+                        "--hostlist=lists/discord.txt",
+                        "",
+                    )
+                ),
+                encoding="utf-8",
+            )
+            store = _PresetStore(
+                "\n".join(
+                    (
+                        "--filter-tcp=80,443",
+                        "--hostlist=lists/youtube.txt",
+                        "--lua-desync=pass",
+                        "",
+                    )
+                )
+            )
+            feature = SimpleNamespace(
+                _presets_feature=store,
+                _app_paths=AppPaths(user_root=root, local_root=root),
+            )
+
+            with patch("settings.store.MAIN_DIRECTORY", str(root)):
+                payload = ProfilePresetService(feature, "zapret2_mode").list_profiles()
+
+        by_text = {" ".join(item.match_lines).lower(): item for item in payload.items}
+        youtube = next(item for text, item in by_text.items() if "youtube" in text)
+        discord = next(item for text, item in by_text.items() if "discord" in text)
+        self.assertTrue(youtube.in_preset)
+        self.assertEqual(youtube.group, "youtube")
+        self.assertEqual(youtube.group_name, "YouTube")
+        self.assertFalse(discord.in_preset)
+        self.assertEqual(discord.group, "discord")
+        self.assertEqual(discord.group_name, "Discord")
 
     def test_profile_setup_loads_selected_profile_without_rebuilding_whole_list(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -158,6 +207,42 @@ class ProfileListPayloadTests(unittest.TestCase):
         self.assertIsNotNone(payload)
         self.assertEqual(payload.item.strategy_id, "tls_fake")
         self.assertEqual(set(payload.strategy_entries), {"tls_fake", "tls_split"})
+
+    def test_profile_move_updates_interface_order_without_rewriting_preset_text(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            templates_dir = root / "profile" / "templates"
+            templates_dir.mkdir(parents=True)
+            (templates_dir / "all_profiles.txt").write_text("", encoding="utf-8")
+            source_text = "\n".join(
+                (
+                    "--filter-tcp=80,443",
+                    "--hostlist=lists/youtube.txt",
+                    "",
+                    "--new",
+                    "--filter-tcp=443",
+                    "--hostlist=lists/discord.txt",
+                    "",
+                )
+            )
+            store = _PresetStore(source_text)
+            feature = SimpleNamespace(
+                _presets_feature=store,
+                _app_paths=AppPaths(user_root=root, local_root=root),
+            )
+            service = ProfilePresetService(feature, "zapret2_mode")
+
+            with patch("settings.store.MAIN_DIRECTORY", str(root)):
+                payload = service.list_profiles()
+                youtube = next(item for item in payload.items if "youtube" in " ".join(item.match_lines).lower())
+                discord = next(item for item in payload.items if "discord" in " ".join(item.match_lines).lower())
+                moved = service.move_profile_before(discord.key, youtube.key)
+                moved_payload = service.list_profiles()
+
+        self.assertEqual(moved, discord.key)
+        self.assertEqual(store.text, source_text)
+        moved_discord = next(item for item in moved_payload.items if "discord" in " ".join(item.match_lines).lower())
+        self.assertTrue(moved_discord.order_is_manual)
 
     def test_profile_setup_reads_strategy_feedback_in_one_batch(self) -> None:
         class _StateStore:

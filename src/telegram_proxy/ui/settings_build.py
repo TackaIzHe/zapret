@@ -11,6 +11,7 @@ from ui.fluent_widgets import (
     QuickActionsBar,
     enable_setting_card_group_auto_height,
     insert_widget_into_setting_card_group,
+    set_tooltip,
 )
 from telegram_proxy.upstream_catalog import UpstreamCatalog
 from ui.theme import get_themed_qta_icon
@@ -116,14 +117,14 @@ def build_telegram_proxy_settings_panel(
     setup_open_btn = primary_push_button_cls()
     setup_open_btn.setText("Открыть")
     setup_open_btn.setIcon(get_themed_qta_icon("mdi.telegram", color="#229ED9"))
-    setup_open_btn.setToolTip("Открыть ссылку для автоматической настройки прокси внутри Telegram.")
+    set_tooltip(setup_open_btn, "Открыть ссылку для автоматической настройки прокси внутри Telegram.")
     setup_open_btn.clicked.connect(on_open_in_telegram)
     setup_card.add_button(setup_open_btn)
 
     setup_copy_btn = push_button_cls()
     setup_copy_btn.setText("Копировать")
     setup_copy_btn.setIcon(get_themed_qta_icon("mdi.content-copy", color="#60cdff"))
-    setup_copy_btn.setToolTip("Сохранить ссылку в буфер обмена, если Telegram не открылся автоматически.")
+    set_tooltip(setup_copy_btn, "Сохранить ссылку в буфер обмена, если Telegram не открылся автоматически.")
     setup_copy_btn.clicked.connect(on_copy_link)
     setup_card.add_button(setup_copy_btn)
 
@@ -142,7 +143,8 @@ def build_telegram_proxy_settings_panel(
     host_edit.setText("127.0.0.1")
     host_edit.setPlaceholderText("127.0.0.1")
     host_edit.setClearButtonEnabled(True)
-    host_edit.setToolTip(
+    set_tooltip(
+        host_edit,
         "IP-адрес для прослушивания. 127.0.0.1 — только локально, "
         "0.0.0.0 или IP вашей сети — доступ с других устройств (телефон и т.д.)"
     )
@@ -253,7 +255,7 @@ def build_telegram_proxy_settings_panel(
     mtproxy_action_btn = push_button_cls()
     mtproxy_action_btn.setText("Открыть")
     mtproxy_action_btn.setIcon(get_themed_qta_icon("mdi.telegram", color="#229ED9"))
-    mtproxy_action_btn.setToolTip("MTProxy настраивается в Telegram напрямую. Нажмите для добавления.")
+    set_tooltip(mtproxy_action_btn, "MTProxy настраивается в Telegram напрямую. Нажмите для добавления.")
     mtproxy_action_btn.clicked.connect(on_open_mtproxy)
     mtproxy_action_widget = mtproxy_action_btn
     mtproxy_action_widget.setVisible(False)

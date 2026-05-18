@@ -72,14 +72,11 @@ def apply_profile_language(
     language: str,
     start_btn,
     stop_and_exit_btn,
-    presets_btn,
-    preset_setup_open_btn,
     profile_ui_mode_btn,
     blobs_open_btn,
     test_card,
     folder_card,
     docs_card,
-    current_preset_caption,
     profile_ui_mode_caption,
     advanced_notice,
     program_settings_card,
@@ -97,15 +94,11 @@ def apply_profile_language(
 ) -> None:
     start_btn.setText(tr_catalog("page.winws2_control.button.start", language=language, default="Запустить Zapret"))
     stop_and_exit_btn.setText(tr_catalog("page.winws2_control.button.stop_and_exit", language=language, default="Остановить и закрыть программу"))
-    presets_btn.setText(tr_catalog("page.winws2_control.button.my_presets", language=language, default="Мои пресеты"))
-    if preset_setup_open_btn is not None:
-        preset_setup_open_btn.setText(tr_catalog("page.winws2_control.button.open", language=language, default="Открыть"))
     if profile_ui_mode_btn is not None:
         profile_ui_mode_btn.setText(tr_catalog("page.winws2_control.button.change_mode", language=language, default="Изменить режим"))
     if blobs_open_btn is not None:
         blobs_open_btn.setText(tr_catalog("page.winws2_control.button.open", language=language, default="Открыть"))
 
-    current_preset_caption.setText(tr_catalog("page.winws2_control.preset.current", language=language, default="Текущий активный пресет"))
     if profile_ui_mode_caption is not None:
         profile_ui_mode_caption.setText(tr_catalog("page.winws2_control.profile_ui_mode.caption", language=language, default="Режим отображения профилей"))
     if advanced_notice is not None:

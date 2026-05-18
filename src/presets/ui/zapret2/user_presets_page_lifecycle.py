@@ -22,7 +22,6 @@ def handle_user_presets_ui_state_changed(
 def activate_user_presets_page(
     *,
     cleanup_in_progress: bool,
-    rebuild_breadcrumb_fn,
     apply_mode_labels_fn,
     resync_layout_metrics_fn,
     start_watching_presets_fn,
@@ -37,7 +36,6 @@ def activate_user_presets_page(
         start_watching_presets_fn()
     except Exception:
         pass
-    rebuild_breadcrumb_fn()
     apply_mode_labels_fn()
     resync_layout_metrics_fn()
     if runtime_service.is_ui_dirty():
@@ -211,7 +209,6 @@ def cleanup_user_presets_page(
 def apply_user_presets_language(
     *,
     tr_fn,
-    rebuild_breadcrumb_fn,
     configs_title_label,
     get_configs_btn,
     create_btn,
@@ -230,9 +227,6 @@ def apply_user_presets_language(
     apply_mode_labels_fn,
 ) -> None:
     apply_mode_labels_fn()
-
-    if rebuild_breadcrumb_fn is not None:
-        rebuild_breadcrumb_fn()
 
     if configs_title_label is not None:
         configs_title_label.setText(

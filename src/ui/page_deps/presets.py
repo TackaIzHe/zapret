@@ -37,14 +37,8 @@ def build_control_page_kwargs(context: PageDepsContext, page_name: PageName) -> 
 
 def build_preset_setup_page_kwargs(context: PageDepsContext, page_name: PageName) -> dict:
     method = ZAPRET2_MODE if page_name == PageName.ZAPRET2_PRESET_SETUP else ZAPRET1_MODE
-    control_page = (
-        PageName.ZAPRET2_MODE_CONTROL
-        if page_name == PageName.ZAPRET2_PRESET_SETUP
-        else PageName.ZAPRET1_MODE_CONTROL
-    )
     return {
         "profile_feature": context.profile_feature,
-        "open_control": lambda page=control_page: context.show_page(page, allow_internal=True),
         "open_profile_setup": lambda profile_key, m=method: context.open_profile_setup(m, profile_key),
     }
 
@@ -70,15 +64,9 @@ def build_profile_setup_page_kwargs(context: PageDepsContext, page_name: PageNam
 
 def build_user_presets_page_kwargs(context: PageDepsContext, page_name: PageName) -> dict:
     method = ZAPRET2_MODE if page_name == PageName.ZAPRET2_USER_PRESETS else ZAPRET1_MODE
-    control_page = (
-        PageName.ZAPRET2_MODE_CONTROL
-        if page_name == PageName.ZAPRET2_USER_PRESETS
-        else PageName.ZAPRET1_MODE_CONTROL
-    )
     return {
         "presets_feature": context.presets_feature,
         "runtime_feature": context.runtime_feature,
-        "open_control": lambda page=control_page: context.show_page(page, allow_internal=True),
         "open_preset_raw_editor": lambda preset_name, m=method: context.open_preset_raw_editor(
             m,
             preset_name,

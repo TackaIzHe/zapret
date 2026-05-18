@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from presets.ui.control.shared_builders import (
-    build_preset_setup_open_card_common,
     build_push_setting_card_common,
 )
 from presets.ui.control.windows_features.build import build_windows_feature_toggles
@@ -15,9 +14,6 @@ from ui.theme import get_cached_qta_pixmap, get_theme_tokens, get_themed_qta_ico
 
 @dataclass(slots=True)
 class Zapret2DeferredBuildWidgets:
-    preset_setup_section_label: object
-    preset_setup_card: object
-    preset_setup_open_btn: object
     profile_ui_mode_btn: object
     profile_ui_mode_label: object
     profile_ui_mode_caption: object
@@ -49,7 +45,6 @@ def build_winws2_pages_deferred_sections(
     setting_card_group_cls,
     push_setting_card_cls,
     win11_toggle_row_cls,
-    on_open_preset_setup_page,
     on_open_profile_ui_mode_dialog,
     on_auto_dpi_toggled,
     on_hide_to_tray_toggled,
@@ -63,24 +58,6 @@ def build_winws2_pages_deferred_sections(
     on_open_folder,
     on_open_docs,
 ) -> Zapret2DeferredBuildWidgets:
-    preset_setup_section_label = add_section_title(
-        return_widget=True,
-        text_key="page.winws2_control.section.profile_tuning",
-    )
-
-    preset_setup_card = setting_card_group_cls(
-        tr_fn("page.winws2_control.section.profile_tuning", "Настройка пресета"),
-        content_parent,
-    )
-    preset_setup_entry = build_preset_setup_open_card_common(
-        tr_fn=tr_fn,
-        push_setting_card_cls=push_setting_card_cls,
-        button_key="page.winws2_control.button.open",
-        title_key="page.winws2_control.profile_ui_mode.card.title",
-        desc_key="page.winws2_control.profile_ui_mode.card.desc",
-        on_open_preset_setup_page=on_open_preset_setup_page,
-        parent=content_parent,
-    )
     profile_ui_mode_card = build_push_setting_card_common(
         push_setting_card_cls=push_setting_card_cls,
         button_text=tr_fn("page.winws2_control.button.change_mode", "Изменить режим"),
@@ -95,7 +72,6 @@ def build_winws2_pages_deferred_sections(
         profile_ui_mode_card.button.setEnabled(False)
     except Exception:
         pass
-    preset_setup_card.addSettingCard(preset_setup_entry.card)
 
     program_settings_title = tr_fn("page.winws2_control.section.program_settings", "Настройки программы")
     program_settings_section_label = None
@@ -222,9 +198,6 @@ def build_winws2_pages_deferred_sections(
     enable_setting_card_group_auto_height(extra_card)
 
     return Zapret2DeferredBuildWidgets(
-        preset_setup_section_label=preset_setup_section_label,
-        preset_setup_card=preset_setup_card,
-        preset_setup_open_btn=preset_setup_entry.button,
         profile_ui_mode_btn=profile_ui_mode_card.button,
         profile_ui_mode_label=profile_ui_mode_card.titleLabel,
         profile_ui_mode_caption=profile_ui_mode_card.contentLabel,

@@ -53,7 +53,7 @@ from qfluentwidgets import (
 )
 
 from ui.fluent_widgets import (
-    SettingsCard, ActionButton, InfoBarHelper,
+    SettingsCard, ActionButton, InfoBarHelper, set_tooltip,
 )
 
 logger = logging.getLogger(__name__)
@@ -275,7 +275,7 @@ class StrategyScanPage(BasePage):
             scope_games_only_label=tr_catalog("page.blockcheck_public.udp_scope_games_only", default="Только игровые ipset"),
         )
         self._udp_scope_hint_label.setText(hint_plan.text)
-        self._udp_scope_hint_label.setToolTip(hint_plan.tooltip)
+        set_tooltip(self._udp_scope_hint_label, hint_plan.tooltip)
         self._udp_scope_hint_label.setVisible(hint_plan.visible)
 
     def _show_quick_domains_menu(self) -> None:

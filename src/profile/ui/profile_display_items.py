@@ -23,13 +23,26 @@ class ProfileDisplayItem:
     rating: str
     favorite: bool
     group: str
+    group_name: str
     order: int
+    order_is_manual: bool = False
 
 
 def build_profile_display_items(items: tuple[Any, ...]) -> tuple[ProfileDisplayItem, ...]:
     rows = [_display_item_from_profile(item) for item in tuple(items or ())]
-    rows.sort(key=lambda item: (item.order, item.display_name.lower(), item.key))
+    rows.sort(key=profile_display_sort_key)
     return tuple(rows)
+
+
+def profile_display_sort_key(item: Any) -> tuple[int, int, int, str, str]:
+    order_is_manual = bool(getattr(item, "order_is_manual", False))
+    return (
+        0 if order_is_manual else 1,
+        int(getattr(item, "order", 0) or 0) if order_is_manual else _protocol_sort_rank(tuple(getattr(item, "match_lines", ()) or ())),
+        0 if order_is_manual else int(getattr(item, "order", 0) or 0),
+        str(getattr(item, "display_name", "") or "").lower(),
+        str(getattr(item, "key", "") or ""),
+    )
 
 
 def _display_item_from_profile(item: Any) -> ProfileDisplayItem:
@@ -46,15 +59,21 @@ def _display_item_from_profile(item: Any) -> ProfileDisplayItem:
         list_type=str(getattr(item, "list_type", "") or ""),
         rating=str(getattr(item, "rating", "") or ""),
         favorite=bool(getattr(item, "favorite", False)),
-        group=_display_group(item),
+        group=str(getattr(item, "group", "") or "common"),
+        group_name=str(getattr(item, "group_name", "") or getattr(item, "group", "") or "Общие"),
         order=int(getattr(item, "order", 0) or 0),
+        order_is_manual=bool(getattr(item, "order_is_manual", False)),
     )
 
 
-def _display_group(item: Any) -> str:
-    if bool(getattr(item, "in_preset", False)):
-        return "current"
-    return str(getattr(item, "group", "") or "default")
+def _protocol_sort_rank(match_lines: tuple[str, ...]) -> int:
+    if filter_values(match_lines, "--filter-tcp"):
+        return 0
+    if filter_values(match_lines, "--filter-udp") and not filter_values(match_lines, "--filter-l7"):
+        return 1
+    if filter_values(match_lines, "--filter-l7"):
+        return 2
+    return 3
 
 
 def _resource_identity(match_lines: tuple[str, ...], list_type: str) -> str:
@@ -110,4 +129,4 @@ def _logical_display_name(item: Any) -> str:
     return name or "Профиль"
 
 
-__all__ = ["ProfileDisplayItem", "build_profile_display_items"]
+__all__ = ["ProfileDisplayItem", "build_profile_display_items", "profile_display_sort_key"]

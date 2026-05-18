@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import telegram_proxy.ui.page_runtime as telegram_proxy_page_runtime
 import telegram_proxy.settings as telegram_proxy_settings
+from ui.fluent_widgets import set_tooltip
 
 
 def refresh_pivot_texts(pivot) -> None:
@@ -222,17 +223,20 @@ def apply_ui_texts(
 
         if setup_open_btn is not None:
             setup_open_btn.setText("Открыть")
-            setup_open_btn.setToolTip(
+            set_tooltip(
+                setup_open_btn,
                 "Открыть ссылку для автоматической настройки прокси внутри Telegram."
             )
         if setup_copy_btn is not None:
             setup_copy_btn.setText("Копировать")
-            setup_copy_btn.setToolTip(
+            set_tooltip(
+                setup_copy_btn,
                 "Сохранить ссылку в буфер обмена, если Telegram не открылся автоматически."
             )
         if mtproxy_action_btn is not None:
             mtproxy_action_btn.setText("Открыть")
-            mtproxy_action_btn.setToolTip(
+            set_tooltip(
+                mtproxy_action_btn,
                 "MTProxy настраивается в Telegram напрямую. Нажмите для добавления."
             )
         if btn_copy_logs is not None:

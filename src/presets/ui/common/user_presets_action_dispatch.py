@@ -19,6 +19,7 @@ class UserPresetListActionHandlers:
     reset: Callable[[str], object]
     delete: Callable[[str], object]
     export: Callable[[str], object]
+    toggle_folder: Callable[[str], object] | None = None
 
 
 def dispatch_user_preset_list_action(*, action: str, name: str, handlers: UserPresetListActionHandlers) -> None:
@@ -36,6 +37,8 @@ def dispatch_user_preset_list_action(*, action: str, name: str, handlers: UserPr
         "delete": handlers.delete,
         "export": handlers.export,
     }
+    if handlers.toggle_folder is not None:
+        callbacks["toggle_folder"] = handlers.toggle_folder
     callback = callbacks.get(action)
     if callback is not None:
         callback(name)

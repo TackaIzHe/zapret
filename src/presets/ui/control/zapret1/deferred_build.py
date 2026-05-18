@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from presets.ui.control.shared_builders import (
-    build_preset_setup_open_card_common,
     build_push_setting_card_common,
 )
 from presets.ui.control.windows_features.build import build_windows_feature_toggles
@@ -15,8 +14,6 @@ from ui.theme import get_themed_qta_icon
 
 @dataclass(slots=True)
 class Zapret1DeferredBuildWidgets:
-    preset_setup_card: object
-    preset_setup_open_btn: object
     program_settings_section_label: object | None
     program_settings_card: object
     auto_dpi_toggle: object
@@ -44,7 +41,6 @@ def build_winws1_pages_deferred_sections(
     push_setting_card_cls,
     setting_card_group_cls,
     win11_toggle_row_cls,
-    on_open_preset_setup_page,
     on_auto_dpi_toggled,
     on_hide_to_tray_toggled,
     on_defender_toggled,
@@ -57,16 +53,6 @@ def build_winws1_pages_deferred_sections(
     on_open_folder,
     on_open_docs,
 ) -> Zapret1DeferredBuildWidgets:
-    preset_setup_entry = build_preset_setup_open_card_common(
-        tr_fn=tr_fn,
-        push_setting_card_cls=push_setting_card_cls,
-        button_key="page.winws1_control.button.open",
-        title_key="page.winws1_control.profiles.title",
-        desc_key="page.winws1_control.profiles.desc",
-        on_open_preset_setup_page=on_open_preset_setup_page,
-        parent=content_parent,
-    )
-
     program_settings_title = tr_fn("page.winws1_control.section.program_settings", "Настройки программы")
     program_settings_section_label = None
     program_settings_card = setting_card_group_cls(program_settings_title, content_parent)
@@ -191,8 +177,6 @@ def build_winws1_pages_deferred_sections(
     enable_setting_card_group_auto_height(extra_card)
 
     return Zapret1DeferredBuildWidgets(
-        preset_setup_card=preset_setup_entry.card,
-        preset_setup_open_btn=preset_setup_entry.button,
         program_settings_section_label=program_settings_section_label,
         program_settings_card=program_settings_card,
         auto_dpi_toggle=auto_dpi_toggle,

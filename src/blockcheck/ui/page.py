@@ -52,7 +52,7 @@ from qfluentwidgets import (
     SegmentedWidget,
 )
 
-from ui.fluent_widgets import SettingsCard, InfoBarHelper, QuickActionsBar
+from ui.fluent_widgets import SettingsCard, InfoBarHelper, QuickActionsBar, set_tooltip
 
 logger = logging.getLogger(__name__)
 
@@ -197,7 +197,8 @@ class BlockcheckPage(BasePage):
                        default="Пропускать проблемные домены")
         )
         self._skip_failed_cb.setChecked(False)
-        self._skip_failed_cb.setToolTip(
+        set_tooltip(
+            self._skip_failed_cb,
             "Если включено, домены с провалившимся preflight "
             "(DNS-заглушка, ISP-инъекция) будут пропущены в основном блокчеке"
         )
@@ -939,14 +940,16 @@ class BlockcheckPage(BasePage):
                 self._actions_title_label.setText(
                     tr_catalog("page.blockcheck.actions.title", language=language, default="Действия")
                 )
-            self._start_btn.setToolTip(
+            set_tooltip(
+                self._start_btn,
                 tr_catalog(
                     "page.blockcheck.action.start.description",
                     language=language,
                     default="Запустить анализ блокировок и проверку DPI для выбранного режима.",
                 )
             )
-            self._stop_btn.setToolTip(
+            set_tooltip(
+                self._stop_btn,
                 tr_catalog(
                     "page.blockcheck.action.stop.description",
                     language=language,

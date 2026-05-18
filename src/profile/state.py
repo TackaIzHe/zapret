@@ -21,7 +21,9 @@ class ProfileListItem:
     rating: str
     favorite: bool
     group: str
+    group_name: str
     order: int
+    order_is_manual: bool = False
 
 
 @dataclass(frozen=True)

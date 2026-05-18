@@ -5,7 +5,8 @@ from typing import Any, Dict
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QVBoxLayout, QWidget
 
-from profile.ui.profile_display_items import build_profile_display_items
+from folders.defaults import build_default_profile_folders
+from profile.ui.profile_display_items import build_profile_display_items, profile_display_sort_key
 from profile.ui.profile_item import ProfileItem
 from profile.ui.widgets.profile_group import ProfileGroup
 from profile.ui.widgets.profile_type_selector import ProfileTypeSelector
@@ -16,17 +17,6 @@ class ProfilesList(QWidget):
     profile_selected = pyqtSignal(str)
     profile_move_requested = pyqtSignal(str, str)
     profile_move_to_end_requested = pyqtSignal(str)
-
-    GROUP_NAMES = {
-        "current": "В текущем preset",
-        "youtube": "YouTube",
-        "discord": "Discord",
-        "telegram": "Telegram",
-        "hostlists": "Hostlist",
-        "ipsets": "IPset",
-        "default": "Прочее",
-    }
-    GROUP_ORDER = ["current", "youtube", "discord", "telegram", "hostlists", "ipsets", "default"]
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -57,15 +47,18 @@ class ProfilesList(QWidget):
         self.clear()
         display_items = build_profile_display_items(tuple(items or ()))
         grouped: dict[str, list[Any]] = {}
+        group_titles: dict[str, str] = {}
         for item in display_items:
-            grouped.setdefault(item.group or "default", []).append(item)
+            group_key = item.group or "common"
+            grouped.setdefault(group_key, []).append(item)
+            group_titles.setdefault(group_key, item.group_name or group_key.title())
 
-        for group_key in self.GROUP_ORDER:
+        for group_key in _ordered_group_keys(grouped):
             rows = grouped.get(group_key) or []
             if not rows:
                 continue
-            rows.sort(key=lambda item: item.order)
-            group = ProfileGroup(group_key, self.GROUP_NAMES.get(group_key, group_key.title()), self)
+            rows.sort(key=profile_display_sort_key)
+            group = ProfileGroup(group_key, group_titles.get(group_key, group_key.title()), self)
             self._groups[group_key] = group
 
             for item in rows:
@@ -116,7 +109,7 @@ class ProfilesList(QWidget):
             item.list_type if item.list_type in {"hostlist", "ipset"} else None,
             self,
         )
-        widget.set_drag_enabled(bool(item.in_preset))
+        widget.set_drag_enabled(True)
         widget.item_activated.connect(self._on_item_clicked)
         widget.item_dropped.connect(self._on_item_dropped)
         widget.set_strategy(item.strategy_id, item.strategy_name)
@@ -130,8 +123,6 @@ class ProfilesList(QWidget):
         source = self._profile_items.get(source_key)
         destination = self._profile_items.get(destination_key)
         if source is None or destination is None:
-            return
-        if not source.in_preset or not destination.in_preset:
             return
         if source_key == destination_key:
             return
@@ -188,7 +179,7 @@ class ProfilesList(QWidget):
             return super().dropEvent(event)
         source_key = bytes(event.mimeData().data(ProfileItem.MIME_TYPE)).decode("utf-8", errors="replace").strip()
         item = self._profile_items.get(source_key)
-        if source_key and item is not None and item.in_preset:
+        if source_key and item is not None:
             self.profile_move_to_end_requested.emit(source_key)
             event.acceptProposedAction()
             return
@@ -197,3 +188,20 @@ class ProfilesList(QWidget):
 def _match_summary(item: Any) -> str:
     parts = [part for part in (protocol_label_from_match_lines(item.match_lines), ports_label_from_match_lines(item.match_lines), item.list_type) if part]
     return " • ".join(parts) or "без явных условий"
+
+
+def _ordered_group_keys(grouped: dict[str, list[Any]]) -> list[str]:
+    default_state = build_default_profile_folders()
+    folders = default_state.get("folders", {})
+    order_by_key = {
+        str(key): int(folder.get("order", 10_000) or 10_000)
+        for key, folder in folders.items()
+        if isinstance(folder, dict)
+    }
+    return sorted(
+        grouped,
+        key=lambda key: (
+            order_by_key.get(str(key), 10_000),
+            str(key).lower(),
+        ),
+    )

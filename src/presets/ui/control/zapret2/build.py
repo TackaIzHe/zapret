@@ -6,7 +6,6 @@ from dataclasses import dataclass
 
 from settings.mode import EXE_NAME_WINWS1
 from presets.ui.control.shared_builders import (
-    build_my_presets_card_common,
     build_mode_management_section_common,
     build_mode_status_section_common,
 )
@@ -30,16 +29,6 @@ class Zapret2ManagementWidgets:
     stop_and_exit_btn: object
     progress_bar: object
     loading_label: object
-
-
-@dataclass(slots=True)
-class Zapret2PresetWidgets:
-    section_label: object
-    card: object
-    preset_name_label: object
-    current_preset_caption: object
-    presets_btn: object
-
 
 def build_winws2_pages_status_section(
     *,
@@ -110,30 +99,4 @@ def build_winws2_pages_management_section(
         stop_and_exit_btn=stop_and_exit_btn,
         progress_bar=progress_bar,
         loading_label=loading_label,
-    )
-
-
-def build_winws2_presets_section(
-    *,
-    add_section_title,
-    tr_fn,
-    push_setting_card_cls,
-    on_open_presets,
-) -> Zapret2PresetWidgets:
-    section_label = add_section_title(return_widget=True, text_key="page.winws2_control.section.preset_switch")
-    preset_entry = build_my_presets_card_common(
-        tr_fn=tr_fn,
-        push_setting_card_cls=push_setting_card_cls,
-        button_key="page.winws2_control.button.my_presets",
-        not_selected_key="page.winws2_control.preset.not_selected",
-        current_key="page.winws2_control.preset.current",
-        on_open_presets=on_open_presets,
-    )
-
-    return Zapret2PresetWidgets(
-        section_label=section_label,
-        card=preset_entry.card,
-        preset_name_label=preset_entry.title_label,
-        current_preset_caption=preset_entry.caption_label,
-        presets_btn=preset_entry.button,
     )

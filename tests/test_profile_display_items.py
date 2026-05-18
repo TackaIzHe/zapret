@@ -16,6 +16,7 @@ def _item(
     enabled: bool = False,
     in_preset: bool = True,
     order: int = 0,
+    order_is_manual: bool = False,
 ):
     return SimpleNamespace(
         key=key,
@@ -31,7 +32,9 @@ def _item(
         rating="",
         favorite=False,
         group="youtube",
+        group_name="YouTube",
         order=order,
+        order_is_manual=order_is_manual,
     )
 
 
@@ -96,7 +99,7 @@ class ProfileDisplayItemsTests(unittest.TestCase):
 
         self.assertEqual(rows[0].display_name, "list-youtube")
 
-    def test_real_preset_profile_is_shown_in_current_group(self) -> None:
+    def test_real_preset_profile_keeps_folder_group_instead_of_current_group(self) -> None:
         rows = build_profile_display_items((
             _item(
                 "active-youtube",
@@ -116,8 +119,78 @@ class ProfileDisplayItemsTests(unittest.TestCase):
         ))
 
         by_key = {row.key: row for row in rows}
-        self.assertEqual(by_key["active-youtube"].group, "current")
+        self.assertEqual(by_key["active-youtube"].group, "youtube")
+        self.assertEqual(by_key["active-youtube"].group_name, "YouTube")
         self.assertEqual(by_key["catalog-discord"].group, "youtube")
+
+    def test_default_order_puts_tcp_profiles_before_udp_profiles(self) -> None:
+        rows = build_profile_display_items((
+            _item(
+                "udp-youtube",
+                name="YouTube UDP",
+                list_type="hostlist",
+                lines=("--filter-udp=443", "--hostlist=lists/youtube.txt"),
+                order=0,
+            ),
+            _item(
+                "tcp-youtube",
+                name="YouTube TCP",
+                list_type="hostlist",
+                lines=("--filter-tcp=80,443", "--hostlist=lists/youtube.txt"),
+                order=1,
+            ),
+        ))
+
+        self.assertEqual([row.key for row in rows], ["tcp-youtube", "udp-youtube"])
+
+    def test_default_order_puts_l7_profiles_after_udp_profiles(self) -> None:
+        rows = build_profile_display_items((
+            _item(
+                "l7-discord",
+                name="Discord L7",
+                list_type="hostlist",
+                lines=("--filter-l7=discord", "--hostlist=lists/discord.txt"),
+                order=0,
+            ),
+            _item(
+                "udp-discord",
+                name="Discord UDP",
+                list_type="hostlist",
+                lines=("--filter-udp=50000-59000", "--hostlist=lists/discord.txt"),
+                order=1,
+            ),
+            _item(
+                "tcp-discord",
+                name="Discord TCP",
+                list_type="hostlist",
+                lines=("--filter-tcp=443", "--hostlist=lists/discord.txt"),
+                order=2,
+            ),
+        ))
+
+        self.assertEqual([row.key for row in rows], ["tcp-discord", "udp-discord", "l7-discord"])
+
+    def test_manual_profile_order_wins_over_protocol_order(self) -> None:
+        rows = build_profile_display_items((
+            _item(
+                "udp-youtube",
+                name="YouTube UDP",
+                list_type="hostlist",
+                lines=("--filter-udp=443", "--hostlist=lists/youtube.txt"),
+                order=0,
+                order_is_manual=True,
+            ),
+            _item(
+                "tcp-youtube",
+                name="YouTube TCP",
+                list_type="hostlist",
+                lines=("--filter-tcp=80,443", "--hostlist=lists/youtube.txt"),
+                order=1,
+                order_is_manual=True,
+            ),
+        ))
+
+        self.assertEqual([row.key for row in rows], ["udp-youtube", "tcp-youtube"])
 
 
 if __name__ == "__main__":

@@ -5,6 +5,12 @@ from functools import lru_cache
 from settings.mode import DEFAULT_LAUNCH_METHOD, ENGINE_WINWS2, engine_for_launch_method, normalize_launch_method
 
 from .match_filters import ports_label_from_match_lines, protocol_label_from_match_lines, strategy_catalog_from_match_lines
+from .folders import (
+    load_profile_folder_state,
+    move_profile_before_in_folder_state,
+    move_profile_to_end_in_folder_state,
+    profile_folder_for_profile,
+)
 from .list_interpreter import build_profile_list_sources
 from .models import EngineName, Preset, Profile
 from .parser import parse_preset_text
@@ -14,7 +20,6 @@ from .serializer import (
     with_profile_deleted,
     with_profile_duplicated,
     with_profile_enabled,
-    with_profile_moved,
     with_profile_strategy_lines,
 )
 from .strategy_state import ProfileStrategyState, ProfileStrategyStateStore
@@ -48,6 +53,7 @@ class ProfilePresetService:
         preset, manifest = self.load_selected_preset()
         catalogs = load_strategy_catalogs(self._app_paths, self._engine)
         templates = self._load_profile_templates()
+        folder_state = load_profile_folder_state()
 
         items: list[ProfileListItem] = []
 
@@ -58,6 +64,7 @@ class ProfilePresetService:
                 in_preset=source.in_preset,
                 key=source.key,
                 order=source.order,
+                folder_state=folder_state,
             )
             items.append(item)
 
@@ -282,27 +289,33 @@ class ProfilePresetService:
         return preset.profiles[duplicate_index].key if 0 <= duplicate_index < len(preset.profiles) else None
 
     def move_profile_before(self, source_profile_key: str, destination_profile_key: str) -> str | None:
-        preset, _manifest = self.load_selected_preset()
-        source_index = _profile_index_for_key(preset, source_profile_key)
-        destination_index = _profile_index_for_key(preset, destination_profile_key)
-        if source_index is None or destination_index is None:
+        sources = self._profile_sources_for_folder_order()
+        source = _find_profile_list_source(sources, source_profile_key)
+        destination = _find_profile_list_source(sources, destination_profile_key)
+        if source is None or destination is None:
             return None
-        new_index = destination_index
-        if source_index < destination_index:
-            new_index -= 1
-        preset = with_profile_moved(preset, source_index, destination_index)
-        self.save_selected_preset(preset)
-        return preset.profiles[new_index].key if 0 <= new_index < len(preset.profiles) else None
+        move_profile_before_in_folder_state(
+            source.profile.persistent_key,
+            destination.profile.persistent_key,
+            [item.profile.persistent_key for item in sources],
+        )
+        return source.key
 
     def move_profile_to_end(self, profile_key: str) -> str | None:
-        preset, _manifest = self.load_selected_preset()
-        source_index = _profile_index_for_key(preset, profile_key)
-        if source_index is None:
+        sources = self._profile_sources_for_folder_order()
+        source = _find_profile_list_source(sources, profile_key)
+        if source is None:
             return None
-        preset = with_profile_moved(preset, source_index, len(preset.profiles))
-        self.save_selected_preset(preset)
-        new_index = len(preset.profiles) - 1
-        return preset.profiles[new_index].key if 0 <= new_index < len(preset.profiles) else None
+        move_profile_to_end_in_folder_state(
+            source.profile.persistent_key,
+            [item.profile.persistent_key for item in sources],
+        )
+        return source.key
+
+    def _profile_sources_for_folder_order(self):
+        preset, _manifest = self.load_selected_preset()
+        templates = self._load_profile_templates()
+        return build_profile_list_sources(tuple(preset.profiles), templates)
 
     def _resolve_profile(self, profile_key: str) -> Profile | None:
         preset, _manifest = self.load_selected_preset()
@@ -330,10 +343,12 @@ class ProfilePresetService:
         in_preset: bool,
         key: str | None = None,
         order: int | None = None,
+        folder_state: dict | None = None,
     ) -> ProfileListItem:
         strategy_entries = _basic_strategy_entries(profile, catalogs)
         strategy_id, strategy_name = _resolve_strategy(profile, strategy_entries)
         list_type = _list_type(profile)
+        folder_key, folder_name, folder_order = profile_folder_for_profile(profile, folder_state)
         effective_strategy_id = strategy_id if in_preset and profile.enabled else "none"
         state = (
             self._state_store.get_strategy_state(profile.persistent_key, effective_strategy_id)
@@ -353,8 +368,10 @@ class ProfilePresetService:
             list_type=list_type,
             rating=state.rating,
             favorite=state.favorite,
-            group=_group_for_profile(profile),
-            order=profile.index if order is None else int(order),
+            group=folder_key,
+            group_name=folder_name,
+            order=folder_order if folder_order is not None else (profile.index if order is None else int(order)),
+            order_is_manual=folder_order is not None,
         )
 
     @lru_cache(maxsize=1)
@@ -432,21 +449,6 @@ def _list_type(profile: Profile) -> str:
     if has_ipset:
         return "ipset"
     return "custom"
-
-
-def _group_for_profile(profile: Profile) -> str:
-    text = " ".join(profile.match.all_lines() + [profile.display_name]).lower()
-    if "youtube" in text or "googlevideo" in text:
-        return "youtube"
-    if "discord" in text:
-        return "discord"
-    if "telegram" in text:
-        return "telegram"
-    if "ipset" in text:
-        return "ipsets"
-    if "hostlist" in text or "lists/" in text:
-        return "hostlists"
-    return "default"
 
 
 def _match_summary(profile: Profile) -> str:

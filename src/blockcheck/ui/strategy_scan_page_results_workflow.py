@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import QTableWidgetItem
 from ui.fluent_widgets import InfoBarHelper
 from app.text_catalog import tr as tr_catalog
 import blockcheck.strategy_scan_run_workflow as strategy_scan_run_workflow
+from ui.widgets.fluent_item_tooltip import set_fluent_item_tooltip
 
 
 def apply_strategy_started_progress(
@@ -77,7 +78,7 @@ def add_strategy_result_row(
 
     name_item = QTableWidgetItem(row_plan.strategy_name)
     name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-    name_item.setToolTip(row_plan.strategy_tooltip)
+    set_fluent_item_tooltip(name_item, row_plan.strategy_tooltip)
     table.setItem(row_idx, 1, name_item)
 
     status_item = QTableWidgetItem(row_plan.status_text)
@@ -88,7 +89,7 @@ def add_strategy_result_row(
     else:
         status_item.setForeground(QColor("#e05454"))
     status_item.setFlags(status_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-    status_item.setToolTip(row_plan.status_tooltip)
+    set_fluent_item_tooltip(status_item, row_plan.status_tooltip)
     table.setItem(row_idx, 2, status_item)
 
     time_item = QTableWidgetItem(row_plan.time_text)

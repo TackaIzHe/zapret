@@ -15,6 +15,7 @@ class LinkedWheelListView(ListView):
     preset_move_requested = pyqtSignal(str, int)
     item_dropped = pyqtSignal(str, str, str, str)
     preset_context_requested = pyqtSignal(str, QPoint)
+    folder_context_requested = pyqtSignal(str, QPoint)
 
     def __init__(self, parent=None, *, draggable_kinds: set[str] | None = None):
         super().__init__(parent)
@@ -85,6 +86,13 @@ class LinkedWheelListView(ListView):
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.RightButton:
             index = self.indexAt(event.position().toPoint())
+            if index.isValid() and str(index.data(PresetListModel.KindRole) or "") == "folder":
+                folder_key = str(index.data(PresetListModel.FolderKeyRole) or "")
+                if folder_key:
+                    self.setCurrentIndex(index)
+                    self.folder_context_requested.emit(folder_key, self.viewport().mapToGlobal(event.position().toPoint()))
+                    event.accept()
+                    return
             if index.isValid() and str(index.data(PresetListModel.KindRole) or "") == "preset":
                 name = str(index.data(PresetListModel.FileNameRole) or "")
                 if name:
@@ -159,6 +167,8 @@ class LinkedWheelListView(ListView):
             destination_kind = str(drop_index.data(PresetListModel.KindRole) or "")
             if destination_kind == "preset":
                 destination_id = str(drop_index.data(PresetListModel.FileNameRole) or "")
+            elif destination_kind == "folder":
+                destination_id = str(drop_index.data(PresetListModel.FolderKeyRole) or "")
             else:
                 destination_kind = "end"
                 destination_id = ""

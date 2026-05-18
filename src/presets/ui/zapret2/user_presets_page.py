@@ -81,7 +81,7 @@ from presets.ui.zapret2.user_presets_page_lifecycle import (
 from app.state_store import MainWindowStateStore
 
 from qfluentwidgets import (
-    Action, BodyLabel, BreadcrumbBar, CaptionLabel, FluentIcon, InfoBar,
+    Action, BodyLabel, CaptionLabel, FluentIcon, InfoBar,
     LineEdit, ListView, MessageBox, PrimaryPushButton, PrimaryToolButton,
     PushButton as FluentPushButton, RoundMenu, StrongBodyLabel, SubtitleLabel,
     ToolButton, TransparentPushButton, TransparentToolButton,
@@ -119,7 +119,6 @@ class BaseZapret2UserPresetsPage(BasePage):
         *,
         presets_feature,
         runtime_feature,
-        open_control,
         open_preset_raw_editor,
         external_actions_feature,
         ui_state_store,
@@ -133,20 +132,13 @@ class BaseZapret2UserPresetsPage(BasePage):
         self._presets_feature = presets_feature
         self._runtime_feature = runtime_feature
         self._external_actions = external_actions_feature
-        self._open_control_callback = open_control
         self._open_preset_raw_editor_callback = open_preset_raw_editor
         self._page_api = self._build_page_runtime().build_page_api()
         self._runtime_service = self._build_runtime_service()
         self._runtime_service.attach_page(self, self._build_runtime_adapter())
 
-        self._breadcrumb = None
         self._configs_title_label = None
         self._get_configs_btn = None
-
-        self._breadcrumb = BreadcrumbBar()
-        self._rebuild_breadcrumb()
-        self._breadcrumb.currentItemChanged.connect(self._on_breadcrumb_item_changed)
-        self.layout.insertWidget(0, self._breadcrumb)
 
         self._presets_model: Optional[PresetListModel] = None
         self._presets_delegate: Optional[PresetListDelegate] = None
@@ -212,37 +204,11 @@ class BaseZapret2UserPresetsPage(BasePage):
             delete_preset_meta=lambda name: self._get_hierarchy_store().delete_preset_meta(name),
         )
 
-    def _current_breadcrumb_title(self) -> str:
-        return self._tr("page.winws2_user_presets.title", "Мои пресеты")
-
-    def _rebuild_breadcrumb(self) -> None:
-        if self._breadcrumb is None:
-            return
-        self._breadcrumb.blockSignals(True)
-        try:
-            self._breadcrumb.clear()
-            self._breadcrumb.addItem(
-                "control",
-                self._tr("page.winws2_user_presets.back.control", "Управление"),
-            )
-            self._breadcrumb.addItem(
-                "presets",
-                self._current_breadcrumb_title(),
-            )
-        finally:
-            self._breadcrumb.blockSignals(False)
-
-    def _on_breadcrumb_item_changed(self, key: str) -> None:
-        self._rebuild_breadcrumb()
-        if key == "control":
-            self._open_control_callback()
-
     def _apply_mode_labels(self) -> None:
         try:
             self.title_label.setText(self._tr("page.winws2_user_presets.title", "Мои пресеты"))
             if self.subtitle_label is not None:
                 self.subtitle_label.setText("")
-            self._rebuild_breadcrumb()
         except Exception:
             pass
 
@@ -311,7 +277,6 @@ class BaseZapret2UserPresetsPage(BasePage):
     def on_page_activated(self) -> None:
         activate_user_presets_page(
             cleanup_in_progress=self._cleanup_in_progress,
-            rebuild_breadcrumb_fn=self._rebuild_breadcrumb,
             apply_mode_labels_fn=self._apply_mode_labels,
             resync_layout_metrics_fn=self._resync_layout_metrics,
             start_watching_presets_fn=self._start_watching_presets,
@@ -436,6 +401,7 @@ class BaseZapret2UserPresetsPage(BasePage):
             on_move_preset_by_step=self._move_preset_by_step,
             on_item_dropped=self._on_item_dropped,
             on_preset_context_requested=self._on_preset_context_requested,
+            on_folder_context_requested=self._on_folder_context_requested,
             on_preset_list_action=self._on_preset_list_action,
             ui_language=self._ui_language,
         )
@@ -660,14 +626,52 @@ class BaseZapret2UserPresetsPage(BasePage):
                 reset=self._on_reset_preset,
                 delete=self._on_delete_preset,
                 export=self._on_export_preset,
+                toggle_folder=self._on_toggle_folder,
             ),
         )
+
+    def _on_toggle_folder(self, folder_key: str) -> None:
+        try:
+            from presets.folders import load_preset_folder_state, save_preset_folder_state
+
+            state = load_preset_folder_state(self._hierarchy_scope_key())
+            folder = state.get("folders", {}).get(str(folder_key or "").strip())
+            if not isinstance(folder, dict):
+                return
+            folder["collapsed"] = not bool(folder.get("collapsed", False))
+            save_preset_folder_state(self._hierarchy_scope_key(), state)
+            self._refresh_presets_view_from_cache()
+        except Exception as exc:
+            log(f"{self.__class__.__name__}: не удалось свернуть папку preset-ов: {exc}", "ERROR")
 
     def _open_preset_subpage(self, name: str):
         self._open_preset_raw_editor_callback(name)
 
     def _on_preset_context_requested(self, name: str, global_pos: QPoint):
         self._on_edit_preset(name, global_pos=global_pos)
+
+    def _on_folder_context_requested(self, folder_key: str, global_pos: QPoint):
+        self._show_folder_menu(folder_key, global_pos)
+
+    def _show_folder_menu(self, folder_key: str, global_pos: QPoint):
+        menu = RoundMenu(parent=self)
+        menu.addAction(make_menu_action("Свернуть / развернуть", icon=fluent_icon("fa5s.chevron-down"), parent=menu))
+        menu.actions()[0].triggered.connect(lambda: self._on_toggle_folder(folder_key))
+        menu.addSeparator()
+        reset_action = make_menu_action("Сбросить папки", icon=fluent_icon("fa5s.undo"), parent=menu)
+        reset_action.triggered.connect(self._reset_preset_folders)
+        menu.addAction(reset_action)
+        menu.exec(global_pos)
+
+    def _reset_preset_folders(self) -> None:
+        try:
+            from folders.defaults import build_default_preset_folders
+            from presets.folders import save_preset_folder_state
+
+            save_preset_folder_state(self._hierarchy_scope_key(), build_default_preset_folders())
+            self._refresh_presets_view_from_cache()
+        except Exception as exc:
+            log(f"{self.__class__.__name__}: не удалось сбросить папки preset-ов: {exc}", "ERROR")
 
     def _on_toggle_pin_preset(self, name: str):
         toggle_pin_preset_action(
@@ -850,7 +854,6 @@ class BaseZapret2UserPresetsPage(BasePage):
         super().set_ui_language(language)
         apply_user_presets_language(
             tr_fn=self._tr,
-            rebuild_breadcrumb_fn=self._rebuild_breadcrumb if self._breadcrumb is not None else None,
             configs_title_label=self._configs_title_label,
             get_configs_btn=self._get_configs_btn,
             create_btn=self.create_btn,

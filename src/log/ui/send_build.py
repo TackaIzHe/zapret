@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ui.fluent_widgets import set_tooltip
 from ui.theme import get_cached_qta_pixmap, get_themed_qta_icon
 
 
@@ -135,7 +136,8 @@ def build_logs_send_tab(
         tr_catalog_fn("page.logs.send.button.send", language=ui_language, default="Подготовить обращение")
     )
     send_log_btn.setIcon(get_themed_qta_icon("fa5b.github", color=tokens.accent_hex))
-    send_log_btn.setToolTip(
+    set_tooltip(
+        send_log_btn,
         tr_catalog_fn(
             "page.logs.send.action.send.description",
             language=ui_language,
@@ -150,7 +152,8 @@ def build_logs_send_tab(
         tr_catalog_fn("page.logs.button.folder", language=ui_language, default="Папка")
     )
     open_logs_folder_btn.setIcon(get_themed_qta_icon("fa5s.folder-open", color=tokens.accent_hex))
-    open_logs_folder_btn.setToolTip(
+    set_tooltip(
+        open_logs_folder_btn,
         tr_catalog_fn(
             "page.logs.send.action.folder.description",
             language=ui_language,

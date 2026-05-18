@@ -41,10 +41,6 @@ def apply_winws1_pages_language(
     start_btn,
     stop_winws_btn,
     stop_and_exit_btn,
-    presets_btn,
-    preset_setup_open_btn,
-    preset_caption_label,
-    preset_setup_card,
     program_settings_card,
     auto_dpi_toggle,
     hide_to_tray_toggle,
@@ -67,24 +63,6 @@ def apply_winws1_pages_language(
     start_btn.setText(tr_catalog("page.winws1_control.button.start", language=language, default="Запустить Zapret"))
     stop_winws_btn.setText(tr_catalog("page.winws1_control.button.stop_winws", language=language, default=f"Остановить {EXE_NAME_WINWS1}"))
     stop_and_exit_btn.setText(tr_catalog("page.winws1_control.button.stop_and_exit", language=language, default="Остановить и закрыть"))
-    presets_btn.setText(tr_catalog("page.winws1_control.button.my_presets", language=language, default="Мои пресеты"))
-    if preset_setup_open_btn is not None:
-        preset_setup_open_btn.setText(tr_catalog("page.winws1_control.button.open", language=language, default="Открыть"))
-
-    if preset_caption_label is not None:
-        preset_caption_label.setText(
-            tr_catalog("page.winws1_control.preset.current", language=language, default="Текущий активный пресет")
-        )
-    if preset_setup_card is not None:
-        preset_setup_card.setTitle(
-            tr_catalog("page.winws1_control.profiles.title", language=language, default="Настройка пресета")
-        )
-        preset_setup_card.setContent(
-            tr_catalog("page.winws1_control.profiles.desc", language=language, default="Открыть профили выбранного пресета и выбрать готовые стратегии")
-        )
-        preset_setup_card.button.setText(
-            tr_catalog("page.winws1_control.button.open", language=language, default="Открыть")
-        )
 
     program_settings_card.titleLabel.setText(
         tr_catalog("page.winws1_control.section.program_settings", language=language, default="Настройки программы")
