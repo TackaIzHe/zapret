@@ -58,7 +58,7 @@ class ProfileFolderActionTests(unittest.TestCase):
             for _key, folder in sorted(state["folders"].items(), key=lambda pair: pair[1]["order"])
         ]
         self.assertIn("Общие", ordered_names)
-        self.assertLess(ordered_names.index("Общие"), ordered_names.index("Сайты"))
+        self.assertLess(ordered_names.index("Общие"), ordered_names.index("ZapretKVN"))
 
     def test_profile_folder_collapsed_and_reset_are_saved_in_settings(self) -> None:
         with TemporaryDirectory() as temp_dir:

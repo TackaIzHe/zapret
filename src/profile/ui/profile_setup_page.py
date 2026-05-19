@@ -32,6 +32,7 @@ from profile.ui.user_profile_dialog import CreateUserProfileDialog
 from qfluentwidgets import (
     BodyLabel,
     BreadcrumbBar,
+    CaptionLabel,
     CheckBox,
     ComboBox,
     InfoBar,
@@ -359,7 +360,6 @@ def _match_tab_text(payload) -> str:
         ("Когда profile применяется", str(getattr(payload, "match_summary", "") or "без явных условий").strip()),
         ("Текущая готовая стратегия", strategy_name),
         ("Аргументы готовой стратегии", strategy_args or "Стратегия не выбрана"),
-        ("Что записано в profile", str(getattr(payload, "raw_profile_text", "") or "").strip() or "Profile пустой"),
     ]
 
     lines: list[str] = []
@@ -402,6 +402,16 @@ class ProfileSetupPageBase(BasePage):
         self._clear_feedback_button = None
         self._update_user_profile_button = None
         self._delete_user_profile_button = None
+        self._raw_profile_text = None
+        self._raw_profile_save_button = None
+        self._list_file_title = None
+        self._list_file_text = None
+        self._list_file_error_label = None
+        self._list_file_status_label = None
+        self._list_file_save_button = None
+        self._list_file_kind = ""
+        self._list_file_normal_style = ""
+        self._list_file_error_style = ""
         self._settings_save_timer = QTimer(self)
         self._settings_save_timer.setSingleShot(True)
         self._settings_save_timer.setInterval(350)
@@ -498,11 +508,12 @@ class ProfileSetupPageBase(BasePage):
         self._strategy_stack = QStackedWidget(self)
         self._strategy_tabs = SegmentedWidget()
         self._strategy_tabs.addItem("strategies", "Готовые стратегии", lambda: self._strategy_stack.setCurrentIndex(0))
-        self._strategy_tabs.addItem("match", "Когда применяется", lambda: self._strategy_stack.setCurrentIndex(1))
+        self._strategy_tabs.addItem("editor", "Редактор", lambda: self._strategy_stack.setCurrentIndex(1))
+        self._strategy_tabs.addItem("match", "Когда применяется", lambda: self._strategy_stack.setCurrentIndex(2))
         self._strategy_tabs.setCurrentItem("strategies")
         set_tooltip(
             self._strategy_tabs,
-            "Готовые стратегии меняют строки --lua-desync. Вкладка «Когда применяется» показывает условия profile и итоговый текст.",
+            "Готовые стратегии меняют строки --lua-desync. «Редактор» меняет файл hostlist/ipset. «Когда применяется» показывает условия profile и итоговый текст.",
         )
         self.layout.addWidget(self._strategy_tabs)
 
@@ -510,18 +521,79 @@ class ProfileSetupPageBase(BasePage):
         self._strategy_list.strategy_activated.connect(self._on_strategy_list_activated)
         self._strategy_stack.addWidget(self._strategy_list)
 
+        editor_tab = QWidget(self)
+        editor_layout = QVBoxLayout(editor_tab)
+        editor_layout.setContentsMargins(0, 0, 0, 0)
+        editor_layout.setSpacing(10)
+
+        self._list_file_title = BodyLabel("Файл списка")
+        editor_layout.addWidget(self._list_file_title)
+
+        self._list_file_text = PlainTextEdit()
+        self._list_file_text.setMinimumHeight(520)
+        self._list_file_text.textChanged.connect(self._on_list_file_text_changed)
+        set_tooltip(
+            self._list_file_text,
+            "Список доменов или IP-адресов из файла, который указан в текущем profile.",
+        )
+        editor_layout.addWidget(self._list_file_text, 1)
+
+        self._list_file_error_label = CaptionLabel("")
+        self._list_file_error_label.setWordWrap(True)
+        self._list_file_error_label.hide()
+        editor_layout.addWidget(self._list_file_error_label)
+
+        editor_actions = QWidget(editor_tab)
+        editor_actions_layout = QHBoxLayout(editor_actions)
+        editor_actions_layout.setContentsMargins(0, 0, 0, 0)
+        editor_actions_layout.setSpacing(12)
+        self._list_file_save_button = PushButton("Сохранить список")
+        self._list_file_save_button.clicked.connect(self._on_list_file_save_clicked)
+        editor_actions_layout.addWidget(self._list_file_save_button)
+        self._list_file_status_label = CaptionLabel("")
+        self._list_file_status_label.setWordWrap(True)
+        editor_actions_layout.addWidget(self._list_file_status_label, 1)
+        editor_layout.addWidget(editor_actions)
+
+        self._strategy_stack.addWidget(editor_tab)
+        self._refresh_list_file_editor_style(has_error=False)
+
         match_tab = QWidget(self)
         match_layout = QVBoxLayout(match_tab)
         match_layout.setContentsMargins(0, 0, 0, 0)
         match_layout.setSpacing(10)
+        match_layout.addWidget(BodyLabel("Условия и готовая стратегия"))
         self._match_text = PlainTextEdit()
         self._match_text.setReadOnly(True)
-        self._match_text.setMinimumHeight(520)
+        self._match_text.setMinimumHeight(180)
         set_tooltip(
             self._match_text,
-            "Подробности текущего profile: условия применения, выбранная готовая стратегия и строки, которые будут записаны в preset.",
+            "Подробности текущего profile: условия применения и выбранная готовая стратегия.",
         )
         match_layout.addWidget(self._match_text)
+
+        match_layout.addWidget(BodyLabel("Текст profile в текущем preset"))
+        self._raw_profile_text = PlainTextEdit()
+        self._raw_profile_text.setMinimumHeight(300)
+        set_tooltip(
+            self._raw_profile_text,
+            "Сырой текст profile. Сохраняется только в текущий preset и не меняет пользовательский шаблон.",
+        )
+        match_layout.addWidget(self._raw_profile_text, 1)
+
+        raw_actions = QWidget(match_tab)
+        raw_actions_layout = QHBoxLayout(raw_actions)
+        raw_actions_layout.setContentsMargins(0, 0, 0, 0)
+        raw_actions_layout.setSpacing(12)
+        self._raw_profile_save_button = PushButton("Сохранить текст profile")
+        self._raw_profile_save_button.clicked.connect(self._on_raw_profile_save_clicked)
+        set_tooltip(
+            self._raw_profile_save_button,
+            "Проверяет текст как один profile и записывает его в текущий preset.",
+        )
+        raw_actions_layout.addWidget(self._raw_profile_save_button)
+        raw_actions_layout.addStretch(1)
+        match_layout.addWidget(raw_actions)
 
         feedback_actions = QWidget(match_tab)
         feedback_actions_layout = QHBoxLayout(feedback_actions)
@@ -688,9 +760,9 @@ class ProfileSetupPageBase(BasePage):
             self._rebuild_breadcrumb()
 
     def _on_update_user_profile_clicked(self) -> None:
-        if not self._profile_key.startswith("template:user:") or self._payload is None:
+        if self._payload is None:
             return
-        profile_id = self._profile_key.split("template:user:", 1)[1].strip()
+        profile_id = _user_profile_id_from_payload(self._profile_key, self._payload)
         if not profile_id:
             return
         item = self._payload.item
@@ -730,9 +802,7 @@ class ProfileSetupPageBase(BasePage):
             )
 
     def _on_delete_user_profile_clicked(self) -> None:
-        if not self._profile_key.startswith("template:user:"):
-            return
-        profile_id = self._profile_key.split("template:user:", 1)[1].strip()
+        profile_id = _user_profile_id_from_payload(self._profile_key, self._payload)
         if not profile_id:
             return
         dialog = MessageBox(
@@ -795,12 +865,19 @@ class ProfileSetupPageBase(BasePage):
             self._enabled_checkbox.setChecked(bool(item.enabled))
             self._enabled_checkbox.setEnabled(True)
             if self._update_user_profile_button is not None:
-                self._update_user_profile_button.setVisible(self._profile_key.startswith("template:user:"))
+                self._update_user_profile_button.setVisible(bool(_user_profile_id_from_payload(self._profile_key, payload)))
             if self._delete_user_profile_button is not None:
-                self._delete_user_profile_button.setVisible(self._profile_key.startswith("template:user:"))
+                self._delete_user_profile_button.setVisible(bool(_user_profile_id_from_payload(self._profile_key, payload)))
             self._apply_editable_settings(payload)
 
             self._match_text.setPlainText(_match_tab_text(payload))
+            if self._raw_profile_text is not None:
+                self._raw_profile_text.setPlainText(str(getattr(payload, "raw_profile_text", "") or ""))
+                raw_editable = bool(getattr(item, "in_preset", False))
+                self._raw_profile_text.setReadOnly(not raw_editable)
+            if self._raw_profile_save_button is not None:
+                self._raw_profile_save_button.setEnabled(bool(getattr(item, "in_preset", False)))
+            self._apply_list_file_editor_payload(payload)
             self._strategy_list.set_rows(
                 entries=payload.strategy_entries,
                 states=payload.strategy_states,
@@ -810,6 +887,159 @@ class ProfileSetupPageBase(BasePage):
             self._rebuild_breadcrumb()
         finally:
             self._loading = False
+
+    def _apply_list_file_editor_payload(self, payload) -> None:
+        state = getattr(payload, "list_editor", None)
+        kind = str(getattr(state, "kind", "") or "").strip().lower()
+        display_path = str(getattr(state, "display_path", "") or "").strip()
+        text = str(getattr(state, "text", "") or "")
+        editable = bool(getattr(state, "editable", False))
+        error_text = str(getattr(state, "error_text", "") or "").strip()
+        invalid_lines = tuple(getattr(state, "invalid_lines", ()) or ())
+        self._list_file_kind = kind
+
+        title = "Файл списка"
+        if display_path:
+            title = f"{display_path} ({'IPset' if kind == 'ipset' else 'Hostlist'})"
+        if self._list_file_title is not None:
+            self._list_file_title.setText(title)
+        if self._list_file_text is not None:
+            self._list_file_text.blockSignals(True)
+            try:
+                self._list_file_text.setPlainText(text)
+                self._list_file_text.setReadOnly(not editable)
+                if kind == "ipset":
+                    self._list_file_text.setPlaceholderText("IP или подсети по одному на строку:\n1.2.3.4\n10.0.0.0/8")
+                else:
+                    self._list_file_text.setPlaceholderText("Домены по одному на строку:\nexample.com\nsub.example.org")
+            finally:
+                self._list_file_text.blockSignals(False)
+        if self._list_file_save_button is not None:
+            self._list_file_save_button.setEnabled(editable and not invalid_lines)
+        if self._list_file_status_label is not None:
+            if editable:
+                lines_count = len([
+                    line
+                    for line in text.splitlines()
+                    if line.strip() and not line.strip().startswith("#")
+                ])
+                self._list_file_status_label.setText(f"Записей: {lines_count}")
+            else:
+                self._list_file_status_label.setText(error_text or "Файл списка недоступен для редактирования.")
+        self._render_list_file_validation(invalid_lines, fallback_error=error_text if not editable else "")
+
+    def _on_list_file_text_changed(self) -> None:
+        if self._loading or self._list_file_text is None:
+            return
+        invalid_lines = self._controller.validate_list_file_text(
+            kind=self._list_file_kind,
+            text=self._list_file_text.toPlainText(),
+        )
+        self._render_list_file_validation(tuple(invalid_lines or ()))
+        if self._list_file_save_button is not None:
+            self._list_file_save_button.setEnabled(not invalid_lines and not self._list_file_text.isReadOnly())
+        if self._list_file_status_label is not None:
+            if invalid_lines:
+                self._list_file_status_label.setText("Исправьте ошибки перед сохранением.")
+            else:
+                lines_count = len([
+                    line
+                    for line in self._list_file_text.toPlainText().splitlines()
+                    if line.strip() and not line.strip().startswith("#")
+                ])
+                self._list_file_status_label.setText(f"Записей: {lines_count} • есть несохранённые изменения")
+
+    def _on_list_file_save_clicked(self) -> None:
+        if self._loading or not self._profile_key or self._list_file_text is None:
+            return
+        try:
+            state = self._controller.save_list_file_text(
+                profile_key=self._profile_key,
+                text=self._list_file_text.toPlainText(),
+            )
+            if state is not None and self._list_file_status_label is not None:
+                self._list_file_status_label.setText("Список сохранён.")
+            self.reload_current_profile()
+            self._on_profile_changed_callback(self._profile_key, "list_file")
+            InfoBar.success(
+                title="Список сохранён",
+                content="Файл списка обновлён.",
+                parent=self.window(),
+            )
+        except Exception as exc:
+            log(f"{self.__class__.__name__}: не удалось сохранить файл списка profile: {exc}", "ERROR")
+            self._render_list_file_validation((), fallback_error=str(exc))
+            InfoBar.error(title="Ошибка", content=str(exc), parent=self.window())
+
+    def _render_list_file_validation(
+        self,
+        invalid_lines: tuple[tuple[int, str], ...],
+        *,
+        fallback_error: str = "",
+    ) -> None:
+        has_error = bool(invalid_lines or fallback_error)
+        self._refresh_list_file_editor_style(has_error=has_error)
+        if self._list_file_error_label is None:
+            return
+        if invalid_lines:
+            lines = [
+                f"Строка {line}: {value}"
+                for line, value in invalid_lines[:5]
+            ]
+            if len(invalid_lines) > 5:
+                lines.append(f"И ещё ошибок: {len(invalid_lines) - 5}")
+            self._list_file_error_label.setText("Неверные строки:\n" + "\n".join(lines))
+            self._list_file_error_label.show()
+            return
+        if fallback_error:
+            self._list_file_error_label.setText(fallback_error)
+            self._list_file_error_label.show()
+            return
+        self._list_file_error_label.clear()
+        self._list_file_error_label.hide()
+
+    def _refresh_list_file_editor_style(self, *, has_error: bool) -> None:
+        if self._list_file_text is None:
+            return
+        tokens = get_theme_tokens()
+        error_color = "#ff6b6b"
+        normal_style = f"""
+            QPlainTextEdit {{
+                background: {tokens.surface_bg};
+                border: 1px solid {tokens.surface_border};
+                border-radius: 8px;
+                padding: 12px;
+                color: {tokens.fg};
+                font-family: Consolas, 'Courier New', monospace;
+                font-size: 13px;
+            }}
+            QPlainTextEdit:hover {{
+                background: {tokens.surface_bg_hover};
+                border: 1px solid {tokens.surface_border_hover};
+            }}
+            QPlainTextEdit:focus {{
+                border: 1px solid {tokens.accent_hex};
+            }}
+        """
+        error_style = f"""
+            QPlainTextEdit {{
+                background: rgba(255, 100, 100, 0.06);
+                border: 1px solid {error_color};
+                border-radius: 8px;
+                padding: 12px;
+                color: {tokens.fg};
+                font-family: Consolas, 'Courier New', monospace;
+                font-size: 13px;
+            }}
+            QPlainTextEdit:focus {{
+                border: 1px solid {error_color};
+            }}
+        """
+        self._list_file_text.setStyleSheet(error_style if has_error else normal_style)
+        if self._list_file_error_label is not None:
+            self._list_file_error_label.setStyleSheet(f"color: {error_color}; background: transparent;")
+        if self._list_file_status_label is not None:
+            self._list_file_status_label.setStyleSheet(f"color: {tokens.fg_faint}; background: transparent;")
 
     def _apply_feedback_buttons(self, payload) -> None:
         item = payload.item
@@ -924,6 +1154,31 @@ class ProfileSetupPageBase(BasePage):
         except Exception as exc:
             log(f"{self.__class__.__name__}: не удалось сохранить настройки профиля: {exc}", "ERROR")
 
+    def _on_raw_profile_save_clicked(self) -> None:
+        if self._loading or not self._profile_key or self._raw_profile_text is None:
+            return
+        try:
+            new_key = self._controller.save_raw_profile_text(
+                profile_key=self._profile_key,
+                raw_text=self._raw_profile_text.toPlainText(),
+            )
+            if new_key:
+                self._profile_key = new_key
+            self.reload_current_profile()
+            self._on_profile_changed_callback(self._profile_key, "raw_profile")
+            InfoBar.success(
+                title="Profile сохранён",
+                content="Текст profile обновлён только в текущем preset.",
+                parent=self.window(),
+            )
+        except Exception as exc:
+            log(f"{self.__class__.__name__}: не удалось сохранить сырой текст profile: {exc}", "ERROR")
+            InfoBar.error(
+                title="Ошибка",
+                content=str(exc),
+                parent=self.window(),
+            )
+
     def _on_enabled_changed(self, state: int) -> None:
         if self._loading or not self._profile_key:
             return
@@ -1008,3 +1263,14 @@ def _protocol_and_ports_from_match_lines(match_lines: tuple[str, ...]) -> tuple[
         if values:
             return protocol, values[0]
     return "tcp", ""
+
+
+def _user_profile_id_from_payload(profile_key: str, payload) -> str:
+    item = getattr(payload, "item", None)
+    profile_id = str(getattr(item, "user_profile_id", "") or "").strip()
+    if profile_id:
+        return profile_id
+    key = str(profile_key or "").strip()
+    if key.startswith("template:user:"):
+        return key.split("template:user:", 1)[1].strip()
+    return ""

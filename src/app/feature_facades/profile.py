@@ -47,6 +47,45 @@ class ProfileFeature:
             out_range=out_range,
         )
 
+    def update_profile_raw_text(
+        self,
+        launch_method: str,
+        profile_key: str,
+        raw_text: str,
+    ) -> str | None:
+        return profile_internal_commands.update_profile_raw_text(
+            self,
+            launch_method,
+            profile_key,
+            raw_text,
+        )
+
+    def validate_profile_list_file_text(
+        self,
+        launch_method: str,
+        kind: str,
+        text: str,
+    ) -> tuple[tuple[int, str], ...]:
+        return profile_internal_commands.validate_profile_list_file_text(
+            self,
+            launch_method,
+            kind,
+            text,
+        )
+
+    def save_profile_list_file_text(
+        self,
+        launch_method: str,
+        profile_key: str,
+        text: str,
+    ):
+        return profile_internal_commands.save_profile_list_file_text(
+            self,
+            launch_method,
+            profile_key,
+            text,
+        )
+
     def set_profile_filter_kind(self, launch_method: str, profile_key: str, filter_kind: str) -> str | None:
         return profile_internal_commands.set_profile_filter_kind(self, launch_method, profile_key, filter_kind)
 

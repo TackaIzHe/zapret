@@ -6,6 +6,7 @@ from PyQt6.QtCore import QPoint, pyqtSignal
 from PyQt6.QtWidgets import QVBoxLayout, QWidget
 
 from folders.defaults import build_default_profile_folders
+from profile.icons import resolve_profile_icon
 from profile.ui.profile_display_items import build_profile_display_items, profile_display_sort_key
 from profile.ui.profile_item import ProfileItem
 from profile.ui.widgets.profile_group import ProfileGroup
@@ -15,6 +16,7 @@ from profile.match_filters import is_voice_match, ports_label_from_match_lines, 
 
 class ProfilesList(QWidget):
     profile_selected = pyqtSignal(str)
+    profile_context_requested = pyqtSignal(str, QPoint)
     profile_move_requested = pyqtSignal(str, str)
     profile_move_to_end_requested = pyqtSignal(str)
     folder_context_requested = pyqtSignal(str, QPoint)
@@ -94,6 +96,9 @@ class ProfilesList(QWidget):
         for group in self._groups.values():
             group.set_expanded(False)
 
+    def profile_item_for_key(self, profile_key: str):
+        return self._profile_items.get(str(profile_key or "").strip())
+
     def _create_item(self, item: Any) -> ProfileItem:
         ports = ports_label_from_match_lines(item.match_lines)
         description_parts = [part for part in (protocol_label_from_match_lines(item.match_lines), f"порты: {ports}" if ports else "") if part]
@@ -103,19 +108,21 @@ class ProfilesList(QWidget):
             tooltip = f"{tooltip}\nПрофиля ещё нет в пресете. Включите его или выберите готовую стратегию."
         elif not item.enabled:
             tooltip = f"{tooltip}\nПрофиль есть в пресете, но сейчас выключен. В файле это записано через --skip."
+        icon = resolve_profile_icon(item.display_name, item.match_lines)
 
         widget = ProfileItem(
             item.key,
             item.display_name,
             description,
-            None,
-            "#60cdff" if item.in_preset else "#888888",
+            icon.icon_name,
+            icon.color if item.in_preset else "#888888",
             tooltip,
             item.list_type if item.list_type in {"hostlist", "ipset"} else None,
             self,
         )
         widget.set_drag_enabled(True)
         widget.item_activated.connect(self._on_item_clicked)
+        widget.context_requested.connect(self._on_item_context_requested)
         widget.item_dropped.connect(self._on_item_dropped)
         widget.set_strategy(item.strategy_id, item.strategy_name)
         widget.set_feedback_state(item.rating, item.favorite)
@@ -123,6 +130,9 @@ class ProfilesList(QWidget):
 
     def _on_item_clicked(self, profile_key: str) -> None:
         self.profile_selected.emit(profile_key)
+
+    def _on_item_context_requested(self, profile_key: str, global_pos: QPoint) -> None:
+        self.profile_context_requested.emit(profile_key, global_pos)
 
     def _on_item_dropped(self, source_key: str, destination_key: str) -> None:
         source = self._profile_items.get(source_key)

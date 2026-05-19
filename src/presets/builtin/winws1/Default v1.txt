@@ -51,7 +51,7 @@
 
 # === Discord Media ===
 --new
---filter-tcp=80,443,1080,2053,2083,2087,2096,8443
+--filter-tcp=80,443
 --hostlist=lists/other.txt
 --dpi-desync=fake,split2
 --dpi-desync-repeats=6
@@ -61,7 +61,7 @@
 
 # === Discord Media ===
 --new
---filter-tcp=80,443,1080,2053,2083,2087,2096,8443
+--filter-tcp=80,443
 --hostlist=lists/soundcloud.txt
 --dpi-desync=fake,split2
 --dpi-desync-repeats=6
@@ -71,7 +71,7 @@
 
 # === Discord Media ===
 --new
---filter-tcp=80,443,1080,2053,2083,2087,2096,8443
+--filter-tcp=80,443
 --hostlist=lists/rutracker.txt
 --dpi-desync=fake,split2
 --dpi-desync-repeats=6
@@ -81,7 +81,7 @@
 
 # === Discord Media ===
 --new
---filter-tcp=80,443,1080,2053,2083,2087,2096,8443
+--filter-tcp=80,443
 --hostlist=lists/rutor.txt
 --dpi-desync=fake,split2
 --dpi-desync-repeats=6
@@ -91,7 +91,7 @@
 
 # === Discord Media ===
 --new
---filter-tcp=80,443,1080,2053,2083,2087,2096,8443
+--filter-tcp=80,443
 --hostlist=lists/roblox.txt
 --dpi-desync=fake,split2
 --dpi-desync-repeats=6
@@ -101,7 +101,7 @@
 
 # === Discord Media ===
 --new
---filter-tcp=80,443,1080,2053,2083,2087,2096,8443
+--filter-tcp=80,443
 --hostlist=lists/itch.txt
 --dpi-desync=fake,split2
 --dpi-desync-repeats=6
@@ -111,7 +111,7 @@
 
 # === Discord Media ===
 --new
---filter-tcp=80,443,1080,2053,2083,2087,2096,8443
+--filter-tcp=80,443
 --hostlist=lists/facebook.txt
 --dpi-desync=fake,split2
 --dpi-desync-repeats=6
@@ -121,7 +121,7 @@
 
 # === Discord Media ===
 --new
---filter-tcp=80,443,1080,2053,2083,2087,2096,8443
+--filter-tcp=80,443
 --hostlist=lists/instagram.txt
 --dpi-desync=fake,split2
 --dpi-desync-repeats=6
@@ -131,7 +131,7 @@
 
 # === Discord Media ===
 --new
---filter-tcp=80,443,1080,2053,2083,2087,2096,8443
+--filter-tcp=80,443
 --hostlist=lists/whatsapp.txt
 --dpi-desync=fake,split2
 --dpi-desync-repeats=6

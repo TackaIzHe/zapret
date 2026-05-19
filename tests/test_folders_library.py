@@ -29,7 +29,7 @@ class FolderDefaultsTests(unittest.TestCase):
 
         self.assertEqual(
             [folder["name"] for folder in state["folders"].values()],
-            ["YouTube", "Discord", "Мессенджеры", "Соцсети", "Игры", "Сайты", "Общие", "Все сайты"],
+            ["YouTube", "Discord", "Мессенджеры", "Соцсети", "Игры", "Хостеры", "Сайты", "ZapretKVN", "Общие", "Все сайты"],
         )
         self.assertEqual(state["folders"][COMMON_FOLDER_KEY]["system"], True)
 
@@ -46,6 +46,13 @@ class FolderDefaultsTests(unittest.TestCase):
         self.assertEqual(classify_profile_folder("Facebook --hostlist=facebook.txt"), "social")
         self.assertEqual(classify_profile_folder("Valorant game filter"), "games")
         self.assertEqual(classify_profile_folder("itch.io --hostlist=lists/itch.txt"), "games")
+        self.assertEqual(classify_profile_folder("roblox --ipset=lists/ipset-roblox.txt"), "games")
+        self.assertEqual(classify_profile_folder("lol-ru --ipset=lists/ipset-lol-ru.txt"), "games")
+        self.assertEqual(classify_profile_folder("cloudflare --ipset=lists/ipset-cloudflare.txt"), "hosters")
+        self.assertEqual(classify_profile_folder("amazon --ipset=lists/ipset-amazon.txt"), "hosters")
+        self.assertEqual(classify_profile_folder("ovh --ipset=lists/ipset-ovh.txt"), "hosters")
+        self.assertEqual(classify_profile_folder("timeweb --ipset=lists/ipset-timeweb.txt"), "zapretkvn")
+        self.assertEqual(classify_profile_folder("zapretkvn --ipset=lists/ipset-zapretkvn.txt"), "zapretkvn")
         self.assertEqual(classify_profile_folder("--filter-tcp=80,443 --hostlist-exclude=ru.txt"), "all-sites")
         self.assertEqual(classify_profile_folder("rutracker.org"), "sites")
 

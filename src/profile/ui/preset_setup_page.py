@@ -4,13 +4,16 @@ from PyQt6.QtCore import QTimer
 
 from log.log import log
 from profile.folders import set_profile_folder_collapsed
+from profile.match_filters import filter_values
+from profile.ui.profile_context_menu import ProfileContextMenuActions, show_profile_context_menu
 from profile.ui.profile_folder_menu import show_profile_folder_menu
 from profile.ui.profiles_list import ProfilesList
 from profile.ui.shell import build_profile_shell
 from profile.ui.user_profile_dialog import CreateUserProfileDialog
-from qfluentwidgets import BodyLabel, InfoBar, MessageBox, PrimaryPushButton
+from qfluentwidgets import BodyLabel, InfoBar, MessageBox
 from settings.mode import ZAPRET1_MODE, ZAPRET2_MODE
 from ui.pages.base_page import BasePage
+from ui.widgets.action_button import ThemedActionButton
 from app.text_catalog import tr as tr_catalog
 
 
@@ -130,6 +133,7 @@ class PresetSetupPageBase(BasePage):
             return
         profiles_list = ProfilesList(self)
         profiles_list.profile_selected.connect(self._on_profile_clicked)
+        profiles_list.profile_context_requested.connect(self._on_profile_context_requested)
         profiles_list.profile_move_requested.connect(self._on_profile_move_requested)
         profiles_list.profile_move_to_end_requested.connect(self._on_profile_move_to_end_requested)
         profiles_list.folder_context_requested.connect(self._on_folder_context_requested)
@@ -137,7 +141,7 @@ class PresetSetupPageBase(BasePage):
         profiles_list.build_profiles(tuple(payload.items))
         self._profiles_list = profiles_list
         self._content_host_layout.addWidget(profiles_list, 1)
-        self._add_profile_btn = PrimaryPushButton("Добавить", self)
+        self._add_profile_btn = ThemedActionButton("Добавить", "fa5s.plus", full_width=True, parent=self)
         self._add_profile_btn.clicked.connect(self._on_add_user_profile_clicked)
         self._content_host_layout.addWidget(self._add_profile_btn)
         self._empty_state_label = None
@@ -185,13 +189,136 @@ class PresetSetupPageBase(BasePage):
         label = BodyLabel(text)
         label.setWordWrap(True)
         self._content_host_layout.addWidget(label)
-        self._add_profile_btn = PrimaryPushButton("Добавить", self)
+        self._add_profile_btn = ThemedActionButton("Добавить", "fa5s.plus", full_width=True, parent=self)
         self._add_profile_btn.clicked.connect(self._on_add_user_profile_clicked)
         self._content_host_layout.addWidget(self._add_profile_btn)
         self._empty_state_label = label
 
     def _on_profile_clicked(self, profile_key: str) -> None:
         self._open_profile_setup(profile_key)
+
+    def _on_profile_context_requested(self, profile_key: str, global_pos) -> None:
+        if self._profiles_list is None:
+            return
+        item = self._profiles_list.profile_item_for_key(profile_key)
+        if item is None:
+            return
+        show_profile_context_menu(
+            parent=self,
+            item=item,
+            global_pos=global_pos,
+            actions=ProfileContextMenuActions(
+                open_profile=self._open_profile_setup,
+                set_enabled=self._set_profile_enabled_from_menu,
+                duplicate_profile=self._duplicate_profile_from_menu,
+                delete_from_preset=self._delete_profile_from_menu,
+                edit_user_profile=self._edit_user_profile_from_menu,
+                delete_user_profile=self._delete_user_profile_from_menu,
+            ),
+        )
+
+    def _set_profile_enabled_from_menu(self, profile_key: str, enabled: bool) -> None:
+        try:
+            self._profile.set_profile_enabled(self.launch_method, profile_key, bool(enabled))
+            self.refresh_from_preset_switch()
+        except Exception as exc:
+            log(f"{self.__class__.__name__}: не удалось изменить состояние profile: {exc}", "ERROR")
+            InfoBar.error(title="Ошибка", content=str(exc), parent=self.window())
+
+    def _duplicate_profile_from_menu(self, profile_key: str) -> None:
+        try:
+            self._profile.duplicate_profile(self.launch_method, profile_key)
+            self.refresh_from_preset_switch()
+        except Exception as exc:
+            log(f"{self.__class__.__name__}: не удалось дублировать profile: {exc}", "ERROR")
+            InfoBar.error(title="Ошибка", content=str(exc), parent=self.window())
+
+    def _delete_profile_from_menu(self, profile_key: str) -> None:
+        dialog = MessageBox(
+            "Удалить profile из preset",
+            "Profile будет убран только из текущего preset. Файлы списков и пользовательский шаблон не удаляются.",
+            self,
+        )
+        dialog.yesButton.setText("Удалить")
+        dialog.cancelButton.setText("Отмена")
+        if not dialog.exec():
+            return
+        try:
+            self._profile.delete_profile(self.launch_method, profile_key)
+            self.refresh_from_preset_switch()
+        except Exception as exc:
+            log(f"{self.__class__.__name__}: не удалось удалить profile из preset: {exc}", "ERROR")
+            InfoBar.error(title="Ошибка", content=str(exc), parent=self.window())
+
+    def _edit_user_profile_from_menu(self, profile_key: str) -> None:
+        if self._profiles_list is None:
+            return
+        item = self._profiles_list.profile_item_for_key(profile_key)
+        if item is None:
+            return
+        profile_id = _user_profile_id_from_item(profile_key, item)
+        if not profile_id:
+            return
+        protocol, ports = _protocol_and_ports_from_match_lines(tuple(getattr(item, "match_lines", ()) or ()))
+        dialog = CreateUserProfileDialog(
+            self,
+            title="Изменить profile",
+            subtitle="Изменяет пользовательский profile и обновляет все preset-ы, где есть старое --name.",
+            button_text="Сохранить",
+            name=str(getattr(item, "display_name", "") or ""),
+            protocol=protocol,
+            ports=ports,
+        )
+        if not dialog.exec():
+            return
+        name, protocol, ports = dialog.values()
+        try:
+            changed = self._profile.update_user_profile(
+                profile_id,
+                name=name,
+                protocol=protocol,
+                ports=ports,
+            )
+            InfoBar.success(
+                title="Profile изменён",
+                content=f"Обновлено profile-ов в preset-ах: {changed}.",
+                parent=self.window(),
+            )
+            self.refresh_from_preset_switch()
+        except Exception as exc:
+            log(f"{self.__class__.__name__}: не удалось изменить пользовательский profile: {exc}", "ERROR")
+            InfoBar.error(title="Ошибка", content=str(exc), parent=self.window())
+
+    def _delete_user_profile_from_menu(self, profile_key: str) -> None:
+        if self._profiles_list is None:
+            return
+        item = self._profiles_list.profile_item_for_key(profile_key)
+        if item is None:
+            return
+        profile_id = _user_profile_id_from_item(profile_key, item)
+        if not profile_id:
+            return
+        dialog = MessageBox(
+            "Удалить пользовательский profile",
+            "Profile будет удалён из библиотеки, его файлы списков будут удалены, "
+            "а profile-ы с таким же --name будут убраны из preset-ов.",
+            self,
+        )
+        dialog.yesButton.setText("Удалить")
+        dialog.cancelButton.setText("Отмена")
+        if not dialog.exec():
+            return
+        try:
+            changed = self._profile.delete_user_profile(profile_id)
+            InfoBar.success(
+                title="Profile удалён",
+                content=f"Удалено profile-ов из preset-ов: {changed}.",
+                parent=self.window(),
+            )
+            self.refresh_from_preset_switch()
+        except Exception as exc:
+            log(f"{self.__class__.__name__}: не удалось удалить пользовательский profile: {exc}", "ERROR")
+            InfoBar.error(title="Ошибка", content=str(exc), parent=self.window())
 
     def _on_profile_move_requested(self, source_profile_key: str, destination_profile_key: str) -> None:
         try:
@@ -300,3 +427,21 @@ class Zapret1PresetSetupPage(PresetSetupPageBase):
     request_button_key = "page.winws1_pages.request.button"
     request_hint_key = "page.winws1_pages.request.hint"
     loading_key = "page.winws1_pages.loading"
+
+
+def _protocol_and_ports_from_match_lines(match_lines: tuple[str, ...]) -> tuple[str, str]:
+    for protocol, option_name in (("tcp", "--filter-tcp"), ("udp", "--filter-udp"), ("l7", "--filter-l7")):
+        values = filter_values(match_lines, option_name)
+        if values:
+            return protocol, values[0]
+    return "tcp", ""
+
+
+def _user_profile_id_from_item(profile_key: str, item) -> str:
+    profile_id = str(getattr(item, "user_profile_id", "") or "").strip()
+    if profile_id:
+        return profile_id
+    key = str(profile_key or "").strip()
+    if key.startswith("template:user:"):
+        return key.split("template:user:", 1)[1].strip()
+    return ""

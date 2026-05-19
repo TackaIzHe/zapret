@@ -29,6 +29,25 @@ def save_winws2_profile_settings(
     )
 
 
+def save_profile_raw_text(*, profile_feature, launch_method: str, profile_key: str, raw_text: str) -> str | None:
+    """Сохраняет полный текст profile в текущий preset."""
+    return profile_feature.update_profile_raw_text(
+        launch_method,
+        profile_key,
+        raw_text,
+    )
+
+
+def validate_profile_list_file_text(*, profile_feature, launch_method: str, kind: str, text: str):
+    """Проверяет строки файла списка для вкладки «Редактор»."""
+    return profile_feature.validate_profile_list_file_text(launch_method, kind, text)
+
+
+def save_profile_list_file_text(*, profile_feature, launch_method: str, profile_key: str, text: str):
+    """Сохраняет файл списка текущего profile."""
+    return profile_feature.save_profile_list_file_text(launch_method, profile_key, text)
+
+
 def set_profile_enabled(*, profile_feature, launch_method: str, profile_key: str, enabled: bool) -> str | None:
     """Включает или выключает profile."""
     return profile_feature.set_profile_enabled(launch_method, profile_key, enabled)

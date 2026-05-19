@@ -230,6 +230,30 @@ def with_profile_moved(preset: Preset, source_index: int, destination_index: int
     return _reparse(updated)
 
 
+def with_profile_raw_text(preset: Preset, profile_index: int, raw_text: str) -> Preset:
+    updated = deepcopy(preset)
+    index = int(profile_index)
+    if index < 0 or index >= len(updated.profiles):
+        raise IndexError(f"Profile index out of range: {profile_index}")
+
+    text = str(raw_text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not text:
+        raise ValueError("profile text must not be empty")
+
+    parsed = parse_preset_text(text, engine=updated.engine, source_name=updated.source_name)
+    if len(parsed.profiles) != 1:
+        raise ValueError("profile text must contain exactly one profile")
+
+    replacement = deepcopy(parsed.profiles[0])
+    current_new_line = str(updated.profiles[index].new_line or "")
+    replacement.index = index
+    replacement.engine = updated.engine
+    replacement.new_line = str(replacement.new_line or current_new_line)
+    updated.profiles[index] = replacement
+    _ensure_profile_boundaries(updated)
+    return _reparse(updated)
+
+
 def _segment_for_strategy_line(engine: EngineName, line: str) -> ProfileSegment:
     lowered = line.lower()
     if engine == ENGINE_WINWS2 and (

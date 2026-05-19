@@ -5,9 +5,12 @@ from __future__ import annotations
 from profile.setup_workflow import (
     apply_strategy_to_profile,
     load_profile_setup,
+    save_profile_raw_text,
+    save_profile_list_file_text,
     save_winws2_profile_settings,
     set_current_strategy_feedback,
     set_profile_enabled,
+    validate_profile_list_file_text,
 )
 
 
@@ -42,6 +45,30 @@ class ProfileSetupController:
             filter_value=filter_value,
             in_range=in_range,
             out_range=out_range,
+        )
+
+    def save_raw_profile_text(self, *, profile_key: str, raw_text: str) -> str | None:
+        return save_profile_raw_text(
+            profile_feature=self._profile,
+            launch_method=self._launch_method,
+            profile_key=profile_key,
+            raw_text=raw_text,
+        )
+
+    def validate_list_file_text(self, *, kind: str, text: str):
+        return validate_profile_list_file_text(
+            profile_feature=self._profile,
+            launch_method=self._launch_method,
+            kind=kind,
+            text=text,
+        )
+
+    def save_list_file_text(self, *, profile_key: str, text: str):
+        return save_profile_list_file_text(
+            profile_feature=self._profile,
+            launch_method=self._launch_method,
+            profile_key=profile_key,
+            text=text,
         )
 
     def set_enabled(self, *, profile_key: str, enabled: bool) -> str | None:

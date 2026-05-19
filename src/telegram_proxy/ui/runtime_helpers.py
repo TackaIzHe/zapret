@@ -5,6 +5,7 @@ from __future__ import annotations
 import telegram_proxy.ui.page_runtime as telegram_proxy_page_runtime
 import telegram_proxy.settings as telegram_proxy_settings
 from ui.fluent_widgets import set_tooltip
+from ui.widgets.action_button import apply_themed_action_button
 
 
 def refresh_pivot_texts(pivot) -> None:
@@ -31,6 +32,12 @@ def refresh_status_texts(*, manager, status_label, btn_toggle, restarting: bool,
 
     if btn_toggle is not None:
         btn_toggle.setText(plan.toggle_text)
+        apply_themed_action_button(
+            btn_toggle,
+            icon_name="fa5s.stop" if "Останов" in plan.toggle_text else "fa5s.play",
+            alignment="center",
+            min_width=140,
+        )
 
 
 def apply_upstream_preset_ui(

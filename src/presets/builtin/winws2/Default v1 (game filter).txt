@@ -120,7 +120,7 @@
 
 --new
 
---filter-tcp=80,443,1080,2053,2083,2087,2096,8443
+--filter-tcp=80,443
 --hostlist=lists/other.txt
 --payload=tls_client_hello
 --out-range=-d10
@@ -128,7 +128,7 @@
 
 --new
 
---filter-tcp=80,443,1080,2053,2083,2087,2096,8443
+--filter-tcp=80,443
 --hostlist=lists/soundcloud.txt
 --payload=tls_client_hello
 --out-range=-d10
@@ -136,7 +136,7 @@
 
 --new
 
---filter-tcp=80,443,1080,2053,2083,2087,2096,8443
+--filter-tcp=80,443
 --hostlist=lists/rutracker.txt
 --payload=tls_client_hello
 --out-range=-d10
@@ -144,7 +144,7 @@
 
 --new
 
---filter-tcp=80,443,1080,2053,2083,2087,2096,8443
+--filter-tcp=80,443
 --hostlist=lists/rutor.txt
 --payload=tls_client_hello
 --out-range=-d10
@@ -152,7 +152,7 @@
 
 --new
 
---filter-tcp=80,443,1080,2053,2083,2087,2096,8443
+--filter-tcp=80,443
 --hostlist=lists/roblox.txt
 --payload=tls_client_hello
 --out-range=-d10
@@ -160,7 +160,7 @@
 
 --new
 
---filter-tcp=80,443,1080,2053,2083,2087,2096,8443
+--filter-tcp=80,443
 --hostlist=lists/itch.txt
 --payload=tls_client_hello
 --out-range=-d10
@@ -168,7 +168,7 @@
 
 --new
 
---filter-tcp=80,443,1080,2053,2083,2087,2096,8443
+--filter-tcp=80,443
 --hostlist=lists/facebook.txt
 --payload=tls_client_hello
 --out-range=-d10
@@ -176,7 +176,7 @@
 
 --new
 
---filter-tcp=80,443,1080,2053,2083,2087,2096,8443
+--filter-tcp=80,443
 --hostlist=lists/instagram.txt
 --payload=tls_client_hello
 --out-range=-d10
@@ -184,7 +184,7 @@
 
 --new
 
---filter-tcp=80,443,1080,2053,2083,2087,2096,8443
+--filter-tcp=80,443
 --hostlist=lists/whatsapp.txt
 --payload=tls_client_hello
 --out-range=-d10

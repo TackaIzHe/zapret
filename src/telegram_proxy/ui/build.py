@@ -12,7 +12,7 @@ from ui.log_limits import (
     TELEGRAM_PROXY_LOG_VIEW_MAX_LINES,
     apply_text_line_limit,
 )
-from ui.theme import get_themed_qta_icon
+from ui.widgets.action_button import apply_themed_action_button
 
 
 @dataclass(slots=True)
@@ -95,19 +95,19 @@ def build_telegram_proxy_logs_panel(
 
     btn_copy_logs = push_button_cls()
     btn_copy_logs.setText("Копировать все")
-    btn_copy_logs.setIcon(get_themed_qta_icon("mdi.content-copy", color="#60cdff"))
+    apply_themed_action_button(btn_copy_logs, icon_name="mdi.content-copy", alignment="left")
     btn_copy_logs.clicked.connect(on_copy_all_logs)
     toolbar.addWidget(btn_copy_logs)
 
     btn_open_log_file = push_button_cls()
     btn_open_log_file.setText("Открыть файл лога")
-    btn_open_log_file.setIcon(get_themed_qta_icon("fa5s.file-alt", color="#60cdff"))
+    apply_themed_action_button(btn_open_log_file, icon_name="fa5s.file-alt", alignment="left")
     btn_open_log_file.clicked.connect(on_open_log_file)
     toolbar.addWidget(btn_open_log_file)
 
     btn_clear_logs = push_button_cls()
     btn_clear_logs.setText("Очистить")
-    btn_clear_logs.setIcon(get_themed_qta_icon("fa5s.eraser", color="#ff9800"))
+    apply_themed_action_button(btn_clear_logs, icon_name="fa5s.eraser", alignment="left")
     btn_clear_logs.clicked.connect(on_clear_logs)
     toolbar.addWidget(btn_clear_logs)
 
@@ -149,13 +149,13 @@ def build_telegram_proxy_diag_panel(
 
     btn_run_diag = primary_push_button_cls()
     btn_run_diag.setText("Запустить диагностику")
-    btn_run_diag.setIcon(get_themed_qta_icon("fa5s.stethoscope", color="#60cdff"))
+    apply_themed_action_button(btn_run_diag, icon_name="fa5s.stethoscope", alignment="left")
     btn_run_diag.clicked.connect(on_run_diagnostics)
     toolbar.addWidget(btn_run_diag)
 
     btn_copy_diag = push_button_cls()
     btn_copy_diag.setText("Копировать результат")
-    btn_copy_diag.setIcon(get_themed_qta_icon("mdi.content-copy", color="#60cdff"))
+    apply_themed_action_button(btn_copy_diag, icon_name="mdi.content-copy", alignment="left")
     btn_copy_diag.clicked.connect(on_copy_diag)
     toolbar.addWidget(btn_copy_diag)
 

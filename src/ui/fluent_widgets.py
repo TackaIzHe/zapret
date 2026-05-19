@@ -14,6 +14,7 @@ import qtawesome as qta
 
 from ui.theme import get_cached_qta_pixmap, get_themed_qta_icon, get_theme_tokens
 from ui.theme_refresh import ThemeRefreshBinding
+from ui.widgets.action_button import apply_themed_action_button
 from qfluentwidgets import (
     BodyLabel, CaptionLabel, CardWidget, CheckBox, ComboBox, FlowLayout,
     FluentIcon, HeaderCardWidget, IndeterminateProgressBar, InfoBar,
@@ -426,21 +427,11 @@ class ActionButton(PushButton):
 
         if icon_name:
             self.setIconSize(QSize(16, 16))
-            # Avoid virtual dispatch to subclass _update_style() while base __init__ runs.
-            ActionButton._update_style(self)
+        apply_themed_action_button(self, icon_name=icon_name, alignment="center")
 
     def _update_style(self):
         """Update icon tint when theme changes."""
-        if self._icon_name:
-            try:
-                tokens = get_theme_tokens()
-                _color = tokens.icon_fg
-                if _color == self._last_icon_color:
-                    return
-                _set_qta_button_icon(self, self._icon_name, color=_color, size=16)
-                self._last_icon_color = _color
-            except Exception:
-                pass
+        apply_themed_action_button(self, icon_name=self._icon_name, alignment="center")
 
     def changeEvent(self, event):  # noqa: N802 (Qt override)
         try:

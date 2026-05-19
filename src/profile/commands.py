@@ -46,6 +46,33 @@ def update_winws2_profile_settings(
     )
 
 
+def update_profile_raw_text(
+    profile_services,
+    launch_method: str,
+    profile_key: str,
+    raw_text: str,
+) -> str | None:
+    return _profile_preset_service(profile_services, launch_method).update_profile_raw_text(profile_key, raw_text)
+
+
+def validate_profile_list_file_text(
+    profile_services,
+    launch_method: str,
+    kind: str,
+    text: str,
+) -> tuple[tuple[int, str], ...]:
+    return _profile_preset_service(profile_services, launch_method).validate_list_file_text(kind, text)
+
+
+def save_profile_list_file_text(
+    profile_services,
+    launch_method: str,
+    profile_key: str,
+    text: str,
+):
+    return _profile_preset_service(profile_services, launch_method).save_profile_list_file_text(profile_key, text)
+
+
 def set_profile_filter_kind(
     profile_services,
     launch_method: str,

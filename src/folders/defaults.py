@@ -21,7 +21,9 @@ _PROFILE_FOLDERS: tuple[tuple[str, str, bool], ...] = (
     ("messengers", "Мессенджеры", False),
     ("social", "Соцсети", False),
     ("games", "Игры", False),
+    ("hosters", "Хостеры", False),
     ("sites", "Сайты", False),
+    ("zapretkvn", "ZapretKVN", False),
     (COMMON_FOLDER_KEY, "Общие", True),
     ("all-sites", "Все сайты", False),
 )
@@ -58,8 +60,12 @@ def classify_profile_folder(text: object) -> str:
         return "messengers"
     if any(token in value for token in ("facebook", "instagram", "tiktok", "twitter", "x.com", "vk.com", "vk ")):
         return "social"
-    if any(token in value for token in ("game", "valorant", "riot", "steam", "itch.io", "battlenet", "battle.net", "wow", "dead by daylight")):
+    if any(token in value for token in ("game", "valorant", "riot", "steam", "itch.io", "roblox", "lol", "league of legends", "battlenet", "battle.net", "wow", "dead by daylight")):
         return "games"
+    if any(token in value for token in ("amazon", "cloudflare", "ovh", "warp")):
+        return "hosters"
+    if any(token in value for token in ("timeweb", "zapretkvn")):
+        return "zapretkvn"
     if _looks_like_all_sites_profile(value):
         return "all-sites"
     if _mentions_site_or_list(value):

@@ -11,6 +11,7 @@ class ProfileListSource:
     profile: Profile
     in_preset: bool
     order: int
+    user_template_key: str = ""
 
 
 def build_profile_list_sources(
@@ -37,6 +38,7 @@ def build_profile_list_sources(
             profile=profile,
             in_preset=False,
             order=template_order + profile.index,
+            user_template_key=f"template:{template_id}" if str(template_id).startswith("user:") else "",
         )
         _add_source_to_groups(source, groups, group_aliases, alias_to_group)
 
@@ -95,13 +97,32 @@ def _logical_profile_key(profile: Profile) -> str:
 
 
 def _select_source(candidates: list[ProfileListSource]) -> ProfileListSource:
+    user_template_key = next((source.user_template_key for source in candidates if source.user_template_key), "")
     preset_sources = [source for source in candidates if source.in_preset]
     if preset_sources:
         preset_sources.sort(key=lambda source: (not source.profile.enabled, source.profile.index))
-        return preset_sources[0]
+        selected = preset_sources[0]
+        if user_template_key and not selected.user_template_key:
+            return ProfileListSource(
+                key=selected.key,
+                profile=selected.profile,
+                in_preset=selected.in_preset,
+                order=selected.order,
+                user_template_key=user_template_key,
+            )
+        return selected
 
     candidates.sort(key=lambda source: (_template_kind_rank(source.profile), source.order))
-    return candidates[0]
+    selected = candidates[0]
+    if user_template_key and not selected.user_template_key:
+        return ProfileListSource(
+            key=selected.key,
+            profile=selected.profile,
+            in_preset=selected.in_preset,
+            order=selected.order,
+            user_template_key=user_template_key,
+        )
+    return selected
 
 
 def _template_kind_rank(profile: Profile) -> int:

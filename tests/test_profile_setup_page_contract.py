@@ -13,6 +13,8 @@ from profile.ui.profile_setup_page import (
     _match_tab_text,
 )
 from profile.ui.preset_setup_page import PresetSetupPageBase, preset_setup_title_for_payload
+from profile.ui.profile_item import ProfileItem
+from profile.ui.profiles_list import ProfilesList
 from ui.presets_menu.delegate import PresetListDelegate
 
 
@@ -52,10 +54,22 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         apply_payload = inspect.getsource(PresetSetupPageBase._apply_payload)
         handler = inspect.getsource(PresetSetupPageBase._on_add_user_profile_clicked)
 
-        self.assertIn('PrimaryPushButton("Добавить"', apply_payload)
+        self.assertIn('ThemedActionButton("Добавить"', apply_payload)
         self.assertIn("CreateUserProfileDialog", handler)
         self.assertIn("create_user_profile", handler)
         self.assertIn("refresh_from_preset_switch", handler)
+
+    def test_profile_rows_have_context_menu_path(self) -> None:
+        item_source = inspect.getsource(ProfileItem)
+        list_source = inspect.getsource(ProfilesList)
+        page_apply = inspect.getsource(PresetSetupPageBase._apply_payload)
+        page_handler = inspect.getsource(PresetSetupPageBase._on_profile_context_requested)
+
+        self.assertIn("context_requested", item_source)
+        self.assertIn("contextMenuEvent", item_source)
+        self.assertIn("profile_context_requested", list_source)
+        self.assertIn("profile_context_requested.connect", page_apply)
+        self.assertIn("show_profile_context_menu", page_handler)
 
     def test_profile_setup_page_has_update_user_profile_action(self) -> None:
         build = inspect.getsource(ProfileSetupPageBase._build_content)
@@ -65,7 +79,7 @@ class ProfileSetupPageContractTests(unittest.TestCase):
 
         self.assertIn("_update_user_profile_button", build)
         self.assertIn("_delete_user_profile_button", build)
-        self.assertIn("template:user:", apply_payload)
+        self.assertIn("_user_profile_id_from_payload", apply_payload)
         self.assertIn("CreateUserProfileDialog", handler)
         self.assertIn("update_user_profile", handler)
         self.assertIn("delete_user_profile", delete_handler)
@@ -98,7 +112,31 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         self.assertIn("Текущая готовая стратегия", text)
         self.assertIn("TLS Fake", text)
         self.assertIn("--lua-desync=fake", text)
-        self.assertIn("--hostlist=lists/youtube.txt", text)
+        self.assertNotIn("--hostlist=lists/youtube.txt", text)
+
+    def test_profile_setup_page_has_raw_profile_editor_for_current_preset(self) -> None:
+        build = inspect.getsource(ProfileSetupPageBase._build_content)
+        apply_payload = inspect.getsource(ProfileSetupPageBase._apply_payload)
+        handler = inspect.getsource(ProfileSetupPageBase._on_raw_profile_save_clicked)
+
+        self.assertIn("_raw_profile_text", build)
+        self.assertIn("Сохранить текст profile", build)
+        self.assertIn("in_preset", apply_payload)
+        self.assertIn("save_raw_profile_text", handler)
+        self.assertIn("Текст profile обновлён только в текущем preset", handler)
+
+    def test_profile_setup_page_has_list_file_editor_as_second_tab(self) -> None:
+        build = inspect.getsource(ProfileSetupPageBase._build_content)
+        apply_payload = inspect.getsource(ProfileSetupPageBase._apply_payload)
+        save_handler = inspect.getsource(ProfileSetupPageBase._on_list_file_save_clicked)
+        validation = inspect.getsource(ProfileSetupPageBase._render_list_file_validation)
+
+        self.assertIn('addItem("editor", "Редактор"', build)
+        self.assertIn('setCurrentIndex(1)', build)
+        self.assertIn("_list_file_text", build)
+        self.assertIn("_apply_list_file_editor_payload", apply_payload)
+        self.assertIn("save_list_file_text", save_handler)
+        self.assertIn("Неверные строки", validation)
 
     def test_strategy_list_rows_store_visual_description(self) -> None:
         set_rows = inspect.getsource(ProfileStrategyListWidget._rebuild_tree)

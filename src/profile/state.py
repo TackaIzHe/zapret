@@ -7,6 +7,16 @@ from .strategy_state import ProfileStrategyState
 
 
 @dataclass(frozen=True)
+class ProfileListFileEditorState:
+    kind: str = ""
+    display_path: str = ""
+    text: str = ""
+    editable: bool = False
+    invalid_lines: tuple[tuple[int, str], ...] = ()
+    error_text: str = ""
+
+
+@dataclass(frozen=True)
 class ProfileListItem:
     key: str
     persistent_key: str
@@ -25,6 +35,7 @@ class ProfileListItem:
     order: int
     order_is_manual: bool = False
     group_collapsed: bool = False
+    user_profile_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -51,3 +62,4 @@ class ProfileSetupPayload:
     in_range: str = "x"
     out_range: str = "a"
     current_strategy_state: ProfileStrategyState = ProfileStrategyState()
+    list_editor: ProfileListFileEditorState = ProfileListFileEditorState()

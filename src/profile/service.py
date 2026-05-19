@@ -14,6 +14,12 @@ from .folders import (
     profile_folder_for_profile,
 )
 from .list_interpreter import build_profile_list_sources
+from .list_file_editor import (
+    profile_list_file_reference,
+    read_profile_list_file_text,
+    validate_profile_list_file_text,
+    write_profile_list_file_text,
+)
 from .models import EngineName, Preset, Profile
 from .normalizer import normalize_preset_profiles
 from .parser import parse_preset_text
@@ -23,12 +29,13 @@ from .serializer import (
     with_profile_deleted,
     with_profile_duplicated,
     with_profile_enabled,
+    with_profile_raw_text,
     with_profile_strategy_lines,
     with_profile_user_match,
 )
 from .strategy_state import ProfileStrategyState, ProfileStrategyStateStore
 from .strategy_catalog import StrategyEntry, load_strategy_catalogs
-from .state import ProfileListItem, ProfileListPayload, ProfileSetupPayload
+from .state import ProfileListFileEditorState, ProfileListItem, ProfileListPayload, ProfileSetupPayload
 from .template_library import load_profile_template_library
 from .user_profiles import create_user_profile, delete_user_profile, update_user_profile
 from .winws2_editable_settings import (
@@ -79,6 +86,7 @@ class ProfilePresetService:
                 key=source.key,
                 order=source.order,
                 folder_state=folder_state,
+                user_template_key=getattr(source, "user_template_key", ""),
             )
             items.append(item)
 
@@ -111,6 +119,7 @@ class ProfilePresetService:
             in_preset=source.in_preset,
             key=source.key,
             order=source.order,
+            user_template_key=getattr(source, "user_template_key", ""),
         )
         strategy_entries = dict(_basic_strategy_entries(profile, catalogs))
         winws2_editable = read_winws2_editable_settings(profile) if self._engine == ENGINE_WINWS2 else Winws2EditableSettings()
@@ -118,6 +127,7 @@ class ProfilePresetService:
             profile.persistent_key,
             tuple(strategy_entries),
         )
+        list_editor = self._list_editor_state_for_profile(profile)
         return ProfileSetupPayload(
             item=item,
             strategy_entries=strategy_entries,
@@ -132,6 +142,7 @@ class ProfilePresetService:
             in_range=winws2_editable.in_range,
             out_range=winws2_editable.out_range,
             current_strategy_state=strategy_states.get(item.strategy_id, ProfileStrategyState()),
+            list_editor=list_editor,
         )
 
     def set_profile_enabled(self, profile_key: str, enabled: bool) -> str | None:
@@ -254,6 +265,26 @@ class ProfilePresetService:
         )
         self.save_selected_preset(preset)
         return preset.profiles[index].key if 0 <= index < len(preset.profiles) else None
+
+    def update_profile_raw_text(self, profile_key: str, raw_text: str) -> str | None:
+        preset, _manifest = self.load_selected_preset()
+        index = _profile_index_for_key(preset, profile_key)
+        if index is None:
+            return None
+        preset = with_profile_raw_text(preset, index, raw_text)
+        self.save_selected_preset(preset)
+        return preset.profiles[index].key if 0 <= index < len(preset.profiles) else None
+
+    def validate_list_file_text(self, kind: str, text: str) -> tuple[tuple[int, str], ...]:
+        return validate_profile_list_file_text(kind, text)
+
+    def save_profile_list_file_text(self, profile_key: str, text: str) -> ProfileListFileEditorState | None:
+        profile = self._resolve_profile(profile_key)
+        if profile is None:
+            return None
+        reference = profile_list_file_reference(profile, self._lists_root())
+        write_profile_list_file_text(self._lists_root(), reference, text)
+        return self._list_editor_state_for_profile(profile)
 
     def set_profile_filter_kind(self, profile_key: str, filter_kind: str) -> str | None:
         if self._engine != ENGINE_WINWS2:
@@ -448,6 +479,22 @@ class ProfilePresetService:
             return ProfileStrategyState()
         return self._state_store.get_strategy_state(item.persistent_key, item.strategy_id)
 
+    def _lists_root(self) -> Path:
+        return Path(getattr(self._app_paths, "user_root", "")) / "lists"
+
+    def _list_editor_state_for_profile(self, profile: Profile) -> ProfileListFileEditorState:
+        reference = profile_list_file_reference(profile, self._lists_root())
+        text = read_profile_list_file_text(self._lists_root(), reference)
+        invalid_lines = validate_profile_list_file_text(reference.kind, text) if reference.editable else ()
+        return ProfileListFileEditorState(
+            kind=reference.kind,
+            display_path=reference.display_path,
+            text=text,
+            editable=reference.editable,
+            invalid_lines=invalid_lines,
+            error_text=reference.error_text,
+        )
+
     def _item_for_profile(
         self,
         profile: Profile,
@@ -457,6 +504,7 @@ class ProfilePresetService:
         key: str | None = None,
         order: int | None = None,
         folder_state: dict | None = None,
+        user_template_key: str = "",
     ) -> ProfileListItem:
         strategy_entries = _basic_strategy_entries(profile, catalogs)
         strategy_id, strategy_name = _resolve_strategy(profile, strategy_entries)
@@ -491,6 +539,7 @@ class ProfilePresetService:
             order=folder_order if folder_order is not None else (profile.index if order is None else int(order)),
             order_is_manual=folder_order is not None,
             group_collapsed=profile_folder_collapsed(folder_key, folder_state),
+            user_profile_id=_user_profile_id_from_template_key(user_template_key),
         )
 
     @lru_cache(maxsize=1)
@@ -576,6 +625,15 @@ def _list_type(profile: Profile) -> str:
     if has_ipset:
         return "ipset"
     return "custom"
+
+
+def _user_profile_id_from_template_key(template_key: str) -> str:
+    key = str(template_key or "").strip()
+    if key.startswith("template:user:"):
+        return key.split("template:user:", 1)[1].strip()
+    if key.startswith("user:"):
+        return key.split("user:", 1)[1].strip()
+    return ""
 
 
 def _match_summary(profile: Profile) -> str:

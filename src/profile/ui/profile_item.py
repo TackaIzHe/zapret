@@ -19,9 +19,11 @@ from PyQt6.QtGui import QCursor, QDrag, QResizeEvent
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
 from ui.fluent_widgets import set_tooltip
-from ui.theme import get_cached_qta_pixmap, get_theme_tokens
+from ui.theme import get_theme_tokens
 from ui.theme_refresh import ThemeRefreshBinding
 from qfluentwidgets import BodyLabel, CaptionLabel, CardWidget, InfoBadge, InfoLevel
+
+from .profile_icon import profile_icon_pixmap
 
 
 class ElidedTextLabel(QLabel):
@@ -111,6 +113,7 @@ class ProfileItem(CardWidget):
 
     item_activated = pyqtSignal(str)
     item_dropped = pyqtSignal(str, str)
+    context_requested = pyqtSignal(str, QPoint)
 
     MIME_TYPE = "application/x-zapret-profile-key"
 
@@ -360,7 +363,7 @@ class ProfileItem(CardWidget):
                 "#808080" if tokens.is_light else "#BFC5CF"
             )
             self._icon_label.setPixmap(
-                get_cached_qta_pixmap(
+                profile_icon_pixmap(
                     self._icon_name,
                     color=color,
                     size=18,
@@ -422,6 +425,10 @@ class ProfileItem(CardWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             self._drag_start_pos = event.position().toPoint()
         return super().mousePressEvent(event)
+
+    def contextMenuEvent(self, event):  # noqa: N802
+        self.context_requested.emit(self._item_key, event.globalPos())
+        event.accept()
 
     def mouseMoveEvent(self, event):  # noqa: N802
         if not self._drag_enabled or not (event.buttons() & Qt.MouseButton.LeftButton):

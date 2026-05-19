@@ -291,7 +291,20 @@ def _add_match_line(match: ProfileMatch, line: str) -> None:
 
 def build_match_signature(match: ProfileMatch) -> str:
     normalized: list[str] = []
-    for line in match.all_lines():
+    primary_lines = [
+        *match.hostlist_lines,
+        *match.ipset_lines,
+        *match.hostlist_domains_lines,
+        *match.inline_ipset_lines,
+    ]
+    identity_lines = [
+        *match.filter_lines,
+        *primary_lines,
+    ]
+    if not primary_lines:
+        identity_lines.extend(match.hostlist_exclude_lines)
+        identity_lines.extend(match.ipset_exclude_lines)
+    for line in identity_lines:
         stripped = str(line or "").strip().lower()
         if not stripped:
             continue

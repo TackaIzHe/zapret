@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import QHBoxLayout, QVBoxLayout
 from qfluentwidgets import CardWidget
 
 from ui.fluent_widgets import PulsingDot
+from ui.widgets.action_button import apply_themed_action_button
 
 
 @dataclass(slots=True)
@@ -162,6 +163,8 @@ def build_push_setting_card_common(
     title_text: str,
     content_text: str,
     on_click,
+    button_icon_name: str | None = "fa5s.external-link-alt",
+    button_alignment: str = "left",
     parent=None,
 ):
     if isinstance(icon, QPixmap):
@@ -175,5 +178,11 @@ def build_push_setting_card_common(
         parent,
     )
     card.setProperty("noDrag", True)
+    apply_themed_action_button(
+        getattr(card, "button", None),
+        icon_name=button_icon_name,
+        alignment=button_alignment,
+        min_width=128,
+    )
     card.clicked.connect(on_click)
     return card
