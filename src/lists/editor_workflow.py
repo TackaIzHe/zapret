@@ -169,6 +169,11 @@ class ListsEditorController:
     def load_text(self, kind: str):
         return load_editor_text(self._lists, kind)
 
+    def create_text_load_worker(self, request_id: int, kind: str, parent=None):
+        from lists.editor_load_worker import ListsEditorTextLoadWorker
+
+        return ListsEditorTextLoadWorker(request_id, self, kind, parent)
+
     def save_text(self, kind: str, text: str):
         return save_editor_text(self._lists, kind, text)
 

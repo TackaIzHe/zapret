@@ -6,9 +6,9 @@ from dataclasses import dataclass
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QLabel
+from qfluentwidgets import FluentIcon
 
 from ui.fluent_widgets import set_tooltip
-from ui.widgets.action_button import apply_themed_action_button
 from ui.widgets.fluent_item_tooltip import install_fluent_item_tooltips
 
 
@@ -46,9 +46,10 @@ def build_actions_section(
 
     actions_bar = quick_actions_bar_cls(content_parent)
 
-    start_btn = push_button_cls()
-    start_btn.setText(tr_fn("page.blockcheck.start", "Запустить"))
-    apply_themed_action_button(start_btn, icon_name="fa5s.play", alignment="left")
+    start_btn = push_button_cls(
+        tr_fn("page.blockcheck.start", "Запустить"),
+        icon=FluentIcon.PLAY,
+    )
     set_tooltip(
         start_btn,
         tr_fn(
@@ -59,9 +60,10 @@ def build_actions_section(
     start_btn.clicked.connect(on_start)
     actions_bar.add_button(start_btn)
 
-    stop_btn = push_button_cls()
-    stop_btn.setText(tr_fn("page.blockcheck.stop", "Остановить"))
-    apply_themed_action_button(stop_btn, icon_name="fa5s.stop", alignment="left")
+    stop_btn = push_button_cls(
+        tr_fn("page.blockcheck.stop", "Остановить"),
+        icon=FluentIcon.CANCEL,
+    )
     set_tooltip(
         stop_btn,
         tr_fn(

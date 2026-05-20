@@ -20,15 +20,13 @@ from blobs.ui.runtime_helpers import (
     reload_blobs_data,
 )
 from ui.fluent_widgets import (
-    ActionButton,
-    PrimaryActionButton,
     QuickActionsBar,
     RefreshButton,
 )
 from ui.theme import get_cached_qta_pixmap, get_theme_tokens
 from app.text_catalog import tr as tr_catalog
 from log.log import log
-from qfluentwidgets import LineEdit, MessageBox, InfoBar, SettingCardGroup
+from qfluentwidgets import LineEdit, MessageBox, InfoBar, PrimaryPushButton, PushButton, SettingCardGroup
 
 
 class BlobsPage(BasePage):
@@ -78,8 +76,8 @@ class BlobsPage(BasePage):
             page=self,
             setting_card_group_cls=SettingCardGroup,
             line_edit_cls=LineEdit,
-            action_button_cls=ActionButton,
-            primary_action_button_cls=PrimaryActionButton,
+            action_button_cls=PushButton,
+            primary_action_button_cls=PrimaryPushButton,
             quick_actions_bar_cls=QuickActionsBar,
             refresh_button_cls=RefreshButton,
             add_widget=self.add_widget,

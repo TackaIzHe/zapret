@@ -7,10 +7,9 @@ from collections.abc import Callable
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
-from qfluentwidgets import BodyLabel, CaptionLabel, LineEdit, PrimaryPushButton, PushButton
+from qfluentwidgets import BodyLabel, CaptionLabel, FluentIcon, LineEdit, PrimaryPushButton, PushButton
 
 from ui.fluent_widgets import SettingsCard, RefreshButton, QuickActionsBar, set_tooltip
-from ui.widgets.action_button import apply_themed_action_button
 
 
 @dataclass(slots=True)
@@ -73,9 +72,10 @@ def build_premium_activation_section(
     key_input.setReadOnly(True)
     key_row.addWidget(key_input, 1)
 
-    activate_btn = PrimaryPushButton()
-    activate_btn.setText(tr("page.premium.button.create_code", "Создать код"))
-    apply_themed_action_button(activate_btn, icon_name="fa5s.link", alignment="left")
+    activate_btn = PrimaryPushButton(
+        tr("page.premium.button.create_code", "Создать код"),
+        icon=FluentIcon.LINK,
+    )
     activate_btn.clicked.connect(on_create_pair_code)
     key_row.addWidget(activate_btn)
 
@@ -125,9 +125,10 @@ def build_premium_device_info_section(
     labels_layout.addWidget(last_check_label)
     labels_layout.addWidget(server_status_label)
 
-    open_bot_btn = PushButton()
-    open_bot_btn.setText(tr("page.premium.button.open_bot", "Открыть бота"))
-    apply_themed_action_button(open_bot_btn, icon_name="fa5b.telegram", alignment="left")
+    open_bot_btn = PushButton(
+        tr("page.premium.button.open_bot", "Открыть бота"),
+        icon=FluentIcon.SEND,
+    )
     open_bot_btn.clicked.connect(on_open_bot)
 
     row_layout = QHBoxLayout()
@@ -169,9 +170,10 @@ def build_premium_actions_section(
     actions_bar = QuickActionsBar(parent)
     actions_bar.add_button(refresh_btn)
 
-    change_key_btn = PushButton()
-    change_key_btn.setText(tr("page.premium.button.reset_activation", "Сбросить активацию"))
-    apply_themed_action_button(change_key_btn, icon_name="fa5s.exchange-alt", alignment="left")
+    change_key_btn = PushButton(
+        tr("page.premium.button.reset_activation", "Сбросить активацию"),
+        icon=FluentIcon.SYNC,
+    )
     set_tooltip(
         change_key_btn,
         tr(
@@ -182,9 +184,10 @@ def build_premium_actions_section(
     change_key_btn.clicked.connect(on_change_key)
     actions_bar.add_button(change_key_btn)
 
-    test_btn = PushButton()
-    test_btn.setText(tr("page.premium.button.test_connection", "Проверить соединение"))
-    apply_themed_action_button(test_btn, icon_name="fa5s.plug", alignment="left")
+    test_btn = PushButton(
+        tr("page.premium.button.test_connection", "Проверить соединение"),
+        icon=FluentIcon.CONNECT,
+    )
     set_tooltip(
         test_btn,
         tr(
@@ -195,9 +198,10 @@ def build_premium_actions_section(
     test_btn.clicked.connect(on_test_connection)
     actions_bar.add_button(test_btn)
 
-    extend_btn = PrimaryPushButton()
-    extend_btn.setText(tr("page.premium.button.extend", "Продлить подписку"))
-    apply_themed_action_button(extend_btn, icon_name="fa5b.telegram", alignment="left")
+    extend_btn = PrimaryPushButton(
+        tr("page.premium.button.extend", "Продлить подписку"),
+        icon=FluentIcon.SEND,
+    )
     set_tooltip(
         extend_btn,
         tr(

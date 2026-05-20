@@ -6,16 +6,14 @@ from dataclasses import dataclass
 
 from PyQt6.QtWidgets import QWidget, QVBoxLayout
 
-from ui.fluent_widgets import QuickActionsBar, RefreshButton, set_tooltip
-from ui.widgets.action_button import apply_themed_action_button
-from qfluentwidgets import BodyLabel, PushButton, PrimaryPushButton
+from ui.fluent_widgets import QuickActionsBar, set_tooltip
+from qfluentwidgets import BodyLabel, FluentIcon, PrimaryPushButton, PushButton
 
 
 @dataclass(slots=True)
 class ProfileShellWidgets:
     toolbar_actions_bar: object
     request_btn: object
-    reload_btn: object
     expand_btn: object
     collapse_btn: object
     info_btn: object
@@ -36,7 +34,6 @@ def build_profile_shell(
     request_hint_key: str,
     loading_key: str,
     on_open_profile_request_form,
-    on_reload,
     on_expand_all,
     on_collapse_all,
     on_show_info_popup,
@@ -51,11 +48,10 @@ def build_profile_shell(
     add_section_title(text_key=toolbar_title_key)
     toolbar_actions_bar = QuickActionsBar(content_parent)
 
-    request_btn = PrimaryPushButton()
-    request_btn.setText(
-        tr_fn(request_button_key, "ОТКРЫТЬ ФОРМУ НА GITHUB")
+    request_btn = PrimaryPushButton(
+        tr_fn(request_button_key, "ОТКРЫТЬ ФОРМУ НА GITHUB"),
+        icon=FluentIcon.GITHUB,
     )
-    apply_themed_action_button(request_btn, icon_name="fa5b.github", alignment="left")
     request_btn.clicked.connect(on_open_profile_request_form)
     set_tooltip(
         request_btn,
@@ -66,20 +62,10 @@ def build_profile_shell(
     )
     toolbar_actions_bar.add_button(request_btn)
 
-    reload_btn = RefreshButton()
-    reload_btn.clicked.connect(on_reload)
-    set_tooltip(
-        reload_btn,
-        tr_fn(
-            _toolbar_key("reload.description"),
-            "Обновить список профилей и выбранных готовых стратегий.",
-        )
+    expand_btn = PushButton(
+        tr_fn(_toolbar_key("expand"), "Развернуть"),
+        icon=FluentIcon.FULL_SCREEN,
     )
-    toolbar_actions_bar.add_button(reload_btn)
-
-    expand_btn = PushButton()
-    expand_btn.setText(tr_fn(_toolbar_key("expand"), "Развернуть"))
-    apply_themed_action_button(expand_btn, icon_name="fa5s.expand-alt", alignment="left")
     expand_btn.clicked.connect(on_expand_all)
     set_tooltip(
         expand_btn,
@@ -90,9 +76,10 @@ def build_profile_shell(
     )
     toolbar_actions_bar.add_button(expand_btn)
 
-    collapse_btn = PushButton()
-    collapse_btn.setText(tr_fn(_toolbar_key("collapse"), "Свернуть"))
-    apply_themed_action_button(collapse_btn, icon_name="fa5s.compress-alt", alignment="left")
+    collapse_btn = PushButton(
+        tr_fn(_toolbar_key("collapse"), "Свернуть"),
+        icon=FluentIcon.BACK_TO_WINDOW,
+    )
     collapse_btn.clicked.connect(on_collapse_all)
     set_tooltip(
         collapse_btn,
@@ -103,9 +90,10 @@ def build_profile_shell(
     )
     toolbar_actions_bar.add_button(collapse_btn)
 
-    info_btn = PushButton()
-    info_btn.setText(tr_fn(_toolbar_key("info"), "Что это такое?"))
-    apply_themed_action_button(info_btn, icon_name="fa5s.question-circle", alignment="left")
+    info_btn = PushButton(
+        tr_fn(_toolbar_key("info"), "Что это такое?"),
+        icon=FluentIcon.QUESTION,
+    )
     info_btn.clicked.connect(on_show_info_popup)
     set_tooltip(
         info_btn,
@@ -134,7 +122,6 @@ def build_profile_shell(
     return ProfileShellWidgets(
         toolbar_actions_bar=toolbar_actions_bar,
         request_btn=request_btn,
-        reload_btn=reload_btn,
         expand_btn=expand_btn,
         collapse_btn=collapse_btn,
         info_btn=info_btn,

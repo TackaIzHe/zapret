@@ -11,7 +11,7 @@ from folders.defaults import (
     classify_profile_folder,
 )
 from folders.ordering import build_folder_rows
-from folders.store import FolderLibraryStore
+from folders.store import FolderLibraryStore, normalize_folder_state
 
 
 class FolderDefaultsTests(unittest.TestCase):
@@ -55,6 +55,32 @@ class FolderDefaultsTests(unittest.TestCase):
         self.assertEqual(classify_profile_folder("zapretkvn --ipset=lists/ipset-zapretkvn.txt"), "zapretkvn")
         self.assertEqual(classify_profile_folder("--filter-tcp=80,443 --hostlist-exclude=ru.txt"), "all-sites")
         self.assertEqual(classify_profile_folder("rutracker.org"), "sites")
+
+    def test_profile_folder_normalization_merges_new_default_folders(self) -> None:
+        old_state = {
+            "folders": {
+                "youtube": {"name": "YouTube", "order": 0},
+                "discord": {"name": "Discord", "order": 1},
+                "messengers": {"name": "Мессенджеры", "order": 2},
+                "social": {"name": "Соцсети", "order": 3},
+                "games": {"name": "Игры", "order": 4},
+                "sites": {"name": "Сайты", "order": 5},
+                "common": {"name": "Общие", "order": 6, "system": True},
+                "all-sites": {"name": "Все сайты", "order": 7},
+            },
+            "items": {},
+        }
+
+        normalized = normalize_folder_state(old_state, build_default_profile_folders())
+        ordered_names = [
+            folder["name"]
+            for _key, folder in sorted(normalized["folders"].items(), key=lambda pair: pair[1]["order"])
+        ]
+
+        self.assertEqual(
+            ordered_names,
+            ["YouTube", "Discord", "Мессенджеры", "Соцсети", "Игры", "Хостеры", "Сайты", "ZapretKVN", "Общие", "Все сайты"],
+        )
 
 
 class FolderOrderingTests(unittest.TestCase):

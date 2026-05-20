@@ -24,8 +24,6 @@ from presets.ui.control.zapret2.runtime_helpers import (
 )
 from presets.ui.control.shared_builders import build_last_status_message_card_common
 from ui.fluent_widgets import (
-    ActionButton,
-    PrimaryActionButton,
     enable_setting_card_group_auto_height,
 )
 from app.state_store import AppUiState, MainWindowStateStore
@@ -44,7 +42,7 @@ from qfluentwidgets import (
     CaptionLabel, StrongBodyLabel, SubtitleLabel, BodyLabel,
     IndeterminateProgressBar, InfoBar,
     SegmentedWidget, MessageBoxBase,
-    SettingCardGroup, PushSettingCard,
+    PrimaryPushButton, PushButton, SettingCardGroup, PushSettingCard,
 )
 
 
@@ -142,20 +140,6 @@ def _log_startup_winws2_control_metric(section: str, elapsed_ms: float) -> None:
 
 
     _log(f"⏱ Startup UI Section: ZAPRET2_MODE_CONTROL {section} {rounded}ms", "⏱ STARTUP")
-
-
-class BigActionButton(PrimaryActionButton):
-    """Большая кнопка запуска (акцентная, PrimaryPushButton)."""
-
-    def __init__(self, text: str, icon_name: str | None = None, accent: bool = True, parent=None):
-        super().__init__(text, icon_name, parent)
-
-
-class StopButton(ActionButton):
-    """Кнопка остановки (нейтральная, PushButton)."""
-
-    def __init__(self, text: str, icon_name: str | None = None, accent: bool = False, parent=None):
-        super().__init__(text, icon_name, parent=parent)
 
 
 class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMixin, BasePage):
@@ -307,7 +291,8 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
 
     def _load_enabled_profile_count(self) -> int | None:
         try:
-            return int(self._profile.count_enabled_profiles(ZAPRET2_MODE))
+            count = self._profile.get_enabled_profile_count_snapshot(ZAPRET2_MODE)
+            return int(count) if count is not None else None
         except Exception:
             return None
 
@@ -415,8 +400,8 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
             tr_fn=lambda key, default: tr_catalog(key, language=self._ui_language, default=default),
             caption_label_cls=CaptionLabel,
             indeterminate_progress_bar_cls=IndeterminateProgressBar,
-            big_action_button_cls=BigActionButton,
-            stop_button_cls=StopButton,
+            big_action_button_cls=PrimaryPushButton,
+            stop_button_cls=PushButton,
             on_start=self._start_dpi,
             on_stop=self._stop_dpi,
             on_stop_and_exit=self._stop_and_exit,

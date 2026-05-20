@@ -6,9 +6,9 @@ from dataclasses import dataclass
 
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtWidgets import QLabel, QHBoxLayout
+from qfluentwidgets import FluentIcon
 
 from ui.pages.base_page import ScrollBlockingTextEdit
-from ui.theme import get_themed_qta_icon
 from ui.fluent_widgets import set_tooltip
 
 
@@ -143,7 +143,7 @@ def build_orchestra_log_card(
 
     clear_log_btn = fluent_push_button_cls()
     clear_log_btn.setText(tr_fn("page.orchestra.button.clear_log", "Очистить лог"))
-    clear_log_btn.setIcon(get_themed_qta_icon("fa5s.broom", color="white"))
+    clear_log_btn.setIcon(FluentIcon.BROOM)
     clear_log_btn.setIconSize(QSize(16, 16))
     clear_log_btn.setFixedHeight(32)
     clear_log_btn.setCursor(Qt.CursorShape.PointingHandCursor)

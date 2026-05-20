@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from settings.mode import exe_name_for_launch_method
+
 from PyQt6.QtCore import QObject, Qt, pyqtSignal
 
 import winws_runtime.public as runtime_commands
@@ -120,6 +122,32 @@ class RuntimeObjects:
             self.runtime_service.observe_process_details(self.process_details)
         except Exception:
             pass
+
+    def current_process_pid(self, launch_method: str, *, refresh: bool = False) -> int | None:
+        details = self.process_details or {}
+        if refresh:
+            manager = self.ensure_process_monitor_manager()
+            if manager is not None and hasattr(manager, "refresh_now"):
+                try:
+                    details = manager.refresh_now()
+                except Exception:
+                    details = self.process_details or {}
+                else:
+                    self.process_details = dict(details or {})
+
+        try:
+            exe_name = exe_name_for_launch_method(launch_method)
+        except Exception:
+            return None
+
+        pids = dict(details or {}).get(str(exe_name or "").strip().lower(), [])
+        if isinstance(pids, list):
+            for item in pids:
+                if isinstance(item, int):
+                    return item
+        if isinstance(pids, int):
+            return pids
+        return None
 
     def ensure_process_monitor_manager(self):
         if self.process_monitor_manager is None:

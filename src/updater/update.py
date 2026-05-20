@@ -3,7 +3,15 @@ updater/update.py
 ────────────────────────────────────────────────────────────────
 ОПТИМИЗИРОВАННАЯ ВЕРСИЯ ДЛЯ БЫСТРОГО СКАЧИВАНИЯ
 """
-import os, sys, tempfile, subprocess, shutil, time, threading, requests
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+
+import requests
 from typing import Callable
 from time import sleep
 

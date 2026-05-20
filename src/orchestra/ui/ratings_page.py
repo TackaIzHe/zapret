@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QWidget,
 )
 from qfluentwidgets import (
+    FluentIcon,
     LineEdit,
     PlainTextEdit,
     TransparentToolButton,
@@ -17,7 +18,7 @@ from qfluentwidgets import (
 from ui.pages.base_page import BasePage
 from ui.fluent_widgets import set_tooltip
 from ui.smooth_scroll import apply_editor_smooth_scroll_preference
-from ui.theme import get_theme_tokens, get_themed_qta_icon
+from ui.theme import get_theme_tokens
 from app.text_catalog import tr as tr_catalog
 from orchestra.ratings_workflow import (
     OrchestraRatingsState,
@@ -140,11 +141,9 @@ class OrchestraRatingsPage(BasePage):
 
     def _apply_page_theme(self, tokens=None, force: bool = False) -> None:
         _ = force
-        tokens = tokens or get_theme_tokens()
+        _ = tokens or get_theme_tokens()
         if hasattr(self, "refresh_btn") and self.refresh_btn is not None:
-            icon_name = "mdi.loading" if self._refresh_loading else "mdi.refresh"
-            icon_color = tokens.fg_faint if self._refresh_loading else tokens.fg
-            self.refresh_btn.setIcon(get_themed_qta_icon(icon_name, color=icon_color))
+            self.refresh_btn.setIcon(FluentIcon.SYNC)
 
     def _refresh_data(self):
         """Обновляет данные истории"""

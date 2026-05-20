@@ -7,15 +7,14 @@ from PyQt6.QtWidgets import (
 )
 import qtawesome as qta
 from qfluentwidgets import (
-    BodyLabel, CaptionLabel, InfoBar, LineEdit, MessageBox, SettingCardGroup,
+    BodyLabel, CaptionLabel, FluentIcon, InfoBar, LineEdit, MessageBox, SettingCardGroup,
+    PrimaryPushButton, PushButton,
     StrongBodyLabel,
 )
 
 from ui.pages.base_page import BasePage, ScrollBlockingPlainTextEdit
 from ui.fluent_widgets import (
     SettingsCard,
-    ActionButton,
-    PrimaryActionButton,
     QuickActionsBar,
     insert_widget_into_setting_card_group,
     set_tooltip,
@@ -50,6 +49,8 @@ class CustomDomainsPage(BasePage):
         self.open_file_btn = None
         self.reset_btn = None
         self.clear_btn = None
+        self._editor_load_request_seq = 0
+        self._editor_load_worker = None
         self._build_ui()
         self._apply_page_theme(force=True)
         self._run_runtime_init_once()
@@ -98,7 +99,10 @@ class CustomDomainsPage(BasePage):
         self.domain_input.returnPressed.connect(self._add_domain)
         add_layout.addWidget(self.domain_input, 1)
 
-        self.add_btn = PrimaryActionButton(self._tr("page.custom_domains.button.add", "Добавить"), "fa5s.plus")
+        self.add_btn = PrimaryPushButton(
+            self._tr("page.custom_domains.button.add", "Добавить"),
+            icon=FluentIcon.ADD,
+        )
         self.add_btn.setFixedHeight(38)
         self.add_btn.clicked.connect(self._add_domain)
         add_layout.addWidget(self.add_btn)
@@ -113,9 +117,9 @@ class CustomDomainsPage(BasePage):
         )
         self._actions_bar = QuickActionsBar(self.content)
 
-        self.open_file_btn = ActionButton(
+        self.open_file_btn = PushButton(
             self._tr("page.custom_domains.button.open_file", "Открыть файл"),
-            "fa5s.external-link-alt",
+            icon=FluentIcon.LINK,
         )
         self.open_file_btn.clicked.connect(self._open_file)
         set_tooltip(
@@ -123,9 +127,9 @@ class CustomDomainsPage(BasePage):
             self._tr("page.custom_domains.tooltip.open_file", "Сохраняет изменения и открывает `lists/user/other.txt` в проводнике"),
         )
 
-        self.reset_btn = ActionButton(
+        self.reset_btn = PushButton(
             self._tr("page.custom_domains.button.reset_file", "Сбросить файл"),
-            "fa5s.undo",
+            icon=FluentIcon.RETURN,
         )
         self.reset_btn.clicked.connect(self._confirm_reset_file)
         set_tooltip(
@@ -136,9 +140,9 @@ class CustomDomainsPage(BasePage):
             ),
         )
 
-        self.clear_btn = ActionButton(
+        self.clear_btn = PushButton(
             self._tr("page.custom_domains.button.clear_all", "Очистить всё"),
-            "fa5s.trash-alt",
+            icon=FluentIcon.DELETE,
         )
         self.clear_btn.clicked.connect(self._confirm_clear_all)
         set_tooltip(
@@ -252,22 +256,39 @@ class CustomDomainsPage(BasePage):
         """Загружает домены из файла"""
         if self._cleanup_in_progress:
             return
-        try:
-            state = self._lists_controller.load_text("domains")
-            
-            # Блокируем сигнал чтобы не срабатывало автосохранение
-            self.text_edit.blockSignals(True)
-            self.text_edit.setPlainText(state.text)
-            self.text_edit.blockSignals(False)
-            
-            self._update_status()
-            log(f"Загружено {state.lines_count} строк из lists/user/other.txt", "INFO")
+        self._request_editor_text("domains")
 
-        except Exception as e:
-            log(f"Ошибка загрузки доменов: {e}", "ERROR")
-            self.status_label.setText(
-                self._tr("page.custom_domains.status.error", "❌ Ошибка: {error}").format(error=e)
-            )
+    def _request_editor_text(self, kind: str) -> None:
+        self._editor_load_request_seq += 1
+        request_seq = self._editor_load_request_seq
+        worker = self._lists_controller.create_text_load_worker(request_seq, kind, self)
+        self._editor_load_worker = worker
+        worker.loaded.connect(self._on_editor_text_loaded)
+        worker.failed.connect(self._on_editor_text_failed)
+        worker.finished.connect(lambda w=worker: self._on_editor_text_worker_finished(w))
+        worker.start()
+
+    def _on_editor_text_loaded(self, request_seq: int, _kind: str, state) -> None:
+        if self._cleanup_in_progress or request_seq != self._editor_load_request_seq:
+            return
+        self.text_edit.blockSignals(True)
+        self.text_edit.setPlainText(state.text)
+        self.text_edit.blockSignals(False)
+        self._update_status()
+        log(f"Загружено {state.lines_count} строк из lists/user/other.txt", "INFO")
+
+    def _on_editor_text_failed(self, request_seq: int, _kind: str, error: str) -> None:
+        if self._cleanup_in_progress or request_seq != self._editor_load_request_seq:
+            return
+        log(f"Ошибка загрузки доменов: {error}", "ERROR")
+        self.status_label.setText(
+            self._tr("page.custom_domains.status.error", "❌ Ошибка: {error}").format(error=error)
+        )
+
+    def _on_editor_text_worker_finished(self, worker) -> None:
+        if self._editor_load_worker is worker:
+            self._editor_load_worker = None
+        worker.deleteLater()
             
     def _on_text_changed(self):
         """Запускает таймер автосохранения"""

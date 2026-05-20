@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
+    FluentIcon,
     StrongBodyLabel,
     PushButton,
     PushButton as FluentPushButton,
@@ -41,7 +42,7 @@ from log.ui.support_workflow import (
 )
 from settings.mode import ORCHESTRA_MODE
 from app.text_catalog import tr as tr_catalog
-from ui.theme import get_cached_qta_pixmap, get_theme_tokens, get_themed_qta_icon
+from ui.theme import get_cached_qta_pixmap, get_theme_tokens
 from log.log import log
 
 # Паттерны для определения РЕАЛЬНЫХ ошибок (строгие)
@@ -99,6 +100,7 @@ class LogsPage(BasePage):
         self._orchestra = orchestra_feature
         self._runtime = runtime_feature
         self.current_log_file = self._logs.get_current_log_file()
+        self._tail_file_signature = None
         self._error_pattern = re.compile('|'.join(ERROR_PATTERNS))
         self._exclude_pattern = re.compile('|'.join(EXCLUDE_PATTERNS), re.IGNORECASE)
 
@@ -182,7 +184,7 @@ class LogsPage(BasePage):
         # Tabs — Pivot handles its own theme
 
         if hasattr(self, "refresh_btn"):
-            self._refresh_icon_normal = get_themed_qta_icon('fa5s.sync-alt', color=tokens.fg)
+            self._refresh_icon_normal = FluentIcon.SYNC
             if not bool(getattr(self, "_refresh_spin_active", False)):
                 self.refresh_btn.setIcon(self._refresh_icon_normal)
 
@@ -721,10 +723,6 @@ class LogsPage(BasePage):
             self._runtime.current_strategy_runner(),
         )
 
-    def _get_runner_pid(self, runner):
-        """Возвращает PID для любого типа runner'а"""
-        return self._logs.get_runner_pid(runner)
-
     def _get_orchestra_log_path(self) -> str:
         """
         Возвращает путь к логу оркестратора.
@@ -847,6 +845,8 @@ class LogsPage(BasePage):
         """Запускает worker для чтения лога"""
         self._thread, self._worker = self._logs.start_tail_worker(
             current_log_file=self.current_log_file,
+            previous_signature=self._tail_file_signature,
+            set_tail_signature_fn=lambda value: setattr(self, "_tail_file_signature", value),
             stop_worker_fn=self._stop_tail_worker,
             build_tail_start_plan_fn=self._logs.build_tail_start_plan,
             set_info_text_fn=self.info_label.setText,
@@ -877,12 +877,15 @@ class LogsPage(BasePage):
 
     def _start_winws_output_worker(self):
         """Запускает worker для чтения вывода winws"""
+        launch_method = self.get_launch_method()
         self._winws_thread, self._winws_worker = self._logs.start_winws_output_worker(
             stop_worker_fn=self._stop_winws_output_worker,
             refresh_title_fn=self._refresh_winws_title,
             build_output_plan_fn=self._logs.build_winws_output_plan,
-            launch_method=self.get_launch_method(),
+            launch_method=launch_method,
             orchestra_runner=self._get_orchestra_runner(),
+            direct_runner=self._runtime.current_strategy_runner(),
+            process_pid=self._runtime.current_process_pid(launch_method, refresh=True),
             language=self._ui_language,
             set_status_fn=self._set_winws_status,
             thread_cls=QThread,
@@ -967,14 +970,25 @@ class LogsPage(BasePage):
             if self._winws_thread and self._winws_thread.isRunning():
                 self._stop_winws_output_worker()
 
-            pid = self._get_runner_pid(runner)
-            self._set_winws_status("running", f"PID: {pid} | Оркестратор")
+            pid = self._runtime.current_process_pid(self.get_launch_method(), refresh=True)
+            pid_text = str(pid) if isinstance(pid, int) else "?"
+            self._set_winws_status("running", f"PID: {pid_text} | Оркестратор")
             return
 
         if source == "direct" and runner:
             # Если worker не работает, запускаем его
             if not self._winws_thread or not self._winws_thread.isRunning():
                 self._start_winws_output_worker()
+            else:
+                launch_method = self.get_launch_method()
+                plan = self._logs.build_winws_output_plan(
+                    launch_method=launch_method,
+                    orchestra_runner=self._get_orchestra_runner(),
+                    direct_runner=runner,
+                    process_pid=self._runtime.current_process_pid(launch_method, refresh=True),
+                    language=self._ui_language,
+                )
+                self._set_winws_status(plan.status_kind, plan.status_text)
             return
 
         # Процесс не запущен - обновляем статус если worker не работает

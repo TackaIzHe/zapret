@@ -13,13 +13,14 @@ from config.build_info import APP_VERSION
 from app.text_catalog import tr as tr_catalog
 from ui.theme import get_cached_qta_pixmap, get_theme_tokens, get_themed_qta_icon
 from ui.theme_refresh import ThemeRefreshBinding
-from ui.fluent_widgets import PrimaryActionButton
 import updater.update_page_plans as update_page_plans
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
     CardWidget,
+    FluentIcon,
     IndeterminateProgressBar,
+    PrimaryPushButton,
     ProgressBar,
     PushButton,
     StrongBodyLabel,
@@ -144,9 +145,9 @@ class ChangelogCard(CardWidget):
         self.later_btn.clicked.connect(self._on_dismiss)
         buttons_layout.addWidget(self.later_btn)
 
-        self.install_btn = PrimaryActionButton(
+        self.install_btn = PrimaryPushButton(
             self._tr("page.servers.changelog.button.install", "Установить"),
-            "fa5s.download",
+            icon=FluentIcon.DOWNLOAD,
         )
         self.install_btn.clicked.connect(self._on_install)
         buttons_layout.addWidget(self.install_btn)
@@ -163,8 +164,8 @@ class ChangelogCard(CardWidget):
         self.title_label.setStyleSheet(f"color: {tokens.accent_hex};")
         self.changelog_text.setStyleSheet(f"color: {tokens.fg_muted}; font-size: 12px; padding: 4px 0;")
 
-        self.close_btn.setIcon(get_themed_qta_icon('fa5s.times', color=tokens.fg_faint))
-        self.install_btn.setIcon(get_themed_qta_icon('fa5s.download', color="#ffffff"))
+        self.close_btn.setIcon(FluentIcon.CLOSE)
+        self.install_btn.setIcon(FluentIcon.DOWNLOAD)
 
         icon_name = 'fa5s.arrow-circle-up' if self._icon_kind == "update" else 'fa5s.download'
         self.icon_label.setPixmap(get_cached_qta_pixmap(icon_name, color=tokens.accent_hex, size=24))

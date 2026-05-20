@@ -6,8 +6,9 @@ from dataclasses import dataclass
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QListView, QSizePolicy
+from qfluentwidgets import FluentIcon, PrimaryPushButton
 
-from ui.fluent_widgets import PrimaryActionButton, SettingsCard, set_tooltip
+from ui.fluent_widgets import SettingsCard, set_tooltip
 from ui.presets_menu.delegate import PresetListDelegate
 from ui.presets_menu.model import PresetListModel
 from ui.presets_menu.toolbar import PresetsToolbarLayout
@@ -84,9 +85,9 @@ def build_user_presets_page_shell(
     configs_title_label.setMinimumWidth(0)
     configs_layout.addWidget(configs_title_label, 1)
 
-    get_configs_btn = PrimaryActionButton(
+    get_configs_btn = PrimaryPushButton(
         tr_fn(f"{tr_prefix}.configs.button", "Получить конфиги"),
-        "fa5s.external-link-alt",
+        icon=FluentIcon.GITHUB,
     )
     get_configs_btn.setFixedHeight(36)
     get_configs_btn.clicked.connect(on_open_new_configs_post)
@@ -107,7 +108,7 @@ def build_user_presets_page_shell(
 
     import_btn = toolbar_layout.create_action_button(
         tr_fn(f"{tr_prefix}.button.import", "Импорт"),
-        "fa5s.file-import",
+        FluentIcon.DOWNLOAD,
     )
     set_tooltip(
         import_btn,
@@ -117,7 +118,7 @@ def build_user_presets_page_shell(
 
     open_folder_btn = toolbar_layout.create_action_button(
         tr_fn(f"{tr_prefix}.button.open_folder", "Открыть папку"),
-        "fa5s.folder-open",
+        FluentIcon.FOLDER,
     )
     set_tooltip(
         open_folder_btn,
@@ -127,7 +128,7 @@ def build_user_presets_page_shell(
 
     reset_all_btn = toolbar_layout.create_action_button(
         tr_fn(f"{tr_prefix}.button.reset_all", "Вернуть встроенные"),
-        "fa5s.undo",
+        FluentIcon.RETURN,
     )
     set_tooltip(
         reset_all_btn,
@@ -140,13 +141,13 @@ def build_user_presets_page_shell(
 
     presets_info_btn = toolbar_layout.create_action_button(
         tr_fn(f"{tr_prefix}.button.wiki", "Вики по пресетам"),
-        "fa5s.info-circle",
+        FluentIcon.INFO,
     )
     presets_info_btn.clicked.connect(on_open_presets_info)
 
     info_btn = toolbar_layout.create_action_button(
         tr_fn(f"{tr_prefix}.button.what_is_this", "Что это такое?"),
-        "fa5s.question-circle",
+        FluentIcon.QUESTION,
     )
     info_btn.clicked.connect(on_info_clicked)
 

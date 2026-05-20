@@ -23,6 +23,26 @@ class _PresetStore:
         self.text = text
 
 
+class _FileBackedPresetStore:
+    def __init__(self, preset_path: Path, text: str) -> None:
+        self.preset_path = preset_path
+        self.preset_path.write_text(text, encoding="utf-8")
+        self.read_count = 0
+
+    def get_selected_source_preset_manifest(self, _launch_method: str):
+        return SimpleNamespace(file_name=self.preset_path.name, name=self.preset_path.stem)
+
+    def get_selected_source_path(self, _launch_method: str) -> Path:
+        return self.preset_path
+
+    def read_selected_preset_source(self, _launch_method: str):
+        self.read_count += 1
+        return self.preset_path.read_text(encoding="utf-8"), self.get_selected_source_preset_manifest(_launch_method)
+
+    def save_selected_preset_source(self, _launch_method: str, text: str) -> None:
+        self.preset_path.write_text(text, encoding="utf-8")
+
+
 class ProfileListPayloadTests(unittest.TestCase):
     def test_profile_folder_order_keeps_zero_order_first(self) -> None:
         grouped = {
@@ -36,6 +56,10 @@ class ProfileListPayloadTests(unittest.TestCase):
     def test_list_profiles_keeps_catalog_rows_but_collapses_hostlist_ipset_variants(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
+            lists_dir = root / "lists"
+            lists_dir.mkdir()
+            (lists_dir / "youtube.txt").write_text("youtube.com\n", encoding="utf-8")
+            (lists_dir / "ipset-youtube.txt").write_text("1.1.1.1\n", encoding="utf-8")
             templates_dir = root / "profile" / "templates"
             templates_dir.mkdir(parents=True)
             (templates_dir / "all_profiles.txt").write_text(
@@ -87,6 +111,10 @@ class ProfileListPayloadTests(unittest.TestCase):
     def test_list_profiles_normalizes_multi_list_profile_and_saves_preset(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
+            lists_dir = root / "lists"
+            lists_dir.mkdir()
+            (lists_dir / "youtube.txt").write_text("youtube.com\n", encoding="utf-8")
+            (lists_dir / "ipset-youtube.txt").write_text("1.1.1.1\n", encoding="utf-8")
             templates_dir = root / "profile" / "templates"
             templates_dir.mkdir(parents=True)
             (templates_dir / "all_profiles.txt").write_text("", encoding="utf-8")
@@ -118,9 +146,48 @@ class ProfileListPayloadTests(unittest.TestCase):
         self.assertIn("--hostlist=lists/other.txt", store.text)
         self.assertNotIn("--hostlist-exclude=lists/list-exclude.txt", store.text)
 
+    def test_selected_preset_snapshot_reuses_parsed_preset_for_summary_calls(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            lists_dir = root / "lists"
+            lists_dir.mkdir()
+            (lists_dir / "youtube.txt").write_text("youtube.com\n", encoding="utf-8")
+            templates_dir = root / "profile" / "templates"
+            templates_dir.mkdir(parents=True)
+            (templates_dir / "all_profiles.txt").write_text("", encoding="utf-8")
+            store = _FileBackedPresetStore(
+                root / "selected.txt",
+                "\n".join(
+                    (
+                        "--filter-tcp=80,443",
+                        "--hostlist=lists/youtube.txt",
+                        "--lua-desync=pass",
+                        "",
+                    )
+                ),
+            )
+            feature = SimpleNamespace(
+                _presets_feature=store,
+                _app_paths=AppPaths(user_root=root, local_root=root),
+            )
+
+            with patch("settings.store.MAIN_DIRECTORY", str(root)):
+                service = ProfilePresetService(feature, "zapret2_mode")
+                service.list_profiles()
+                enabled_count = service.count_enabled_profiles()
+                display_state = service.get_profile_strategy_display_state()
+
+        self.assertEqual(enabled_count, 1)
+        self.assertEqual(display_state.active_count, 1)
+        self.assertEqual(store.read_count, 1)
+
     def test_list_profiles_shows_current_ipset_variant_when_preset_uses_ipset(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
+            lists_dir = root / "lists"
+            lists_dir.mkdir()
+            (lists_dir / "youtube.txt").write_text("youtube.com\n", encoding="utf-8")
+            (lists_dir / "ipset-youtube.txt").write_text("1.1.1.1\n", encoding="utf-8")
             templates_dir = root / "profile" / "templates"
             templates_dir.mkdir(parents=True)
             (templates_dir / "all_profiles.txt").write_text(
@@ -163,6 +230,10 @@ class ProfileListPayloadTests(unittest.TestCase):
     def test_template_profile_is_shown_as_not_added(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
+            lists_dir = root / "lists"
+            lists_dir.mkdir()
+            (lists_dir / "youtube.txt").write_text("youtube.com\n", encoding="utf-8")
+            (lists_dir / "ipset-youtube.txt").write_text("1.1.1.1\n", encoding="utf-8")
             templates_dir = root / "profile" / "templates"
             templates_dir.mkdir(parents=True)
             (templates_dir / "all_profiles.txt").write_text(
@@ -197,6 +268,10 @@ class ProfileListPayloadTests(unittest.TestCase):
     def test_skipped_preset_profile_is_shown_as_disabled(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
+            lists_dir = root / "lists"
+            lists_dir.mkdir()
+            (lists_dir / "youtube.txt").write_text("youtube.com\n", encoding="utf-8")
+            (lists_dir / "ipset-youtube.txt").write_text("1.1.1.1\n", encoding="utf-8")
             templates_dir = root / "profile" / "templates"
             templates_dir.mkdir(parents=True)
             (templates_dir / "all_profiles.txt").write_text("", encoding="utf-8")
@@ -257,6 +332,10 @@ class ProfileListPayloadTests(unittest.TestCase):
     def test_same_profile_name_collapses_different_hostlist_files(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
+            lists_dir = root / "lists"
+            lists_dir.mkdir()
+            (lists_dir / "youtube.txt").write_text("", encoding="utf-8")
+            (lists_dir / "ipset-youtube.txt").write_text("", encoding="utf-8")
             templates_dir = root / "profile" / "templates"
             templates_dir.mkdir(parents=True)
             (templates_dir / "all_profiles.txt").write_text(

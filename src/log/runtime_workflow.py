@@ -34,6 +34,8 @@ def run_logs_runtime_init(
 def start_tail_worker(
     *,
     current_log_file: str,
+    previous_signature,
+    set_tail_signature_fn,
     stop_worker_fn,
     build_tail_start_plan_fn,
     set_info_text_fn,
@@ -46,16 +48,20 @@ def start_tail_worker(
     log_fn,
 ):
     stop_worker_fn()
-    plan = build_tail_start_plan_fn(current_log_file=current_log_file)
+    plan = build_tail_start_plan_fn(
+        current_log_file=current_log_file,
+        previous_signature=previous_signature,
+    )
     if not plan.should_start:
         return None, None
 
-    clear_log_view_fn()
+    if plan.should_clear_view:
+        clear_log_view_fn()
     set_info_text_fn(plan.info_text)
 
     try:
         thread = thread_cls(parent)
-        worker = create_worker_fn(plan.file_path)
+        worker = create_worker_fn(plan.file_path, initial_max_bytes=plan.initial_max_bytes)
         worker.moveToThread(thread)
 
         thread.started.connect(worker.run)
@@ -65,6 +71,7 @@ def start_tail_worker(
         thread.finished.connect(on_thread_finished)
         thread.finished.connect(thread.deleteLater)
         thread.start()
+        set_tail_signature_fn(plan.file_signature)
         return thread, worker
     except Exception as e:
         log_fn(f"Ошибка запуска log tail worker: {e}", "ERROR")
@@ -117,6 +124,8 @@ def start_winws_output_worker(
     build_output_plan_fn,
     launch_method: str,
     orchestra_runner,
+    direct_runner,
+    process_pid,
     language: str,
     set_status_fn,
     thread_cls,
@@ -133,6 +142,8 @@ def start_winws_output_worker(
     plan = build_output_plan_fn(
         launch_method=launch_method,
         orchestra_runner=orchestra_runner,
+        direct_runner=direct_runner,
+        process_pid=process_pid,
         language=language,
     )
     set_status_fn(plan.status_kind, plan.status_text)

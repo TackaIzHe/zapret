@@ -5,12 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QSizePolicy
-from qfluentwidgets import BreadcrumbBar
+from qfluentwidgets import BreadcrumbBar, FluentIcon
 
 from ui.fluent_widgets import (
     SettingsCard,
-    ActionButton,
-    PrimaryActionButton,
     QuickActionsBar,
     RefreshButton,
     insert_widget_into_setting_card_group,
@@ -81,7 +79,7 @@ def build_blobs_page_header(
 
     add_btn = primary_action_button_cls(
         tr_fn("page.blobs.button.add", "Добавить блоб"),
-        "fa5s.plus",
+        icon=FluentIcon.ADD,
     )
     add_btn.clicked.connect(on_add_blob)
 
@@ -90,13 +88,13 @@ def build_blobs_page_header(
 
     open_folder_btn = action_button_cls(
         tr_fn("page.blobs.button.bin_folder", "Папка bin"),
-        "fa5s.folder-open",
+        icon=FluentIcon.FOLDER,
     )
     open_folder_btn.clicked.connect(on_open_bin_folder)
 
     open_json_btn = action_button_cls(
         tr_fn("page.blobs.button.open_json", "Открыть JSON"),
-        "fa5s.file-code",
+        icon=FluentIcon.DOCUMENT,
     )
     open_json_btn.clicked.connect(on_open_json)
 

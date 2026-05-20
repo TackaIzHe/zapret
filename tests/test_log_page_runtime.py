@@ -20,7 +20,7 @@ class _FakeDirectRunner:
 
 
 class LogPageRuntimeTests(unittest.TestCase):
-    def test_winws_output_plan_uses_direct_runner_process(self) -> None:
+    def test_winws_output_plan_uses_runtime_pid_and_direct_runner_process(self) -> None:
         process = object()
         runner = _FakeDirectRunner(process)
 
@@ -28,12 +28,13 @@ class LogPageRuntimeTests(unittest.TestCase):
             launch_method="zapret2_mode",
             orchestra_runner=None,
             direct_runner=runner,
+            process_pid=24680,
             language="ru",
         )
 
         self.assertEqual(plan.action, "start_worker")
         self.assertEqual(plan.process, process)
-        self.assertIn("14848", plan.status_text)
+        self.assertIn("24680", plan.status_text)
         self.assertIn("Default v5", plan.status_text)
 
     def test_tail_plan_does_not_reload_unchanged_log_history(self) -> None:

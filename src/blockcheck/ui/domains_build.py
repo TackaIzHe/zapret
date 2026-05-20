@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ui.widgets.action_button import apply_themed_action_button
+from qfluentwidgets import FluentIcon
 
 
 @dataclass(slots=True)
@@ -43,9 +43,10 @@ def build_blockcheck_domains_ui(
     input_edit.returnPressed.connect(on_add)
     input_row.addWidget(input_edit)
 
-    add_button = push_button_cls()
-    add_button.setText(tr_fn("page.blockcheck.add_domain", "Добавить"))
-    apply_themed_action_button(add_button, icon_name="fa5s.plus", alignment="left")
+    add_button = push_button_cls(
+        tr_fn("page.blockcheck.add_domain", "Добавить"),
+        icon=FluentIcon.ADD,
+    )
     add_button.clicked.connect(on_add)
     input_row.addWidget(add_button)
 

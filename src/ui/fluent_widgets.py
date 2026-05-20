@@ -3,9 +3,9 @@
 Общие fluent-виджеты и маленькие помощники для страниц.
 
 Страницы импортируют отсюда только готовые UI-кирпичики:
-SettingsCard, ActionButton, SettingsRow, PulsingDot и похожие элементы.
+SettingsCard, SettingsRow, PulsingDot и похожие элементы.
 """
-from PyQt6.QtCore import Qt, QSize, QEvent, QTimer, QObject
+from PyQt6.QtCore import Qt, QSize, QTimer, QObject, QEvent
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSizePolicy,
 )
@@ -14,7 +14,6 @@ import qtawesome as qta
 
 from ui.theme import get_cached_qta_pixmap, get_themed_qta_icon, get_theme_tokens
 from ui.theme_refresh import ThemeRefreshBinding
-from ui.widgets.action_button import apply_themed_action_button
 from qfluentwidgets import (
     BodyLabel, CaptionLabel, CardWidget, CheckBox, ComboBox, FlowLayout,
     FluentIcon, HeaderCardWidget, IndeterminateProgressBar, InfoBar,
@@ -147,7 +146,7 @@ def refresh_setting_card_group_height(group):
     except Exception:
         pass
 
-    height = 0
+    height_candidates: list[int] = []
     try:
         width = max(1, int(group.width() or 0), int(layout.sizeHint().width() or 0))
     except Exception:
@@ -155,14 +154,19 @@ def refresh_setting_card_group_height(group):
 
     try:
         if layout.hasHeightForWidth():
-            height = int(layout.totalHeightForWidth(width))
+            height_candidates.append(int(layout.totalHeightForWidth(width)))
     except Exception:
-        height = 0
-    if height <= 0:
-        try:
-            height = int(layout.sizeHint().height())
-        except Exception:
-            height = 0
+        pass
+    try:
+        height_candidates.append(int(layout.sizeHint().height()))
+    except Exception:
+        pass
+    try:
+        height_candidates.append(int(layout.minimumSize().height()))
+    except Exception:
+        pass
+
+    height = max((item for item in height_candidates if item > 0), default=0)
     if height <= 0:
         return group
 
@@ -229,11 +233,36 @@ class QuickActionsBar(SimpleCardWidget):
         except Exception:
             pass
         self.actions_layout.addWidget(button)
+        self._refresh_minimum_height()
         return button
 
     def add_buttons(self, buttons) -> None:
         for button in buttons or ():
             self.add_button(button)
+
+    def sizeHint(self):  # noqa: N802
+        return self._expanded_layout_hint(super().sizeHint())
+
+    def minimumSizeHint(self):  # noqa: N802
+        return self._expanded_layout_hint(super().minimumSizeHint())
+
+    def _expanded_layout_hint(self, fallback: QSize) -> QSize:
+        try:
+            layout_hint = self.actions_layout.sizeHint()
+            layout_minimum = self.actions_layout.minimumSize()
+            width = max(int(fallback.width()), int(layout_hint.width()), int(layout_minimum.width()))
+            height = max(int(fallback.height()), int(layout_hint.height()), int(layout_minimum.height()))
+            return QSize(width, height)
+        except Exception:
+            return fallback
+
+    def _refresh_minimum_height(self) -> None:
+        try:
+            minimum = int(self.actions_layout.minimumSize().height())
+            if minimum > 0:
+                self.setMinimumHeight(minimum)
+        except Exception:
+            pass
 
 
 class SemanticNotice(QWidget):
@@ -388,89 +417,30 @@ def build_advanced_settings_section(
 
 
 # ---------------------------------------------------------------------------
-# ActionButton — non-accent PushButton (use PrimaryActionButton for accent)
+# RefreshButton — PushButton with WinUI-style spinning animation
 # ---------------------------------------------------------------------------
 
-
-def _set_qta_button_icon(button, icon_name: str | None, *, color: str, size: int = 16) -> None:
-    if not icon_name:
-        return
-    try:
-        pixmap = get_cached_qta_pixmap(icon_name, color=color, size=size)
-        if pixmap.isNull():
-            button.setIcon(get_themed_qta_icon(icon_name, color=color))
-            return
-        button.setIcon(QIcon(pixmap))
-    except Exception:
-        try:
-            button.setIcon(get_themed_qta_icon(icon_name, color=color))
-        except Exception:
-            pass
-
-class ActionButton(PushButton):
-    """Non-accent action button using qfluentwidgets PushButton.
-
-    For accent (primary) buttons, use PrimaryActionButton instead.
-    Note: PushButton.__init__ takes (parent=None) only — text is set via setText().
-    Subclasses (StopButton etc.) rely on this being a real class.
-    """
-
-    def __init__(self, text: str, icon_name: str | None = None, parent=None):
-        super().__init__(parent)
-        self.setText(text)
-        self._icon_name = icon_name
-        self._theme_refresh_scheduled = False
-        self._last_icon_color = None
-        self.setFixedHeight(32)
-        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-
-        if icon_name:
-            self.setIconSize(QSize(16, 16))
-        apply_themed_action_button(self, icon_name=icon_name, alignment="center")
-
-    def _update_style(self):
-        """Update icon tint when theme changes."""
-        apply_themed_action_button(self, icon_name=self._icon_name, alignment="center")
-
-    def changeEvent(self, event):  # noqa: N802 (Qt override)
-        try:
-            if event.type() in (QEvent.Type.StyleChange, QEvent.Type.PaletteChange):
-                if not self._icon_name:
-                    return super().changeEvent(event)
-                if not self._theme_refresh_scheduled:
-                    self._theme_refresh_scheduled = True
-                    QTimer.singleShot(16, self._on_debounced_theme_change)
-        except Exception:
-            pass
-        return super().changeEvent(event)
-
-    def _on_debounced_theme_change(self) -> None:
-        try:
-            self._update_style()
-        finally:
-            self._theme_refresh_scheduled = False
-
-
-# ---------------------------------------------------------------------------
-# RefreshButton — ActionButton with WinUI-style spinning animation
-# ---------------------------------------------------------------------------
-
-class RefreshButton(ActionButton):
+class RefreshButton(PushButton):
     """Refresh / reload button with WinUI-style icon spin during loading.
 
     Usage:
-        btn = RefreshButton()          # default "Обновить" + sync icon
+        btn = RefreshButton()          # default "Обновить" + FluentIcon.SYNC
         btn = RefreshButton("Обновить статус")
         btn.set_loading(True)          # start spin, disable button
         btn.set_loading(False)         # stop spin, re-enable button
     """
 
-    def __init__(self, text: str = "Обновить", icon_name: str = "fa5s.sync-alt", parent=None):
+    def __init__(self, text: str = "Обновить", icon=FluentIcon.SYNC, parent=None):
         self._loading = False
         self._spin_angle = 0.0
         self._spin_timer = None
-        super().__init__(text, icon_name, parent=parent)
+        self._base_icon = icon
+        PushButton.__init__(self, parent=parent)
+        self.setText(text)
+        self.setIcon(icon)
+        self.setFixedHeight(32)
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._spin_timer = QTimer(self)
         self._spin_timer.setInterval(40)  # ~25 fps
         self._spin_timer.timeout.connect(self._spin_tick)
@@ -489,27 +459,19 @@ class RefreshButton(ActionButton):
         else:
             if timer is not None:
                 timer.stop()
-            self._set_icon_at(0.0)
+            self.setIcon(self._base_icon)
 
     def _spin_tick(self) -> None:
         self._spin_angle = (self._spin_angle + 12) % 360  # ~1 rotation/sec
         self._set_icon_at(self._spin_angle)
 
     def _set_icon_at(self, angle: float) -> None:
-        if not self._icon_name:
-            return
         try:
-            import qtawesome as qta
-            from qfluentwidgets import isDarkTheme as _idt
-            color = "#cccccc" if _idt() else "#555555"
-
             size = self.iconSize()
             icon_w = max(16, int(size.width()) or 16)
             icon_h = max(16, int(size.height()) or 16)
 
-            # Рисуем вращение внутри фиксированного холста одного размера,
-            # чтобы иконка не "плавала" по вертикали из-за меняющегося bbox.
-            source = get_cached_qta_pixmap(self._icon_name, color=color, size=max(icon_w, icon_h))
+            source = self.icon().pixmap(max(icon_w, icon_h), max(icon_w, icon_h))
             rotated = source.transformed(QTransform().rotate(angle), Qt.TransformationMode.SmoothTransformation)
 
             canvas = QPixmap(icon_w, icon_h)
@@ -525,34 +487,6 @@ class RefreshButton(ActionButton):
             timer = getattr(self, "_spin_timer", None)
             if timer is not None:
                 timer.stop()
-
-    def _update_style(self) -> None:
-        """Update icon tint when theme changes (only when not spinning)."""
-        if not getattr(self, "_loading", False):
-            self._set_icon_at(0.0)
-
-
-# ---------------------------------------------------------------------------
-# PrimaryActionButton — accent PrimaryPushButton (start/confirm actions)
-# ---------------------------------------------------------------------------
-
-class PrimaryActionButton(PrimaryPushButton):
-    """Accent action button using qfluentwidgets PrimaryPushButton.
-
-    Use this for primary / confirm actions (e.g. «Запустить», «Применить»).
-    PrimaryPushButton.__init__ takes (parent=None) only — text is set via setText().
-    """
-
-    def __init__(self, text: str, icon_name: str | None = None, parent=None):
-        super().__init__(parent)
-        self.setText(text)
-        self._icon_name = icon_name
-        self.setFixedHeight(32)
-        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        if icon_name:
-            self.setIconSize(QSize(16, 16))
-        apply_themed_action_button(self, icon_name=icon_name, alignment="center")
 
 
 # ---------------------------------------------------------------------------

@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ui.fluent_widgets import set_tooltip
-from ui.theme import get_cached_qta_pixmap, get_theme_tokens, get_themed_qta_icon
+from ui.theme import get_cached_qta_pixmap, get_theme_tokens
 from ui.theme_refresh import ThemeRefreshBinding
 from app.text_catalog import tr as tr_catalog
 from qfluentwidgets import (
@@ -22,6 +22,7 @@ from qfluentwidgets import (
     SubtitleLabel,
     BodyLabel,
     CaptionLabel,
+    FluentIcon,
     TransparentToolButton,
 )
 
@@ -125,7 +126,7 @@ class BlobItemWidget(QFrame):
 
         if self.blob_info.get("is_user"):
             self._delete_btn = TransparentToolButton()
-            self._delete_btn.setIcon(get_themed_qta_icon('fa5s.trash-alt', color='#ff6b6b'))
+            self._delete_btn.setIcon(FluentIcon.DELETE)
             self._delete_btn.setFixedSize(28, 28)
             self._delete_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             self._delete_btn.clicked.connect(self._on_delete)
@@ -241,7 +242,7 @@ class AddBlobDialog(MessageBoxBase):
         self.value_edit.setPlaceholderText(self._tr("page.blobs.dialog.add.value.path_placeholder", "Путь к файлу"))
         value_layout.addWidget(self.value_edit, 1)
         self.browse_btn = TransparentToolButton(self._value_container)
-        self.browse_btn.setIcon(get_themed_qta_icon("fa5s.folder-open", color="#888"))
+        self.browse_btn.setIcon(FluentIcon.FOLDER)
         self.browse_btn.setFixedSize(32, 32)
         set_tooltip(self.browse_btn, self._tr("page.blobs.dialog.add.browse.tooltip", "Выбрать файл"))
         self.browse_btn.clicked.connect(self._browse_file)

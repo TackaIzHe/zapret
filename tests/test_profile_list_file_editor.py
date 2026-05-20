@@ -60,6 +60,7 @@ class ProfileListFileEditorTests(unittest.TestCase):
             root = Path(temp_dir)
             lists_dir = root / "lists"
             lists_dir.mkdir()
+            (lists_dir / "youtube.txt").write_text("youtube.com\n", encoding="utf-8")
             (lists_dir / "ipset-youtube.txt").write_text("1.1.1.1\n", encoding="utf-8")
             store = _PresetStore(
                 "--filter-tcp=80,443\n--ipset=lists/ipset-youtube.txt\n--lua-desync=pass\n"

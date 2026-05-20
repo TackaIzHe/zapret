@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from qfluentwidgets import FluentIcon
+
 
 @dataclass(slots=True)
 class HostlistOverviewPanelWidgets:
@@ -58,7 +60,7 @@ def build_overview_panel(
 
     open_button = action_button_cls(
         tr_fn("page.hostlist.button.open", "Открыть"),
-        "fa5s.folder-open",
+        icon=FluentIcon.FOLDER,
     )
     open_button.clicked.connect(on_open)
     set_tooltip_fn(
@@ -70,7 +72,7 @@ def build_overview_panel(
     if on_rebuild is not None:
         rebuild_button = action_button_cls(
             tr_fn("page.hostlist.button.rebuild", "Перестроить"),
-            "fa5s.sync-alt",
+            icon=FluentIcon.SYNC,
         )
         rebuild_button.clicked.connect(on_rebuild)
         if rebuild_tooltip_key:

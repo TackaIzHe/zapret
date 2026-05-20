@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget
+from qfluentwidgets import FluentIcon
 
 from ui.pages.base_page import ScrollBlockingPlainTextEdit
 from ui.log_limits import (
@@ -12,7 +13,6 @@ from ui.log_limits import (
     TELEGRAM_PROXY_LOG_VIEW_MAX_LINES,
     apply_text_line_limit,
 )
-from ui.widgets.action_button import apply_themed_action_button
 
 
 @dataclass(slots=True)
@@ -93,21 +93,15 @@ def build_telegram_proxy_logs_panel(
     toolbar = QHBoxLayout()
     toolbar.setSpacing(8)
 
-    btn_copy_logs = push_button_cls()
-    btn_copy_logs.setText("Копировать все")
-    apply_themed_action_button(btn_copy_logs, icon_name="mdi.content-copy", alignment="left")
+    btn_copy_logs = push_button_cls("Копировать все", icon=FluentIcon.COPY)
     btn_copy_logs.clicked.connect(on_copy_all_logs)
     toolbar.addWidget(btn_copy_logs)
 
-    btn_open_log_file = push_button_cls()
-    btn_open_log_file.setText("Открыть файл лога")
-    apply_themed_action_button(btn_open_log_file, icon_name="fa5s.file-alt", alignment="left")
+    btn_open_log_file = push_button_cls("Открыть файл лога", icon=FluentIcon.DOCUMENT)
     btn_open_log_file.clicked.connect(on_open_log_file)
     toolbar.addWidget(btn_open_log_file)
 
-    btn_clear_logs = push_button_cls()
-    btn_clear_logs.setText("Очистить")
-    apply_themed_action_button(btn_clear_logs, icon_name="fa5s.eraser", alignment="left")
+    btn_clear_logs = push_button_cls("Очистить", icon=FluentIcon.ERASE_TOOL)
     btn_clear_logs.clicked.connect(on_clear_logs)
     toolbar.addWidget(btn_clear_logs)
 
@@ -147,15 +141,11 @@ def build_telegram_proxy_diag_panel(
     toolbar = QHBoxLayout()
     toolbar.setSpacing(8)
 
-    btn_run_diag = primary_push_button_cls()
-    btn_run_diag.setText("Запустить диагностику")
-    apply_themed_action_button(btn_run_diag, icon_name="fa5s.stethoscope", alignment="left")
+    btn_run_diag = primary_push_button_cls("Запустить диагностику", icon=FluentIcon.DEVELOPER_TOOLS)
     btn_run_diag.clicked.connect(on_run_diagnostics)
     toolbar.addWidget(btn_run_diag)
 
-    btn_copy_diag = push_button_cls()
-    btn_copy_diag.setText("Копировать результат")
-    apply_themed_action_button(btn_copy_diag, icon_name="mdi.content-copy", alignment="left")
+    btn_copy_diag = push_button_cls("Копировать результат", icon=FluentIcon.COPY)
     btn_copy_diag.clicked.connect(on_copy_diag)
     toolbar.addWidget(btn_copy_diag)
 

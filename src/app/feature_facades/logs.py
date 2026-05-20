@@ -23,9 +23,6 @@ class LogsFeature:
     def get_running_runner_source(self, launch_method: str, orchestra_runner, direct_runner):
         return log_commands.get_running_runner_source(launch_method, orchestra_runner, direct_runner)
 
-    def get_runner_pid(self, runner):
-        return log_commands.get_runner_pid(runner)
-
     def get_orchestra_log_path(self, orchestra_runner):
         return log_commands.get_orchestra_log_path(orchestra_runner)
 
@@ -38,8 +35,8 @@ class LogsFeature:
     def open_logs_folder(self) -> None:
         return log_commands.open_logs_folder()
 
-    def create_log_tail_worker(self, file_path: str):
-        return log_commands.create_log_tail_worker(file_path)
+    def create_log_tail_worker(self, file_path: str, *, initial_max_bytes: int | None = 1024 * 1024):
+        return log_commands.create_log_tail_worker(file_path, initial_max_bytes=initial_max_bytes)
 
     def create_winws_output_worker(self, process):
         return log_commands.create_winws_output_worker(process)
@@ -51,8 +48,11 @@ class LogsFeature:
             blocking=blocking,
         )
 
-    def build_tail_start_plan(self, *, current_log_file: str):
-        return log_commands.build_tail_start_plan(current_log_file=current_log_file)
+    def build_tail_start_plan(self, *, current_log_file: str, previous_signature=None):
+        return log_commands.build_tail_start_plan(
+            current_log_file=current_log_file,
+            previous_signature=previous_signature,
+        )
 
     def build_support_feedback(self, result):
         return log_commands.build_support_feedback(result)
@@ -63,10 +63,12 @@ class LogsFeature:
     def build_stats_text_plan(self, stats, *, language: str):
         return log_commands.build_stats_text_plan(stats, language=language)
 
-    def build_winws_output_plan(self, *, launch_method: str, orchestra_runner, language: str):
+    def build_winws_output_plan(self, *, launch_method: str, orchestra_runner, direct_runner, process_pid, language: str):
         return log_commands.build_winws_output_plan(
             launch_method=launch_method,
             orchestra_runner=orchestra_runner,
+            direct_runner=direct_runner,
+            process_pid=process_pid,
             language=language,
         )
 

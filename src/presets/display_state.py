@@ -34,26 +34,9 @@ def resolve_profile_strategy_display_state(
         return ProfileStrategyDisplayState(summary="Профили", active_count=0)
 
     try:
-        payload = profile_feature.list_profiles(method)
-        active_names = [
-            item.display_name
-            for item in payload.items
-            if item.in_preset and item.enabled and item.strategy_id != "none"
-        ]
+        return profile_feature.get_profile_strategy_display_state(method, max_items=max_items)
     except Exception:
         return ProfileStrategyDisplayState(summary="Профили", active_count=0)
-
-    if not active_names:
-        return ProfileStrategyDisplayState(summary="Не выбрана", active_count=0)
-    if len(active_names) <= max_items:
-        return ProfileStrategyDisplayState(
-            summary=" • ".join(active_names),
-            active_count=len(active_names),
-        )
-    return ProfileStrategyDisplayState(
-        summary=" • ".join(active_names[:max_items]) + f" +{len(active_names) - max_items} ещё",
-        active_count=len(active_names),
-    )
 
 
 def refresh_profile_strategy_summary_in_store(

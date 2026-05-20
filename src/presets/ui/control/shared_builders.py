@@ -6,10 +6,9 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import QHBoxLayout, QVBoxLayout
 
-from qfluentwidgets import CardWidget
+from qfluentwidgets import CardWidget, FluentIcon
 
 from ui.fluent_widgets import PulsingDot
-from ui.widgets.action_button import apply_themed_action_button
 
 
 @dataclass(slots=True)
@@ -119,15 +118,14 @@ def build_mode_management_section_common(
 
     start_btn = big_action_button_cls(
         tr_fn(start_key, start_default),
-        "fa5s.play",
-        accent=True,
+        icon=FluentIcon.PLAY,
     )
     start_btn.clicked.connect(on_start)
     buttons_layout.addWidget(start_btn)
 
     stop_winws_btn = stop_button_cls(
         tr_fn(stop_key, stop_default),
-        "fa5s.stop",
+        icon=FluentIcon.CANCEL,
     )
     stop_winws_btn.clicked.connect(on_stop)
     stop_winws_btn.setVisible(False)
@@ -135,7 +133,7 @@ def build_mode_management_section_common(
 
     stop_and_exit_btn = stop_button_cls(
         tr_fn(stop_exit_key, stop_exit_default),
-        "fa5s.power-off",
+        icon=FluentIcon.POWER_BUTTON,
     )
     stop_and_exit_btn.clicked.connect(on_stop_and_exit)
     stop_and_exit_btn.setVisible(False)
@@ -163,7 +161,7 @@ def build_push_setting_card_common(
     title_text: str,
     content_text: str,
     on_click,
-    button_icon_name: str | None = "fa5s.external-link-alt",
+    button_icon_name=FluentIcon.LINK,
     button_alignment: str = "left",
     parent=None,
 ):
@@ -178,11 +176,11 @@ def build_push_setting_card_common(
         parent,
     )
     card.setProperty("noDrag", True)
-    apply_themed_action_button(
-        getattr(card, "button", None),
-        icon_name=button_icon_name,
-        alignment=button_alignment,
-        min_width=128,
-    )
+    button = getattr(card, "button", None)
+    if button is not None:
+        if hasattr(button_icon_name, "icon"):
+            button_icon_name = button_icon_name.icon()
+        button.setIcon(button_icon_name)
+        button.setMinimumWidth(128)
     card.clicked.connect(on_click)
     return card

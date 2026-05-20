@@ -10,15 +10,14 @@ from PyQt6.QtWidgets import (
 import qtawesome as qta
 
 from qfluentwidgets import (
-    BodyLabel, CaptionLabel, InfoBar, LineEdit, MessageBox, SettingCardGroup,
+    BodyLabel, CaptionLabel, FluentIcon, InfoBar, LineEdit, MessageBox, SettingCardGroup,
+    PrimaryPushButton, PushButton,
     StrongBodyLabel,
 )
 
 from ui.pages.base_page import BasePage, ScrollBlockingPlainTextEdit
 from ui.fluent_widgets import (
     SettingsCard,
-    ActionButton,
-    PrimaryActionButton,
     QuickActionsBar,
     insert_widget_into_setting_card_group,
     set_tooltip,
@@ -65,6 +64,8 @@ class NetrogatPage(BasePage):
         }
         self._runtime_initialized = False
         self._cleanup_in_progress = False
+        self._editor_load_request_seq = 0
+        self._editor_load_worker = None
         self._build_ui()
         self._apply_page_theme(force=True)
         self._run_runtime_init_once()
@@ -117,7 +118,10 @@ class NetrogatPage(BasePage):
         self.input.returnPressed.connect(self._add)
         add_layout.addWidget(self.input, 1)
 
-        self.add_btn = PrimaryActionButton(self._tr("page.netrogat.button.add", "Добавить"), "fa5s.plus")
+        self.add_btn = PrimaryPushButton(
+            self._tr("page.netrogat.button.add", "Добавить"),
+            icon=FluentIcon.ADD,
+        )
         self.add_btn.setFixedHeight(38)
         self.add_btn.clicked.connect(self._add)
         add_layout.addWidget(self.add_btn)
@@ -139,9 +143,9 @@ class NetrogatPage(BasePage):
 
         self._actions_bar = QuickActionsBar(self.content)
 
-        self._add_defaults_btn = PrimaryActionButton(
+        self._add_defaults_btn = PrimaryPushButton(
             self._tr("page.netrogat.button.add_missing", "Добавить недостающие"),
-            "fa5s.plus-circle",
+            icon=FluentIcon.ADD,
         )
         self._add_defaults_btn.clicked.connect(self._add_missing_defaults)
         set_tooltip(
@@ -152,9 +156,9 @@ class NetrogatPage(BasePage):
             ),
         )
 
-        self._open_btn = ActionButton(
+        self._open_btn = PushButton(
             self._tr("page.netrogat.button.open_file", "Открыть файл"),
-            "fa5s.external-link-alt",
+            icon=FluentIcon.LINK,
         )
         self._open_btn.clicked.connect(self._open_file)
         set_tooltip(
@@ -165,9 +169,9 @@ class NetrogatPage(BasePage):
             ),
         )
 
-        self._open_final_btn = ActionButton(
+        self._open_final_btn = PushButton(
             self._tr("page.netrogat.button.open_final", "Открыть итоговый"),
-            "fa5s.file-alt",
+            icon=FluentIcon.DOCUMENT,
         )
         self._open_final_btn.clicked.connect(self._open_final_file)
         set_tooltip(
@@ -178,9 +182,9 @@ class NetrogatPage(BasePage):
             ),
         )
 
-        self._clear_btn = ActionButton(
+        self._clear_btn = PushButton(
             self._tr("page.netrogat.button.clear_all", "Очистить всё"),
-            "fa5s.trash-alt",
+            icon=FluentIcon.DELETE,
         )
         self._clear_btn.clicked.connect(self._clear_all)
         set_tooltip(
@@ -256,14 +260,38 @@ class NetrogatPage(BasePage):
     def _load(self):
         if self._cleanup_in_progress:
             return
-            state = self._lists_controller.load_text("netrogat")
-        # Блокируем сигнал чтобы не срабатывало автосохранение
+        self._request_editor_text("netrogat")
+
+    def _request_editor_text(self, kind: str) -> None:
+        self._editor_load_request_seq += 1
+        request_seq = self._editor_load_request_seq
+        worker = self._lists_controller.create_text_load_worker(request_seq, kind, self)
+        self._editor_load_worker = worker
+        worker.loaded.connect(self._on_editor_text_loaded)
+        worker.failed.connect(self._on_editor_text_failed)
+        worker.finished.connect(lambda w=worker: self._on_editor_text_worker_finished(w))
+        worker.start()
+
+    def _on_editor_text_loaded(self, request_seq: int, _kind: str, state) -> None:
+        if self._cleanup_in_progress or request_seq != self._editor_load_request_seq:
+            return
         self.text_edit.blockSignals(True)
         self.text_edit.setPlainText(state.text)
         self.text_edit.blockSignals(False)
         self._status_state["saved"] = False
         self._update_status()
         log(f"Загружено {state.lines_count} строк из lists/user/netrogat.txt", "INFO")
+
+    def _on_editor_text_failed(self, request_seq: int, _kind: str, error: str) -> None:
+        if self._cleanup_in_progress or request_seq != self._editor_load_request_seq:
+            return
+        log(f"Ошибка загрузки lists/user/netrogat.txt: {error}", "ERROR")
+        self.status_label.setText(f"Ошибка загрузки: {error}")
+
+    def _on_editor_text_worker_finished(self, worker) -> None:
+        if self._editor_load_worker is worker:
+            self._editor_load_worker = None
+        worker.deleteLater()
 
     def _render_status_label(self):
         summary = self._tr(

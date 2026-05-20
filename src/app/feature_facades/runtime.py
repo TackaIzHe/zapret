@@ -76,6 +76,9 @@ class RuntimeFeature:
     def current_strategy_runner(self):
         return self.commands.current_strategy_runner()
 
+    def current_process_pid(self, launch_method: str, *, refresh: bool = False) -> int | None:
+        return self.objects.current_process_pid(launch_method, refresh=refresh)
+
     def configure_runtime_ui_bridge(self, bridge) -> None:
         self.ui_port.configure_runtime_ui_bridge(bridge)
 

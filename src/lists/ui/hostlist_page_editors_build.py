@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ui.theme import get_themed_qta_icon
+from qfluentwidgets import FluentIcon
 
 
 @dataclass(slots=True)
@@ -101,9 +101,10 @@ def build_domains_panel_ui(
     if hasattr(input_edit, "returnPressed"):
         input_edit.returnPressed.connect(on_add)
     add_row.addWidget(input_edit, 1)
-    add_button = primary_push_button_cls()
-    add_button.setText(tr_fn("page.hostlist.button.add", "Добавить"))
-    add_button.setIcon(get_themed_qta_icon("fa5s.plus", color=tokens.accent_hex))
+    add_button = primary_push_button_cls(
+        tr_fn("page.hostlist.button.add", "Добавить"),
+        icon=FluentIcon.ADD,
+    )
     add_button.setFixedHeight(38)
     add_button.clicked.connect(on_add)
     add_row.addWidget(add_button)
@@ -115,7 +116,7 @@ def build_domains_panel_ui(
 
     open_action = action_button_cls(
         tr_fn("page.hostlist.button.open_file", "Открыть файл"),
-        "fa5s.external-link-alt",
+        icon=FluentIcon.LINK,
     )
     open_action.clicked.connect(on_open_file)
     set_tooltip_fn(
@@ -128,7 +129,7 @@ def build_domains_panel_ui(
 
     reset_action = action_button_cls(
         tr_fn("page.hostlist.button.reset_file", "Сбросить файл"),
-        "fa5s.undo",
+        icon=FluentIcon.RETURN,
     )
     reset_action.clicked.connect(on_reset_file)
     set_tooltip_fn(
@@ -141,7 +142,7 @@ def build_domains_panel_ui(
 
     clear_action = action_button_cls(
         tr_fn("page.hostlist.button.clear_all", "Очистить всё"),
-        "fa5s.trash-alt",
+        icon=FluentIcon.DELETE,
     )
     clear_action.clicked.connect(on_clear_all)
     set_tooltip_fn(
@@ -253,9 +254,10 @@ def build_ips_panel_ui(
     if hasattr(input_edit, "returnPressed"):
         input_edit.returnPressed.connect(on_add)
     add_row.addWidget(input_edit, 1)
-    add_button = primary_push_button_cls()
-    add_button.setText(tr_fn("page.hostlist.button.add", "Добавить"))
-    add_button.setIcon(get_themed_qta_icon("fa5s.plus", color=tokens.accent_hex))
+    add_button = primary_push_button_cls(
+        tr_fn("page.hostlist.button.add", "Добавить"),
+        icon=FluentIcon.ADD,
+    )
     add_button.setFixedHeight(38)
     add_button.clicked.connect(on_add)
     add_row.addWidget(add_button)
@@ -267,7 +269,7 @@ def build_ips_panel_ui(
 
     open_action = action_button_cls(
         tr_fn("page.hostlist.button.open_file", "Открыть файл"),
-        "fa5s.external-link-alt",
+        icon=FluentIcon.LINK,
     )
     open_action.clicked.connect(on_open_file)
     set_tooltip_fn(
@@ -277,7 +279,7 @@ def build_ips_panel_ui(
 
     clear_action = action_button_cls(
         tr_fn("page.hostlist.button.clear_all", "Очистить всё"),
-        "fa5s.trash-alt",
+        icon=FluentIcon.DELETE,
     )
     clear_action.clicked.connect(on_clear_all)
     set_tooltip_fn(

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import time
+
 from PyQt6.QtCore import QTimer
+from PyQt6.QtWidgets import QSizePolicy
 
 from log.log import log
 from profile.folders import set_profile_folder_collapsed
@@ -10,10 +13,9 @@ from profile.ui.profile_folder_menu import show_profile_folder_menu
 from profile.ui.profiles_list import ProfilesList
 from profile.ui.shell import build_profile_shell
 from profile.ui.user_profile_dialog import CreateUserProfileDialog
-from qfluentwidgets import BodyLabel, InfoBar, MessageBox
+from qfluentwidgets import BodyLabel, FluentIcon, InfoBar, MessageBox, PrimaryPushButton
 from settings.mode import ZAPRET1_MODE, ZAPRET2_MODE
 from ui.pages.base_page import BasePage
-from ui.widgets.action_button import ThemedActionButton
 from app.text_catalog import tr as tr_catalog
 
 
@@ -51,19 +53,20 @@ class PresetSetupPageBase(BasePage):
         self._empty_state_label = None
         self._content_host_layout = None
         self._loading_label = None
-        self._reload_btn = None
         self._expand_btn = None
         self._collapse_btn = None
         self._request_btn = None
         self._info_btn = None
         self._add_profile_btn = None
         self._toolbar_actions_bar = None
+        self._profile_load_request_id = 0
+        self._profile_load_worker = None
         self._cleanup_in_progress = False
         self._build_content()
-        QTimer.singleShot(0, self.refresh_from_preset_switch)
+        QTimer.singleShot(0, self._request_profiles_payload)
 
     def on_page_activated(self) -> None:
-        self.refresh_from_preset_switch()
+        self._request_profiles_payload()
 
     def _build_content(self) -> None:
         shell = build_profile_shell(
@@ -77,47 +80,59 @@ class PresetSetupPageBase(BasePage):
             request_hint_key=self.request_hint_key,
             loading_key=self.loading_key,
             on_open_profile_request_form=self._show_profile_info,
-            on_reload=self._reload_profiles,
             on_expand_all=self._expand_all,
             on_collapse_all=self._collapse_all,
             on_show_info_popup=self._show_profile_info,
         )
         self._toolbar_actions_bar = shell.toolbar_actions_bar
         self._request_btn = shell.request_btn
-        self._reload_btn = shell.reload_btn
         self._expand_btn = shell.expand_btn
         self._collapse_btn = shell.collapse_btn
         self._info_btn = shell.info_btn
         self._content_host_layout = shell.content_host_layout
         self._loading_label = shell.loading_label
 
-    def _reload_profiles(self) -> None:
-        self.refresh_from_preset_switch()
-
     def refresh_from_preset_switch(self) -> None:
+        self._request_profiles_payload()
+
+    def _request_profiles_payload(self) -> None:
         if self._cleanup_in_progress:
             return
-        try:
-            if self._reload_btn is not None:
-                self._reload_btn.set_loading(True)
-        except Exception:
-            pass
-        try:
-            payload = self._profile.list_profiles(self.launch_method)
-            self._apply_payload(payload)
-        except Exception as exc:
-            log(f"{self.__class__.__name__}: не удалось прочитать профили: {exc}", "ERROR")
-            self._show_empty_state(
-                "Не удалось показать профили выбранного пресета. "
-                "Файл мог быть удалён, очищен или повреждён. "
-                "Выберите пресет заново и нажмите «Обновить»."
-            )
-        finally:
-            try:
-                if self._reload_btn is not None:
-                    self._reload_btn.set_loading(False)
-            except Exception:
-                pass
+        self._profile_load_request_id += 1
+        request_id = self._profile_load_request_id
+        if self._loading_label is not None:
+            self._loading_label.show()
+        self._clear_dynamic_widgets()
+        worker = self._profile.create_profile_list_load_worker(request_id, self.launch_method, self)
+        self._profile_load_worker = worker
+        worker.loaded.connect(self._on_profile_payload_loaded)
+        worker.failed.connect(self._on_profile_payload_failed)
+        worker.finished.connect(lambda w=worker: self._on_profile_worker_finished(w))
+        worker.start()
+
+    def _on_profile_payload_loaded(self, request_id: int, payload) -> None:
+        if request_id != self._profile_load_request_id or self._cleanup_in_progress:
+            return
+        if self._loading_label is not None:
+            self._loading_label.hide()
+        self._apply_payload(payload)
+
+    def _on_profile_payload_failed(self, request_id: int, error: str) -> None:
+        if request_id != self._profile_load_request_id or self._cleanup_in_progress:
+            return
+        if self._loading_label is not None:
+            self._loading_label.hide()
+        log(f"{self.__class__.__name__}: не удалось прочитать профили: {error}", "ERROR")
+        self._show_empty_state(
+            "Не удалось показать профили выбранного пресета. "
+            "Файл мог быть удалён, очищен или повреждён. "
+            "Выберите пресет заново в разделе «Мои пресеты»."
+        )
+
+    def _on_profile_worker_finished(self, worker) -> None:
+        if self._profile_load_worker is worker:
+            self._profile_load_worker = None
+        worker.deleteLater()
 
     def _apply_payload(self, payload) -> None:
         if self._content_host_layout is None:
@@ -138,10 +153,14 @@ class PresetSetupPageBase(BasePage):
         profiles_list.profile_move_to_end_requested.connect(self._on_profile_move_to_end_requested)
         profiles_list.folder_context_requested.connect(self._on_folder_context_requested)
         profiles_list.folder_toggled.connect(self._on_folder_toggled)
+        started_at = time.perf_counter()
         profiles_list.build_profiles(tuple(payload.items))
+        elapsed_ms = (time.perf_counter() - started_at) * 1000.0
+        log(f"{self.__class__.__name__}: ProfileItem build {elapsed_ms:.1f}ms ({len(payload.items)} items)", "DEBUG")
         self._profiles_list = profiles_list
         self._content_host_layout.addWidget(profiles_list, 1)
-        self._add_profile_btn = ThemedActionButton("Добавить", "fa5s.plus", full_width=True, parent=self)
+        self._add_profile_btn = PrimaryPushButton("Добавить", parent=self, icon=FluentIcon.ADD)
+        self._add_profile_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._add_profile_btn.clicked.connect(self._on_add_user_profile_clicked)
         self._content_host_layout.addWidget(self._add_profile_btn)
         self._empty_state_label = None
@@ -189,7 +208,8 @@ class PresetSetupPageBase(BasePage):
         label = BodyLabel(text)
         label.setWordWrap(True)
         self._content_host_layout.addWidget(label)
-        self._add_profile_btn = ThemedActionButton("Добавить", "fa5s.plus", full_width=True, parent=self)
+        self._add_profile_btn = PrimaryPushButton("Добавить", parent=self, icon=FluentIcon.ADD)
+        self._add_profile_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._add_profile_btn.clicked.connect(self._on_add_user_profile_clicked)
         self._content_host_layout.addWidget(self._add_profile_btn)
         self._empty_state_label = label

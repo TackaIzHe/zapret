@@ -140,7 +140,7 @@
 
 --new
 
---filter-udp=443
+--filter-udp=443-65535
 --ipset=lists/ipset-discord.txt
 --out-range=-n8
 --payload=all
@@ -176,7 +176,7 @@
 
 --new
 
---filter-tcp=80,443
+--filter-tcp=80,443,1080,2053,2083,2087,2096,8443
 --ipset=lists/ipset-discord.txt
 --out-range=-n8
 --lua-desync=send:repeats=2
@@ -312,15 +312,6 @@
 --new
 
 --filter-udp=444-65535
---ipset=lists/ipset-discord.txt
---out-range=-n8
---payload=all
---lua-desync=fake:blob=quic2:repeats=7
---lua-desync=udplen:increment=5:pattern=0xDEADBEEF
-
---new
-
---filter-udp=444-65535
 --ipset=lists/ipset-cloudflare.txt
 --out-range=-n8
 --payload=all
@@ -356,7 +347,7 @@
 
 --new
 
---filter-udp=444-65535
+--filter-udp=443-65535
 --ipset=lists/ipset-amazon.txt
 --out-range=-n8
 --payload=all

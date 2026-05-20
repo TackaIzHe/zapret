@@ -316,39 +316,19 @@ def _profile_selection_details(
     try:
         if profile_feature is None:
             return _ProfileSelectionDetails()
-        selected_profile_name = ""
-        if selected_profile_key:
-            setup = profile_feature.get_profile_setup(launch_method, selected_profile_key)
-            if setup is not None:
-                item = setup.item
-                selected_profile_name = str(item.display_name or "").strip()
-                return _ProfileSelectionDetails(
-                    summary=str(item.strategy_name or item.display_name or "").strip(),
-                    selected_profile_name=selected_profile_name,
-                    profile_count=1 if item.in_preset else 0,
-                    enabled_profile_count=1 if item.in_preset and item.enabled else 0,
-                    active_strategy_count=1 if item.in_preset and item.enabled and item.strategy_id != "none" else 0,
-                )
-
-        payload = profile_feature.list_profiles(launch_method)
-        profile_items = [item for item in payload.items if item.in_preset]
-        enabled_items = [item for item in profile_items if item.enabled]
-        active_items = [item for item in enabled_items if item.strategy_id != "none"]
-        active_names = [str(item.strategy_name or item.display_name or "").strip() for item in active_items]
-        active_names = [name for name in active_names if name]
-        if not active_names:
-            summary = ""
-        else:
-            max_items = 2
-            if len(active_names) <= max_items:
-                summary = " • ".join(active_names)
-            else:
-                summary = " • ".join(active_names[:max_items]) + f" +{len(active_names) - max_items} ещё"
+        details_getter = getattr(profile_feature, "get_profile_selection_details", None)
+        if not callable(details_getter):
+            return _ProfileSelectionDetails()
+        details = details_getter(
+            launch_method,
+            selected_profile_key=selected_profile_key,
+        ) or {}
         return _ProfileSelectionDetails(
-            summary=summary,
-            profile_count=len(profile_items),
-            enabled_profile_count=len(enabled_items),
-            active_strategy_count=len(active_items),
+            summary=str(details.get("summary") or ""),
+            selected_profile_name=str(details.get("selected_profile_name") or ""),
+            profile_count=int(details.get("profile_count") or 0),
+            enabled_profile_count=int(details.get("enabled_profile_count") or 0),
+            active_strategy_count=int(details.get("active_strategy_count") or 0),
         )
     except Exception:
         return _ProfileSelectionDetails()

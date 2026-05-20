@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from profile import commands as profile_internal_commands
@@ -11,12 +11,33 @@ from profile import settings as profile_settings
 class ProfileFeature:
     _presets_feature: Any
     _app_paths: Any
+    _preset_service_cache: dict[str, Any] = field(default_factory=dict, init=False, repr=False, compare=False)
 
     def list_profiles(self, launch_method: str):
         return profile_internal_commands.list_profiles(self, launch_method)
 
     def count_enabled_profiles(self, launch_method: str) -> int:
         return int(profile_internal_commands.count_enabled_profiles(self, launch_method))
+
+    def get_enabled_profile_count_snapshot(self, launch_method: str) -> int | None:
+        return profile_internal_commands.get_enabled_profile_count_snapshot(self, launch_method)
+
+    def get_profile_strategy_display_state(self, launch_method: str, max_items: int = 2):
+        return profile_internal_commands.get_profile_strategy_display_state(self, launch_method, max_items=max_items)
+
+    def get_profile_selection_details(
+        self,
+        launch_method: str,
+        *,
+        selected_profile_key: str = "",
+        max_items: int = 2,
+    ):
+        return profile_internal_commands.get_profile_selection_details(
+            self,
+            launch_method,
+            selected_profile_key=selected_profile_key,
+            max_items=max_items,
+        )
 
     def get_profile_setup(self, launch_method: str, profile_key: str):
         return profile_internal_commands.get_profile_setup(self, launch_method, profile_key)
@@ -188,3 +209,8 @@ class ProfileFeature:
         from profile.advanced_settings_loader import AdvancedSettingsLoadWorker
 
         return AdvancedSettingsLoadWorker(request_id, self, parent)
+
+    def create_profile_list_load_worker(self, request_id: int, launch_method: str, parent=None):
+        from profile.profile_list_loader import ProfileListLoadWorker
+
+        return ProfileListLoadWorker(request_id, self, launch_method, parent)

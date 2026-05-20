@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ui.theme import get_themed_qta_icon
+from qfluentwidgets import FluentIcon
 
 
 @dataclass(slots=True)
@@ -108,9 +108,10 @@ def build_exclusions_panel_ui(
     if hasattr(excl_input, "returnPressed"):
         excl_input.returnPressed.connect(on_excl_add)
     add_row.addWidget(excl_input, 1)
-    excl_add_btn = primary_push_button_cls()
-    excl_add_btn.setText(tr_fn("page.hostlist.button.add", "Добавить"))
-    excl_add_btn.setIcon(get_themed_qta_icon("fa5s.plus", color=tokens.accent_hex))
+    excl_add_btn = primary_push_button_cls(
+        tr_fn("page.hostlist.button.add", "Добавить"),
+        icon=FluentIcon.ADD,
+    )
     excl_add_btn.setFixedHeight(38)
     excl_add_btn.clicked.connect(on_excl_add)
     add_row.addWidget(excl_add_btn)
@@ -122,7 +123,7 @@ def build_exclusions_panel_ui(
 
     excl_defaults_action_card = action_button_cls(
         tr_fn("page.hostlist.exclusions.button.add_missing", "Добавить недостающие"),
-        "fa5s.plus-circle",
+        icon=FluentIcon.ADD,
     )
     excl_defaults_action_card.clicked.connect(on_excl_defaults)
     set_tooltip_fn(
@@ -135,7 +136,7 @@ def build_exclusions_panel_ui(
 
     excl_open_action_card = action_button_cls(
         tr_fn("page.hostlist.button.open_file", "Открыть файл"),
-        "fa5s.external-link-alt",
+        icon=FluentIcon.LINK,
     )
     excl_open_action_card.clicked.connect(on_excl_open_file)
     set_tooltip_fn(
@@ -148,7 +149,7 @@ def build_exclusions_panel_ui(
 
     excl_open_final_action_card = action_button_cls(
         tr_fn("page.hostlist.exclusions.button.open_final", "Открыть итоговый"),
-        "fa5s.file-alt",
+        icon=FluentIcon.DOCUMENT,
     )
     excl_open_final_action_card.clicked.connect(on_excl_open_final)
     set_tooltip_fn(
@@ -161,7 +162,7 @@ def build_exclusions_panel_ui(
 
     excl_clear_action_card = action_button_cls(
         tr_fn("page.hostlist.button.clear_all", "Очистить всё"),
-        "fa5s.trash-alt",
+        icon=FluentIcon.DELETE,
     )
     excl_clear_action_card.clicked.connect(on_excl_clear_all)
     set_tooltip_fn(
@@ -236,9 +237,10 @@ def build_exclusions_panel_ui(
     if hasattr(ipru_input, "returnPressed"):
         ipru_input.returnPressed.connect(on_ipru_add)
     ipru_add_row.addWidget(ipru_input, 1)
-    ipru_add_btn = primary_push_button_cls()
-    ipru_add_btn.setText(tr_fn("page.hostlist.button.add", "Добавить"))
-    ipru_add_btn.setIcon(get_themed_qta_icon("fa5s.plus", color=tokens.accent_hex))
+    ipru_add_btn = primary_push_button_cls(
+        tr_fn("page.hostlist.button.add", "Добавить"),
+        icon=FluentIcon.ADD,
+    )
     ipru_add_btn.setFixedHeight(38)
     ipru_add_btn.clicked.connect(on_ipru_add)
     ipru_add_row.addWidget(ipru_add_btn)
@@ -253,7 +255,7 @@ def build_exclusions_panel_ui(
 
     ipru_open_action_card = action_button_cls(
         tr_fn("page.hostlist.button.open_file", "Открыть файл"),
-        "fa5s.external-link-alt",
+        icon=FluentIcon.LINK,
     )
     ipru_open_action_card.clicked.connect(on_ipru_open_file)
     set_tooltip_fn(
@@ -266,7 +268,7 @@ def build_exclusions_panel_ui(
 
     ipru_open_final_action_card = action_button_cls(
         tr_fn("page.hostlist.exclusions.button.open_final", "Открыть итоговый"),
-        "fa5s.file-alt",
+        icon=FluentIcon.DOCUMENT,
     )
     ipru_open_final_action_card.clicked.connect(on_ipru_open_final)
     set_tooltip_fn(
@@ -279,7 +281,7 @@ def build_exclusions_panel_ui(
 
     ipru_clear_action_card = action_button_cls(
         tr_fn("page.hostlist.button.clear_all", "Очистить всё"),
-        "fa5s.trash-alt",
+        icon=FluentIcon.DELETE,
     )
     ipru_clear_action_card.clicked.connect(on_ipru_clear_all)
     set_tooltip_fn(

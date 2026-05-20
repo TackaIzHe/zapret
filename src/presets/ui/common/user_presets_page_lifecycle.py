@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import time
 
+from qfluentwidgets import FluentIcon
+
 from ui.fluent_widgets import set_tooltip
 
 
@@ -133,7 +135,6 @@ def apply_user_presets_page_theme(
     get_theme_tokens_fn,
     get_semantic_palette_fn,
     get_cached_qta_pixmap_fn,
-    get_themed_qta_icon_fn,
     schedule_layout_resync_fn,
     configs_icon,
     reset_all_btn,
@@ -155,7 +156,7 @@ def apply_user_presets_page_theme(
 
         if reset_all_btn is not None:
             try:
-                reset_all_btn.setIcon(get_themed_qta_icon_fn("fa5s.undo", color=tokens.fg))
+                reset_all_btn.setIcon(FluentIcon.RETURN)
             except Exception:
                 pass
 

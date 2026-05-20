@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import QTableWidgetItem
 from ui.fluent_widgets import InfoBarHelper
 from app.text_catalog import tr as tr_catalog
 import blockcheck.strategy_scan_run_workflow as strategy_scan_run_workflow
-from ui.widgets.action_button import apply_themed_action_button
+from qfluentwidgets import FluentIcon
 from ui.widgets.fluent_item_tooltip import set_fluent_item_tooltip
 
 
@@ -101,7 +101,7 @@ def add_strategy_result_row(
     if row_plan.can_apply:
         apply_btn = push_button_cls()
         apply_btn.setText(tr_fn("page.blockcheck_public.apply", "Применить"))
-        apply_themed_action_button(apply_btn, icon_name="fa5s.check", alignment="left")
+        apply_btn.setIcon(FluentIcon.ACCEPT)
         apply_btn.setFixedHeight(26)
         apply_btn.clicked.connect(
             lambda checked=False, args=result.strategy_args, name=result.strategy_name:

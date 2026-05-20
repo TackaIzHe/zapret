@@ -14,8 +14,6 @@ _WIDGET_EXPORTS: dict[str, tuple[str, str]] = {
     "strategies_tooltip_manager": (".strategies_tooltip", "strategies_tooltip_manager"),
     "StrategiesListTooltip": (".strategies_tooltip", "StrategiesListTooltip"),
     "NotificationBanner": (".notification_banner", "NotificationBanner"),
-    "ThemedActionButton": (".action_button", "ThemedActionButton"),
-    "apply_themed_action_button": (".action_button", "apply_themed_action_button"),
     "Win11Spinner": (".win11_spinner", "Win11Spinner"),
     "FolderGroup": (".folder_header", "FolderGroup"),
     "FolderGroupHeader": (".folder_header", "FolderGroupHeader"),

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
+import time
 
+from log.log import log
 from settings.mode import DEFAULT_LAUNCH_METHOD, ENGINE_WINWS2, PRESET_LAUNCH_METHODS, engine_for_launch_method, normalize_launch_method
 
 from .match_filters import ports_label_from_match_lines, protocol_label_from_match_lines, strategy_catalog_from_match_lines
@@ -46,6 +50,13 @@ from .winws2_editable_settings import (
 )
 
 
+@dataclass(slots=True)
+class _SelectedPresetSnapshot:
+    revision: tuple[object, ...]
+    preset: Preset
+    manifest: object
+
+
 class ProfilePresetService:
     def __init__(self, profile_services, launch_method: str = DEFAULT_LAUNCH_METHOD) -> None:
         self._profile_services = profile_services
@@ -54,21 +65,46 @@ class ProfilePresetService:
         self._launch_method = normalize_launch_method(launch_method)
         self._engine = _engine_for_method(self._launch_method)
         self._state_store = ProfileStrategyStateStore()
+        self._selected_preset_snapshot: _SelectedPresetSnapshot | None = None
+        self._profile_list_snapshot: ProfileListPayload | None = None
 
     @property
     def engine(self) -> EngineName:
         return self._engine
 
     def load_selected_preset(self) -> tuple[Preset, object]:
-        source_text, manifest = self._presets.read_selected_preset_source(self._launch_method)
-        return parse_preset_text(source_text, engine=self._engine, source_name=manifest.file_name), manifest
+        revision, manifest, source_text = self._selected_preset_revision()
+        snapshot = self._selected_preset_snapshot
+        if snapshot is not None and snapshot.revision == revision:
+            return snapshot.preset, snapshot.manifest
+
+        read_started_at = time.perf_counter()
+        if source_text is None:
+            source_text, manifest = self._presets.read_selected_preset_source(self._launch_method)
+        self._log_timing("profile_feature.selected_preset.read", read_started_at)
+
+        parse_started_at = time.perf_counter()
+        preset = parse_preset_text(source_text, engine=self._engine, source_name=manifest.file_name)
+        self._log_timing("profile_feature.selected_preset.parse", parse_started_at)
+
+        snapshot = _SelectedPresetSnapshot(
+            revision=revision,
+            preset=preset,
+            manifest=manifest,
+        )
+        self._selected_preset_snapshot = snapshot
+        return snapshot.preset, snapshot.manifest
 
     def save_selected_preset(self, preset: Preset) -> None:
         self._presets.save_selected_preset_source(self._launch_method, serialize_preset(preset))
+        self._invalidate_selected_preset_snapshot()
 
     def list_profiles(self) -> ProfileListPayload:
+        total_started_at = time.perf_counter()
         preset, manifest = self.load_selected_preset()
+        normalize_started_at = time.perf_counter()
         normalization = normalize_preset_profiles(preset)
+        self._log_timing("profile_feature.profiles.normalize", normalize_started_at)
         if normalization.changed:
             preset = normalization.preset
             self.save_selected_preset(preset)
@@ -78,6 +114,7 @@ class ProfilePresetService:
 
         items: list[ProfileListItem] = []
 
+        items_started_at = time.perf_counter()
         for source in build_profile_list_sources(tuple(preset.profiles), templates):
             item = self._item_for_profile(
                 source.profile,
@@ -89,18 +126,97 @@ class ProfilePresetService:
                 user_template_key=getattr(source, "user_template_key", ""),
             )
             items.append(item)
+        self._log_timing("profile_feature.profile_item.build", items_started_at)
 
-        return ProfileListPayload(
+        payload = ProfileListPayload(
             items=tuple(items),
             selected_preset_file_name=str(getattr(manifest, "file_name", "") or ""),
             selected_preset_name=str(getattr(manifest, "name", "") or ""),
             normalized_split_profiles=normalization.split_profile_count,
             normalized_created_profiles=normalization.created_profile_count,
         )
+        self._profile_list_snapshot = payload
+        self._log_timing("profile_feature.list_profiles.total", total_started_at)
+        return payload
 
     def count_enabled_profiles(self) -> int:
         preset, _manifest = self.load_selected_preset()
         return sum(1 for profile in preset.profiles if bool(getattr(profile, "enabled", False)))
+
+    def get_profile_strategy_display_state(self, max_items: int = 2):
+        from presets.display_state import ProfileStrategyDisplayState
+
+        payload = self._profile_list_snapshot
+        if payload is None:
+            return ProfileStrategyDisplayState(summary="Профили", active_count=0)
+        current_file_name = self._current_selected_preset_file_name()
+        payload_file_name = str(getattr(payload, "selected_preset_file_name", "") or "").strip()
+        if current_file_name and payload_file_name and current_file_name != payload_file_name:
+            return ProfileStrategyDisplayState(summary="Профили", active_count=0)
+
+        active_names = [
+            item.display_name
+            for item in payload.items
+            if item.in_preset and item.enabled and item.strategy_id != "none"
+        ]
+        if not active_names:
+            return ProfileStrategyDisplayState(summary="Не выбрана", active_count=0)
+        if len(active_names) <= max_items:
+            return ProfileStrategyDisplayState(
+                summary=" • ".join(active_names),
+                active_count=len(active_names),
+            )
+        return ProfileStrategyDisplayState(
+            summary=" • ".join(active_names[:max_items]) + f" +{len(active_names) - max_items} ещё",
+            active_count=len(active_names),
+        )
+
+    def get_enabled_profile_count_snapshot(self) -> int | None:
+        details = self.get_profile_selection_details()
+        if not details:
+            return None
+        return int(details.get("enabled_profile_count") or 0)
+
+    def get_profile_selection_details(self, *, selected_profile_key: str = "", max_items: int = 2) -> dict[str, Any]:
+        payload = self._profile_list_snapshot
+        if payload is None:
+            return {}
+        current_file_name = self._current_selected_preset_file_name()
+        payload_file_name = str(getattr(payload, "selected_preset_file_name", "") or "").strip()
+        if current_file_name and payload_file_name and current_file_name != payload_file_name:
+            return {}
+
+        profile_items = [item for item in payload.items if item.in_preset]
+        enabled_items = [item for item in profile_items if item.enabled]
+        active_items = [item for item in enabled_items if item.strategy_id != "none"]
+
+        selected_key = str(selected_profile_key or "").strip()
+        if selected_key:
+            for item in payload.items:
+                if selected_key in {str(item.key or ""), str(item.persistent_key or "")}:
+                    return {
+                        "summary": str(item.strategy_name or item.display_name or "").strip(),
+                        "selected_profile_name": str(item.display_name or "").strip(),
+                        "profile_count": 1 if item.in_preset else 0,
+                        "enabled_profile_count": 1 if item.in_preset and item.enabled else 0,
+                        "active_strategy_count": 1 if item.in_preset and item.enabled and item.strategy_id != "none" else 0,
+                    }
+
+        active_names = [str(item.strategy_name or item.display_name or "").strip() for item in active_items]
+        active_names = [name for name in active_names if name]
+        if not active_names:
+            summary = ""
+        elif len(active_names) <= max_items:
+            summary = " • ".join(active_names)
+        else:
+            summary = " • ".join(active_names[:max_items]) + f" +{len(active_names) - max_items} ещё"
+        return {
+            "summary": summary,
+            "selected_profile_name": "",
+            "profile_count": len(profile_items),
+            "enabled_profile_count": len(enabled_items),
+            "active_strategy_count": len(active_items),
+        }
 
     def get_profile_setup(self, profile_key: str) -> ProfileSetupPayload | None:
         preset, _manifest = self.load_selected_preset()
@@ -134,7 +250,7 @@ class ProfilePresetService:
             strategy_states=strategy_states,
             raw_profile_text=_profile_raw_text(profile),
             raw_strategy_text="\n".join(getattr(profile.strategy, "strategy_lines", ()) or ()),
-            match_summary=_match_summary(profile),
+            match_summary=_match_summary(profile, list_type=item.list_type),
             editable_filter_kind=winws2_editable.filter_kind,
             editable_filter_value=winws2_editable.filter_value,
             editable_filter_enabled=winws2_editable.filter_editable,
@@ -508,7 +624,7 @@ class ProfilePresetService:
     ) -> ProfileListItem:
         strategy_entries = _basic_strategy_entries(profile, catalogs)
         strategy_id, strategy_name = _resolve_strategy(profile, strategy_entries)
-        list_type = _list_type(profile)
+        list_type = _visible_list_type(profile, self._app_paths)
         folder_key, folder_name, folder_order = profile_folder_for_profile(profile, folder_state)
         effective_strategy_id = strategy_id if in_preset and profile.enabled else "none"
         display_strategy_name = _profile_status_name(
@@ -545,6 +661,52 @@ class ProfilePresetService:
     @lru_cache(maxsize=1)
     def _load_profile_templates(self) -> dict[str, Profile]:
         return load_profile_template_library(self._app_paths, self._engine)
+
+    def _invalidate_selected_preset_snapshot(self) -> None:
+        self._selected_preset_snapshot = None
+        self._profile_list_snapshot = None
+
+    def _current_selected_preset_file_name(self) -> str:
+        file_name_getter = getattr(self._presets, "get_selected_source_preset_file_name", None)
+        if callable(file_name_getter):
+            return str(file_name_getter(self._launch_method) or "").strip()
+        manifest_getter = getattr(self._presets, "get_selected_source_preset_manifest", None)
+        if callable(manifest_getter):
+            manifest = manifest_getter(self._launch_method)
+            return str(getattr(manifest, "file_name", "") or "").strip()
+        return ""
+
+    def _selected_preset_revision(self) -> tuple[tuple[object, ...], object, str | None]:
+        manifest_getter = getattr(self._presets, "get_selected_source_preset_manifest", None)
+        path_getter = getattr(self._presets, "get_selected_source_path", None)
+        if callable(manifest_getter) and callable(path_getter):
+            manifest = manifest_getter(self._launch_method)
+            path = Path(path_getter(self._launch_method))
+            stat = path.stat()
+            revision = (
+                self._launch_method,
+                str(getattr(manifest, "file_name", "") or ""),
+                str(path),
+                int(stat.st_mtime_ns),
+                int(stat.st_size),
+            )
+            return revision, manifest, None
+
+        source_text, manifest = self._presets.read_selected_preset_source(self._launch_method)
+        revision = (
+            self._launch_method,
+            str(getattr(manifest, "file_name", "") or ""),
+            len(source_text),
+            hash(source_text),
+        )
+        return revision, manifest, source_text
+
+    def _log_timing(self, label: str, started_at: float) -> None:
+        try:
+            elapsed_ms = (time.perf_counter() - started_at) * 1000.0
+            log(f"{label}: {elapsed_ms:.1f}ms", "DEBUG")
+        except Exception:
+            pass
 
 
 def _engine_for_method(launch_method: str) -> EngineName:
@@ -627,6 +789,29 @@ def _list_type(profile: Profile) -> str:
     return "custom"
 
 
+def _visible_list_type(profile: Profile, app_paths) -> str:
+    list_type = _list_type(profile)
+    if list_type not in {"hostlist", "ipset"}:
+        return ""
+    if not _profile_has_filter_choice(profile, app_paths):
+        return ""
+    return list_type
+
+
+def _profile_has_filter_choice(profile: Profile, app_paths) -> bool:
+    if profile.engine != ENGINE_WINWS2:
+        return False
+    settings = read_winws2_editable_settings(profile)
+    if not settings.filter_editable:
+        return False
+    available = {
+        kind
+        for kind in _available_filter_kinds(settings, app_paths)
+        if kind in {"hostlist", "ipset"}
+    }
+    return len(available) > 1
+
+
 def _user_profile_id_from_template_key(template_key: str) -> str:
     key = str(template_key or "").strip()
     if key.startswith("template:user:"):
@@ -636,9 +821,10 @@ def _user_profile_id_from_template_key(template_key: str) -> str:
     return ""
 
 
-def _match_summary(profile: Profile) -> str:
+def _match_summary(profile: Profile, *, list_type: str | None = None) -> str:
     match_lines = tuple(profile.match.all_lines())
-    parts = [part for part in (protocol_label_from_match_lines(match_lines), ports_label_from_match_lines(match_lines), _list_type(profile)) if part]
+    visible_list_type = _list_type(profile) if list_type is None else str(list_type or "")
+    parts = [part for part in (protocol_label_from_match_lines(match_lines), ports_label_from_match_lines(match_lines), visible_list_type) if part]
     return " • ".join(parts) or "без явных условий"
 
 

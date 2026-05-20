@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import unittest
-from types import SimpleNamespace
+
+from qfluentwidgets import FluentIcon
 
 from presets.ui.common.user_presets_actions_workflow import show_reset_all_result
 
@@ -22,17 +23,12 @@ class UserPresetsResetResultTests(unittest.TestCase):
     def _show_result(self, *, success_count: int, total_count: int, failed_count: int = 0) -> _Button:
         button = _Button()
 
-        def themed_icon(name: str, *, color: str):
-            return (name, color)
-
         show_reset_all_result(
             cleanup_in_progress=False,
             success_count=success_count,
             total_count=total_count,
             failed_count=failed_count,
             reset_all_btn=button,
-            themed_icon_fn=themed_icon,
-            get_theme_tokens_fn=lambda: SimpleNamespace(fg="#fff"),
             single_shot_fn=lambda _delay, callback: None,
             restore_label_fn=lambda: None,
         )
@@ -42,19 +38,19 @@ class UserPresetsResetResultTests(unittest.TestCase):
         button = self._show_result(success_count=3, total_count=83)
 
         self.assertEqual(button.text, "Сброшено: 3")
-        self.assertEqual(button.icon, ("fa5s.check", "#fff"))
+        self.assertEqual(button.icon, FluentIcon.ACCEPT)
 
     def test_reset_result_shows_nothing_to_change_as_success(self) -> None:
         button = self._show_result(success_count=0, total_count=83)
 
         self.assertEqual(button.text, "Нечего менять")
-        self.assertEqual(button.icon, ("fa5s.check", "#fff"))
+        self.assertEqual(button.icon, FluentIcon.ACCEPT)
 
     def test_reset_result_shows_failed_count_as_warning(self) -> None:
         button = self._show_result(success_count=3, total_count=83, failed_count=2)
 
         self.assertEqual(button.text, "Ошибки: 2")
-        self.assertEqual(button.icon, ("fa5s.exclamation-triangle", "#fff"))
+        self.assertEqual(button.icon, FluentIcon.INFO)
 
 
 if __name__ == "__main__":

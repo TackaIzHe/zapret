@@ -5,11 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from PyQt6.QtWidgets import QWidget, QHBoxLayout
+from qfluentwidgets import FluentIcon
 
 from ui.fluent_widgets import QuickActionsBar, SettingsCard, set_tooltip
 from diagnostics.ui.components import ConnectionStatusBadge, ScrollBlockingConnectionTextEdit
 from ui.log_limits import DIAGNOSTICS_LOG_VIEW_MAX_LINES, apply_text_line_limit
-from ui.widgets.action_button import apply_themed_action_button
 
 
 @dataclass(slots=True)
@@ -123,9 +123,10 @@ def build_connection_controls(
 
     actions_bar = QuickActionsBar(content_parent)
 
-    start_btn = push_button_cls()
-    start_btn.setText(tr_fn("page.connection.button.start", "Запустить тест"))
-    apply_themed_action_button(start_btn, icon_name="fa5s.play", alignment="left")
+    start_btn = push_button_cls(
+        tr_fn("page.connection.button.start", "Запустить тест"),
+        icon=FluentIcon.PLAY,
+    )
     set_tooltip(
         start_btn,
         tr_fn(
@@ -136,9 +137,10 @@ def build_connection_controls(
     start_btn.clicked.connect(on_start)
     actions_bar.add_button(start_btn)
 
-    stop_btn = push_button_cls()
-    stop_btn.setText(tr_fn("page.connection.button.stop", "Стоп"))
-    apply_themed_action_button(stop_btn, icon_name="fa5s.stop", alignment="left")
+    stop_btn = push_button_cls(
+        tr_fn("page.connection.button.stop", "Стоп"),
+        icon=FluentIcon.CANCEL,
+    )
     set_tooltip(
         stop_btn,
         tr_fn(
@@ -150,9 +152,10 @@ def build_connection_controls(
     stop_btn.setEnabled(False)
     actions_bar.add_button(stop_btn)
 
-    send_log_btn = push_button_cls()
-    send_log_btn.setText(tr_fn("page.connection.button.send_log", "Подготовить обращение"))
-    apply_themed_action_button(send_log_btn, icon_name="fa5b.github", alignment="left")
+    send_log_btn = push_button_cls(
+        tr_fn("page.connection.button.send_log", "Подготовить обращение"),
+        icon=FluentIcon.GITHUB,
+    )
     set_tooltip(
         send_log_btn,
         tr_fn(

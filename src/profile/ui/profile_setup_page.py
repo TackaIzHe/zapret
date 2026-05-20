@@ -39,6 +39,7 @@ from qfluentwidgets import (
     LineEdit,
     MessageBox,
     PlainTextEdit,
+    FluentIcon,
     SearchLineEdit,
     SegmentedWidget,
     PushButton,
@@ -48,7 +49,6 @@ from ui.pages.base_page import BasePage
 from ui.fluent_widgets import set_tooltip
 from app.text_catalog import tr as tr_catalog
 from ui.theme import get_cached_qta_pixmap, get_theme_tokens, to_qcolor
-from ui.widgets.action_button import apply_themed_action_button
 from ui.widgets.fluent_item_tooltip import FluentItemToolTipController
 from ui.widgets.fluent_scrollbar import install_fluent_scrollbars
 from ui.widgets.hover_row import paint_profile_hover_row, profile_hover_row_rect
@@ -395,6 +395,8 @@ class ProfileSetupPageBase(BasePage):
         self._on_profile_changed_callback = on_profile_changed
         self._profile_key = ""
         self._loading = False
+        self._setup_load_request_id = 0
+        self._setup_load_worker = None
         self._payload = None
         self._settings_container = None
         self._work_button = None
@@ -407,6 +409,7 @@ class ProfileSetupPageBase(BasePage):
         self._raw_profile_save_button = None
         self._list_file_title = None
         self._list_file_text = None
+        self._list_file_editor_tab = None
         self._list_file_error_label = None
         self._list_file_status_label = None
         self._list_file_save_button = None
@@ -440,13 +443,11 @@ class ProfileSetupPageBase(BasePage):
         self._enabled_checkbox = CheckBox("Включён")
         self._enabled_checkbox.stateChanged.connect(self._on_enabled_changed)
         header_layout.addWidget(self._enabled_checkbox, 0, Qt.AlignmentFlag.AlignRight)
-        self._update_user_profile_button = PushButton("Изменить")
-        apply_themed_action_button(self._update_user_profile_button, icon_name="fa5s.edit", alignment="left")
+        self._update_user_profile_button = PushButton("Изменить", icon=FluentIcon.EDIT)
         self._update_user_profile_button.clicked.connect(self._on_update_user_profile_clicked)
         self._update_user_profile_button.hide()
         header_layout.addWidget(self._update_user_profile_button, 0, Qt.AlignmentFlag.AlignRight)
-        self._delete_user_profile_button = PushButton("Удалить")
-        apply_themed_action_button(self._delete_user_profile_button, icon_name="fa5s.trash-alt", alignment="left")
+        self._delete_user_profile_button = PushButton("Удалить", icon=FluentIcon.DELETE)
         self._delete_user_profile_button.clicked.connect(self._on_delete_user_profile_clicked)
         self._delete_user_profile_button.hide()
         header_layout.addWidget(self._delete_user_profile_button, 0, Qt.AlignmentFlag.AlignRight)
@@ -525,6 +526,7 @@ class ProfileSetupPageBase(BasePage):
         self._strategy_stack.addWidget(self._strategy_list)
 
         editor_tab = QWidget(self)
+        self._list_file_editor_tab = editor_tab
         editor_layout = QVBoxLayout(editor_tab)
         editor_layout.setContentsMargins(0, 0, 0, 0)
         editor_layout.setSpacing(10)
@@ -550,8 +552,7 @@ class ProfileSetupPageBase(BasePage):
         editor_actions_layout = QHBoxLayout(editor_actions)
         editor_actions_layout.setContentsMargins(0, 0, 0, 0)
         editor_actions_layout.setSpacing(12)
-        self._list_file_save_button = PushButton("Сохранить список")
-        apply_themed_action_button(self._list_file_save_button, icon_name="fa5s.save", alignment="left")
+        self._list_file_save_button = PushButton("Сохранить список", icon=FluentIcon.SAVE)
         self._list_file_save_button.clicked.connect(self._on_list_file_save_clicked)
         editor_actions_layout.addWidget(self._list_file_save_button)
         self._list_file_status_label = CaptionLabel("")
@@ -589,8 +590,7 @@ class ProfileSetupPageBase(BasePage):
         raw_actions_layout = QHBoxLayout(raw_actions)
         raw_actions_layout.setContentsMargins(0, 0, 0, 0)
         raw_actions_layout.setSpacing(12)
-        self._raw_profile_save_button = PushButton("Сохранить текст profile")
-        apply_themed_action_button(self._raw_profile_save_button, icon_name="fa5s.save", alignment="left")
+        self._raw_profile_save_button = PushButton("Сохранить текст profile", icon=FluentIcon.SAVE)
         self._raw_profile_save_button.clicked.connect(self._on_raw_profile_save_clicked)
         set_tooltip(
             self._raw_profile_save_button,
@@ -605,8 +605,7 @@ class ProfileSetupPageBase(BasePage):
         feedback_actions_layout.setContentsMargins(0, 0, 0, 0)
         feedback_actions_layout.setSpacing(12)
 
-        self._work_button = PushButton("Работает")
-        apply_themed_action_button(self._work_button, icon_name="fa5s.check", alignment="left")
+        self._work_button = PushButton("Работает", icon=FluentIcon.ACCEPT)
         set_tooltip(
             self._work_button,
             "Пометить текущую готовую стратегию как рабочую для этого profile.",
@@ -614,8 +613,7 @@ class ProfileSetupPageBase(BasePage):
         self._work_button.clicked.connect(lambda: self._set_current_strategy_feedback(rating="work"))
         feedback_actions_layout.addWidget(self._work_button)
 
-        self._notwork_button = PushButton("Не работает")
-        apply_themed_action_button(self._notwork_button, icon_name="fa5s.times", alignment="left")
+        self._notwork_button = PushButton("Не работает", icon=FluentIcon.CLOSE)
         set_tooltip(
             self._notwork_button,
             "Пометить текущую готовую стратегию как нерабочую для этого profile.",
@@ -623,8 +621,7 @@ class ProfileSetupPageBase(BasePage):
         self._notwork_button.clicked.connect(lambda: self._set_current_strategy_feedback(rating="notwork"))
         feedback_actions_layout.addWidget(self._notwork_button)
 
-        self._favorite_button = PushButton("В избранное")
-        apply_themed_action_button(self._favorite_button, icon_name="fa5s.star", alignment="left")
+        self._favorite_button = PushButton("В избранное", icon=FluentIcon.HEART)
         set_tooltip(
             self._favorite_button,
             "Добавить текущую готовую стратегию в избранное или убрать её оттуда.",
@@ -632,8 +629,7 @@ class ProfileSetupPageBase(BasePage):
         self._favorite_button.clicked.connect(self._toggle_current_strategy_favorite)
         feedback_actions_layout.addWidget(self._favorite_button)
 
-        self._clear_feedback_button = PushButton("Убрать оценку")
-        apply_themed_action_button(self._clear_feedback_button, icon_name="fa5s.undo", alignment="left")
+        self._clear_feedback_button = PushButton("Убрать оценку", icon=FluentIcon.RETURN)
         set_tooltip(
             self._clear_feedback_button,
             "Очистить вашу оценку для текущей готовой стратегии.",
@@ -852,19 +848,43 @@ class ProfileSetupPageBase(BasePage):
         return False
 
     def reload_current_profile(self) -> None:
+        self._request_profile_setup_payload()
+
+    def _request_profile_setup_payload(self) -> None:
         if not self._profile_key:
             return
-        try:
-            payload = self._controller.load(self._profile_key)
-        except Exception as exc:
-            log(f"{self.__class__.__name__}: не удалось прочитать профиль {self._profile_key}: {exc}", "ERROR")
-            payload = None
+        self._setup_load_request_id += 1
+        request_id = self._setup_load_request_id
+        self._summary.setText("Загрузка profile...")
+        self._enabled_checkbox.setEnabled(False)
+        worker = self._controller.create_load_worker(request_id, self._profile_key, self)
+        self._setup_load_worker = worker
+        worker.loaded.connect(self._on_profile_setup_payload_loaded)
+        worker.failed.connect(self._on_profile_setup_payload_failed)
+        worker.finished.connect(lambda w=worker: self._on_profile_setup_worker_finished(w))
+        worker.start()
+
+    def _on_profile_setup_payload_loaded(self, request_id: int, payload) -> None:
+        if request_id != self._setup_load_request_id:
+            return
         if payload is None:
-            self._summary.setText("Профиль не найден. Вернитесь к списку и нажмите «Обновить».")
+            self._summary.setText("Профиль не найден. Вернитесь к списку и выберите profile заново.")
             self._enabled_checkbox.setEnabled(False)
             return
         self._payload = payload
         self._apply_payload(payload)
+
+    def _on_profile_setup_payload_failed(self, request_id: int, error: str) -> None:
+        if request_id != self._setup_load_request_id:
+            return
+        log(f"{self.__class__.__name__}: не удалось прочитать профиль {self._profile_key}: {error}", "ERROR")
+        self._summary.setText("Профиль не найден. Вернитесь к списку и выберите profile заново.")
+        self._enabled_checkbox.setEnabled(False)
+
+    def _on_profile_setup_worker_finished(self, worker) -> None:
+        if self._setup_load_worker is worker:
+            self._setup_load_worker = None
+        worker.deleteLater()
 
     def _apply_payload(self, payload) -> None:
         self._loading = True
@@ -1076,14 +1096,16 @@ class ProfileSetupPageBase(BasePage):
             return
 
         filter_enabled = bool(getattr(payload, "editable_filter_enabled", True))
-        self._filter_combo.setVisible(filter_enabled)
-        self._filter_value.setVisible(filter_enabled)
+        available_kinds = tuple(getattr(payload, "editable_filter_kinds", ()) or ())
+        filter_switchable = filter_enabled and len({kind for kind in available_kinds if kind in {"hostlist", "ipset"}}) > 1
         self._rebuild_filter_kind_combo(
-            tuple(getattr(payload, "editable_filter_kinds", ()) or ()),
+            available_kinds,
             str(getattr(payload, "editable_filter_kind", "") or "hostlist"),
         )
         set_combo_by_data(self._filter_combo, getattr(payload, "editable_filter_kind", "") or "hostlist")
         self._filter_value.setText(str(getattr(payload, "editable_filter_value", "") or ""))
+        self._filter_combo.setVisible(filter_switchable)
+        self._filter_value.setVisible(filter_switchable)
         set_range_controls(self._in_range_mode, self._in_range_value, getattr(payload, "in_range", "") or "x")
         set_range_controls(self._out_range_mode, self._out_range_value, getattr(payload, "out_range", "") or "a")
         self._update_all_range_tooltips()

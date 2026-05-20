@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
     QWidget, QFrame,
 )
 from qfluentwidgets import (
+    FluentIcon,
     LineEdit,
     PushButton,
     TransparentToolButton,
@@ -22,7 +23,7 @@ from qfluentwidgets import (
 
 from ui.pages.base_page import BasePage
 from ui.fluent_widgets import set_tooltip
-from ui.theme import get_cached_qta_pixmap, get_theme_tokens, get_themed_qta_icon
+from ui.theme import get_cached_qta_pixmap, get_theme_tokens
 from ui.theme_refresh import ThemeRefreshBinding
 from app.text_catalog import tr as tr_catalog
 
@@ -126,7 +127,7 @@ class WhitelistDomainRow(QFrame):
             )
 
         if self._delete_btn is not None:
-            self._delete_btn.setIcon(get_themed_qta_icon("mdi.close-circle-outline", color=tokens.fg))
+            self._delete_btn.setIcon(FluentIcon.CLOSE)
 
     def _on_delete_clicked(self):
         """При клике на удаление - уведомляем родителя"""
@@ -286,10 +287,10 @@ class OrchestraWhitelistPage(BasePage):
         tokens = tokens or get_theme_tokens()
 
         if hasattr(self, "add_btn") and self.add_btn is not None:
-            self.add_btn.setIcon(get_themed_qta_icon("mdi.plus", color=tokens.fg))
+            self.add_btn.setIcon(FluentIcon.ADD)
 
         if hasattr(self, "clear_user_btn") and self.clear_user_btn is not None:
-            self.clear_user_btn.setIcon(get_themed_qta_icon("mdi.delete-sweep", color=tokens.fg))
+            self.clear_user_btn.setIcon(FluentIcon.DELETE)
 
         if hasattr(self, "restart_warning") and self.restart_warning is not None:
             self.restart_warning.setStyleSheet(

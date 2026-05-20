@@ -28,6 +28,11 @@ class ProfileSetupController:
             profile_key=profile_key,
         )
 
+    def create_load_worker(self, request_id: int, profile_key: str, parent=None):
+        from profile.profile_setup_loader import ProfileSetupLoadWorker
+
+        return ProfileSetupLoadWorker(request_id, self, profile_key, parent)
+
     def save_winws2_settings(
         self,
         *,

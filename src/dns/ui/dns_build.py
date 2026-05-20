@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+from qfluentwidgets import FluentIcon
 from PyQt6.QtCore import Qt
 
 from ui.theme import get_cached_qta_pixmap
@@ -65,7 +67,10 @@ def build_custom_dns_ui(
     custom_secondary.returnPressed.connect(on_apply)
     custom_layout.addWidget(custom_secondary)
 
-    custom_apply_btn = action_button_cls(tr_fn("page.network.custom.apply", "OK"), "fa5s.check")
+    custom_apply_btn = action_button_cls(
+        tr_fn("page.network.custom.apply", "OK"),
+        icon=FluentIcon.ACCEPT,
+    )
     custom_apply_btn.setFixedSize(70, 26)
     custom_apply_btn.clicked.connect(on_apply)
     custom_layout.addWidget(custom_apply_btn)

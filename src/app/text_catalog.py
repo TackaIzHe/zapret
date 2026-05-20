@@ -4801,16 +4801,16 @@ TEXTS_EXTRA: dict[str, dict[str, str]] = {
         "en": "Zapret 2 presets were not found. Import a preset or reinstall the app to restore built-in presets.",
     },
     "page.winws2_pages.empty.no_selected_preset": {
-        "ru": "Не удалось понять, какой пресет выбран. Откройте «Мои пресеты», выберите пресет заново и нажмите «Обновить».",
-        "en": "Could not determine which preset is selected. Open My Presets, choose a preset again, and click Refresh.",
+        "ru": "Не удалось понять, какой пресет выбран. Откройте «Мои пресеты» и выберите preset заново.",
+        "en": "Could not determine which preset is selected. Open My Presets and choose a preset again.",
     },
     "page.winws2_pages.empty.preset_read_error": {
         "ru": "Не удалось открыть выбранный пресет «{preset_name}». Файл мог быть удалён, очищен или повреждён. Выберите другой пресет или верните встроенный.",
         "en": "Could not open the selected preset \"{preset_name}\". The file may have been deleted, emptied, or corrupted. Choose another preset or restore the built-in one.",
     },
     "page.winws2_pages.empty.unknown_error": {
-        "ru": "Не удалось показать профили пресета «{preset_name}». Нажмите «Обновить». Если ошибка повторится, выберите другой пресет.",
-        "en": "Could not show profiles from preset \"{preset_name}\". Click Refresh. If the error repeats, choose another preset.",
+        "ru": "Не удалось показать profile-ы preset-а «{preset_name}». Если ошибка повторится, выберите другой preset.",
+        "en": "Could not show profiles from preset \"{preset_name}\". If the error repeats, choose another preset.",
     },
     "page.winws2_pages.empty.no_categories": {
         "ru": "В выбранном пресете «{preset_name}» нет профилей, которые можно показать на этой странице. Попробуйте другой пресет или добавьте нужный профиль.",

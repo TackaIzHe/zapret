@@ -122,8 +122,8 @@ def _accent_foreground_color(accent_rgb: tuple[int, int, int]) -> str:
     r, g, b = accent_rgb
     yiq = (r * 299 + g * 587 + b * 114) / 1000
     if yiq >= 160:
-        return "rgba(18, 18, 18, 0.90)"
-    return "rgba(245, 245, 245, 0.95)"
+        return "#121212"
+    return "#f5f5f5"
 
 
 def _normalize_theme_name(theme_name: str | None) -> str:
@@ -1070,6 +1070,8 @@ def resolve_icon_color(color=None, *, theme_name: str | None = None, muted_fallb
         return tokens.icon_fg_muted
     if raw == tokens.fg_faint:
         return tokens.icon_fg_faint
+    if raw == tokens.accent_fg:
+        return tokens.accent_fg
 
     parsed = _to_qcolor(color)
     if parsed is None:

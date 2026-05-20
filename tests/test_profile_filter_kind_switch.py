@@ -115,10 +115,16 @@ class ProfileFilterKindSwitchTests(unittest.TestCase):
             )
 
             setup = service.get_profile_setup("profile:0")
+            payload = service.list_profiles()
             new_key = service.set_profile_filter_kind("profile:0", "ipset")
 
         self.assertIsNotNone(setup)
         self.assertEqual(setup.editable_filter_kinds, ("hostlist",))
+        self.assertEqual(setup.item.list_type, "")
+        self.assertEqual(setup.list_editor.kind, "hostlist")
+        self.assertTrue(setup.list_editor.editable)
+        self.assertNotIn("hostlist", setup.match_summary)
+        self.assertEqual(payload.items[0].list_type, "")
         self.assertIsNone(new_key)
         self.assertIn("--hostlist=lists/discord-updates.txt", store.text)
         self.assertNotIn("ipset-discord-updates.txt", store.text)
@@ -145,10 +151,15 @@ class ProfileFilterKindSwitchTests(unittest.TestCase):
             )
 
             setup = service.get_profile_setup("profile:0")
+            payload = service.list_profiles()
             new_key = service.set_profile_filter_kind("profile:0", "ipset")
 
         self.assertIsNotNone(setup)
         self.assertEqual(setup.editable_filter_kinds, ("hostlist", "ipset"))
+        self.assertEqual(setup.item.list_type, "hostlist")
+        self.assertTrue(setup.list_editor.editable)
+        self.assertIn("hostlist", setup.match_summary)
+        self.assertEqual(payload.items[0].list_type, "hostlist")
         self.assertEqual(new_key, "profile:0")
         self.assertIn("--ipset=lists/ipset-discord.txt", store.text)
 

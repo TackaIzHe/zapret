@@ -189,6 +189,11 @@ class RawPresetEditorController:
     def load_text(self, path: Path | None) -> RawPresetLoadResult:
         return load_raw_preset_text(path)
 
+    def create_load_worker(self, request_id: int, path: Path | None, parent=None):
+        from presets.raw_preset_loader import RawPresetLoadWorker
+
+        return RawPresetLoadWorker(request_id, self, path, parent)
+
     def save_text(self, *, file_name: str, source_text: str) -> RawPresetSaveResult:
         return save_raw_preset_text(
             presets_feature=self._presets,

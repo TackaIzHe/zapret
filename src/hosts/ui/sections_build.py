@@ -10,8 +10,7 @@ from PyQt6.QtWidgets import QLabel, QHBoxLayout
 from ui.fluent_widgets import SettingsCard, SemanticNotice
 from ui.theme import get_cached_qta_pixmap, get_theme_tokens
 from ui.theme_semantic import get_semantic_palette
-from ui.widgets.action_button import apply_themed_action_button
-from qfluentwidgets import BodyLabel, CaptionLabel, PushButton, StrongBodyLabel, SwitchButton
+from qfluentwidgets import BodyLabel, CaptionLabel, FluentIcon, PushButton, StrongBodyLabel, SwitchButton
 
 
 @dataclass(slots=True)
@@ -104,15 +103,17 @@ def build_hosts_status_section(
     status_label.setProperty("tone", "primary")
     status_layout.addWidget(status_label, 1)
 
-    clear_btn = PushButton()
-    clear_btn.setText(tr_fn("page.hosts.button.clear", " Очистить"))
-    apply_themed_action_button(clear_btn, icon_name="fa5s.trash-alt", alignment="left")
+    clear_btn = PushButton(
+        tr_fn("page.hosts.button.clear", "Очистить"),
+        icon=FluentIcon.DELETE,
+    )
     clear_btn.clicked.connect(on_clear_clicked)
     status_layout.addWidget(clear_btn)
 
-    open_hosts_button = PushButton()
-    open_hosts_button.setText(tr_fn("page.hosts.button.open", " Открыть"))
-    apply_themed_action_button(open_hosts_button, icon_name="fa5s.external-link-alt", alignment="left")
+    open_hosts_button = PushButton(
+        tr_fn("page.hosts.button.open", "Открыть"),
+        icon=FluentIcon.LINK,
+    )
     open_hosts_button.clicked.connect(on_open_hosts_file)
     status_layout.addWidget(open_hosts_button)
 

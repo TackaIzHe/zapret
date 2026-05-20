@@ -1,10 +1,20 @@
 from __future__ import annotations
 
+from settings.mode import normalize_launch_method
+
 from .service import ProfilePresetService
 
 
 def _profile_preset_service(profile_services, launch_method: str) -> ProfilePresetService:
-    return ProfilePresetService(profile_services, launch_method)
+    key = normalize_launch_method(launch_method)
+    cache = getattr(profile_services, "_preset_service_cache", None)
+    if isinstance(cache, dict):
+        service = cache.get(key)
+        if service is None:
+            service = ProfilePresetService(profile_services, key)
+            cache[key] = service
+        return service
+    return ProfilePresetService(profile_services, key)
 
 
 def list_profiles(profile_services, launch_method: str):
@@ -13,6 +23,27 @@ def list_profiles(profile_services, launch_method: str):
 
 def count_enabled_profiles(profile_services, launch_method: str) -> int:
     return _profile_preset_service(profile_services, launch_method).count_enabled_profiles()
+
+
+def get_enabled_profile_count_snapshot(profile_services, launch_method: str) -> int | None:
+    return _profile_preset_service(profile_services, launch_method).get_enabled_profile_count_snapshot()
+
+
+def get_profile_strategy_display_state(profile_services, launch_method: str, max_items: int = 2):
+    return _profile_preset_service(profile_services, launch_method).get_profile_strategy_display_state(max_items=max_items)
+
+
+def get_profile_selection_details(
+    profile_services,
+    launch_method: str,
+    *,
+    selected_profile_key: str = "",
+    max_items: int = 2,
+):
+    return _profile_preset_service(profile_services, launch_method).get_profile_selection_details(
+        selected_profile_key=selected_profile_key,
+        max_items=max_items,
+    )
 
 
 def get_profile_setup(profile_services, launch_method: str, profile_key: str):

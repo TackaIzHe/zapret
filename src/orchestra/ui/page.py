@@ -6,6 +6,7 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtWidgets import (
     QVBoxLayout, QLabel,
 )
+from qfluentwidgets import FluentIcon
 
 import orchestra.page_runtime as orchestra_page_runtime
 from orchestra.page_controller import OrchestraPageController
@@ -46,7 +47,7 @@ from orchestra.ui.page_log_history_workflow import (
     delete_log_history_entry,
     view_log_history_entry,
 )
-from ui.theme import get_cached_qta_pixmap, get_theme_tokens, get_themed_qta_icon
+from ui.theme import get_cached_qta_pixmap, get_theme_tokens
 from app.text_catalog import tr as tr_catalog
 from qfluentwidgets import (
     BodyLabel,
@@ -267,22 +268,22 @@ class OrchestraPage(BasePage):
         # qfluentwidgets widgets — they style themselves.
 
         if self._clear_filter_btn is not None:
-            self._clear_filter_btn.setIcon(get_themed_qta_icon("mdi.close", color=tokens.fg_faint))
+            self._clear_filter_btn.setIcon(FluentIcon.CLOSE)
 
         if self.clear_log_btn is not None:
-            self.clear_log_btn.setIcon(get_themed_qta_icon("fa5s.broom", color=tokens.fg))
+            self.clear_log_btn.setIcon(FluentIcon.BROOM)
 
         if self._clear_all_logs_btn is not None:
-            self._clear_all_logs_btn.setIcon(get_themed_qta_icon("fa5s.trash-alt", color=tokens.fg))
+            self._clear_all_logs_btn.setIcon(FluentIcon.DELETE)
 
         if self.clear_learned_btn is not None:
             self._update_clear_learned_button_icon()
 
         if self._view_log_btn is not None:
-            self._view_log_btn.setIcon(get_themed_qta_icon("fa5s.eye", color=tokens.fg))
+            self._view_log_btn.setIcon(FluentIcon.VIEW)
 
         if self._delete_log_btn is not None:
-            self._delete_log_btn.setIcon(get_themed_qta_icon("fa5s.trash-alt", color=tokens.fg))
+            self._delete_log_btn.setIcon(FluentIcon.DELETE)
 
         self._update_status(self._current_state)
 
@@ -324,7 +325,7 @@ class OrchestraPage(BasePage):
             done_text="",
             fg_color=tokens.fg,
         )
-        self.clear_learned_btn.setIcon(get_themed_qta_icon(plan.icon_name, color=plan.icon_color))
+        self.clear_learned_btn.setIcon(FluentIcon.DELETE if plan.action in {"confirm", "done"} else FluentIcon.SYNC)
 
     def _reset_clear_learned_button(self) -> None:
         if self._cleanup_in_progress:
@@ -339,7 +340,7 @@ class OrchestraPage(BasePage):
                 fg_color=get_theme_tokens().fg,
             )
             self.clear_learned_btn.setText(plan.text)
-            self.clear_learned_btn.setIcon(get_themed_qta_icon(plan.icon_name, color=plan.icon_color))
+            self.clear_learned_btn.setIcon(FluentIcon.DELETE if plan.action in {"confirm", "done"} else FluentIcon.SYNC)
 
     def _on_clear_learned_clicked(self) -> None:
         if self._cleanup_in_progress:
@@ -356,7 +357,7 @@ class OrchestraPage(BasePage):
                     fg_color=get_theme_tokens().fg,
                 )
                 self.clear_learned_btn.setText(plan.text)
-                self.clear_learned_btn.setIcon(get_themed_qta_icon(plan.icon_name, color=plan.icon_color))
+                self.clear_learned_btn.setIcon(FluentIcon.DELETE if plan.action in {"confirm", "done"} else FluentIcon.SYNC)
             self._clear_learned()
             QTimer.singleShot(1500, self._reset_clear_learned_button)
             return
@@ -371,7 +372,7 @@ class OrchestraPage(BasePage):
                 fg_color=get_theme_tokens().fg,
             )
             self.clear_learned_btn.setText(plan.text)
-            self.clear_learned_btn.setIcon(get_themed_qta_icon(plan.icon_name, color=plan.icon_color))
+            self.clear_learned_btn.setIcon(FluentIcon.DELETE if plan.action in {"confirm", "done"} else FluentIcon.SYNC)
         self._clear_learned_reset_timer.start(3000)
 
     def _clear_learned(self):

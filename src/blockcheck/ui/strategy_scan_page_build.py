@@ -6,12 +6,11 @@ from dataclasses import dataclass
 
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QHBoxLayout, QHeaderView
-from qfluentwidgets import CaptionLabel
+from qfluentwidgets import CaptionLabel, FluentIcon
 
-from ui.fluent_widgets import ActionButton, QuickActionsBar, SettingsCard, set_tooltip
+from ui.fluent_widgets import QuickActionsBar, SettingsCard, set_tooltip
 from ui.log_limits import BLOCKCHECK_LOG_VIEW_MAX_LINES, apply_text_line_limit
 from ui.pages.base_page import ScrollBlockingTextEdit
-from ui.widgets.action_button import apply_themed_action_button
 from ui.widgets.fluent_item_tooltip import install_fluent_item_tooltips
 
 
@@ -143,9 +142,9 @@ def build_strategy_scan_control_section(
     target_input.setFixedHeight(33)
     settings_row.addWidget(target_input)
 
-    quick_domain_btn = ActionButton(
+    quick_domain_btn = push_button_cls(
         tr_fn("page.strategy_scan.quick_domains", "Быстрый выбор"),
-        icon_name="fa5s.list",
+        icon=FluentIcon.MENU,
     )
     set_tooltip(
         quick_domain_btn,
@@ -179,9 +178,10 @@ def build_strategy_scan_control_section(
 
     actions_bar = QuickActionsBar(parent)
 
-    start_btn = push_button_cls()
-    start_btn.setText(tr_fn("page.strategy_scan.start", "Начать сканирование"))
-    apply_themed_action_button(start_btn, icon_name="fa5s.search", alignment="left")
+    start_btn = push_button_cls(
+        tr_fn("page.strategy_scan.start", "Начать сканирование"),
+        icon=FluentIcon.SEARCH,
+    )
     set_tooltip(
         start_btn,
         tr_fn(
@@ -192,9 +192,10 @@ def build_strategy_scan_control_section(
     start_btn.clicked.connect(on_start)
     actions_bar.add_button(start_btn)
 
-    stop_btn = push_button_cls()
-    stop_btn.setText(tr_fn("page.strategy_scan.stop", "Остановить"))
-    apply_themed_action_button(stop_btn, icon_name="fa5s.stop", alignment="left")
+    stop_btn = push_button_cls(
+        tr_fn("page.strategy_scan.stop", "Остановить"),
+        icon=FluentIcon.CANCEL,
+    )
     set_tooltip(
         stop_btn,
         tr_fn(
@@ -269,10 +270,8 @@ def build_strategy_scan_log_section(*, tr_fn, push_button_cls, parent, on_toggle
         tr_fn("page.strategy_scan.log", "Подробный лог")
     )
 
-    expand_log_btn = push_button_cls()
-    expand_log_btn.setText("Развернуть")
+    expand_log_btn = push_button_cls("Развернуть", icon=FluentIcon.FULL_SCREEN)
     expand_log_btn.setFixedWidth(120)
-    apply_themed_action_button(expand_log_btn, icon_name="fa5s.expand-alt", alignment="left", min_width=120)
     expand_log_btn.clicked.connect(on_toggle_log_expand)
 
     log_header = QHBoxLayout()
@@ -281,9 +280,9 @@ def build_strategy_scan_log_section(*, tr_fn, push_button_cls, parent, on_toggle
     log_header.addWidget(support_status_label, 1)
     log_header.addStretch()
 
-    prepare_support_btn = ActionButton(
+    prepare_support_btn = push_button_cls(
         tr_fn("page.strategy_scan.prepare_support", "Подготовить обращение"),
-        icon_name="fa5b.github",
+        icon=FluentIcon.GITHUB,
     )
     prepare_support_btn.clicked.connect(on_prepare_support)
     log_header.addWidget(prepare_support_btn)

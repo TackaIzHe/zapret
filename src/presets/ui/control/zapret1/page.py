@@ -24,10 +24,6 @@ from presets.ui.control.shared_builders import build_last_status_message_card_co
 import presets.ui.control.control_runtime as control_runtime
 from presets.ui.control.control_page_runtime_shared import apply_last_status_message
 from presets.ui.control.windows_features.runtime import ControlPageWindowsFeatureMixin
-from ui.fluent_widgets import (
-    ActionButton,
-    PrimaryActionButton,
-)
 from app.state_store import AppUiState, MainWindowStateStore
 from presets.ui.control.control_page_shared import (
     ControlPageActionMixin,
@@ -40,18 +36,8 @@ from presets.ui.control.top_summary_widget import ControlTopSummaryWidget
 from qfluentwidgets import (
     CaptionLabel, StrongBodyLabel,
     IndeterminateProgressBar, InfoBar,
-    PushSettingCard, SettingCardGroup,
+    PrimaryPushButton, PushButton, PushSettingCard, SettingCardGroup,
 )
-
-
-class BigActionButton(PrimaryActionButton):
-    def __init__(self, text: str, icon_name: str | None = None, accent: bool = True, parent=None):
-        super().__init__(text, icon_name, parent)
-
-
-class StopButton(ActionButton):
-    def __init__(self, text: str, icon_name: str | None = None, accent: bool = False, parent=None):
-        super().__init__(text, icon_name, parent=parent)
 
 
 class Zapret1ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMixin, BasePage):
@@ -202,8 +188,8 @@ class Zapret1ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
             tr_fn=lambda key, default: tr_catalog(key, language=self._ui_language, default=default),
             caption_label_cls=CaptionLabel,
             indeterminate_progress_bar_cls=IndeterminateProgressBar,
-            big_action_button_cls=BigActionButton,
-            stop_button_cls=StopButton,
+            big_action_button_cls=PrimaryPushButton,
+            stop_button_cls=PushButton,
             on_start=self._start_dpi,
             on_stop=self._stop_dpi,
             on_stop_and_exit=self._stop_and_exit,
@@ -380,7 +366,8 @@ class Zapret1ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
 
     def _load_enabled_profile_count(self) -> int | None:
         try:
-            return int(self._profile.count_enabled_profiles(ZAPRET1_MODE))
+            count = self._profile.get_enabled_profile_count_snapshot(ZAPRET1_MODE)
+            return int(count) if count is not None else None
         except Exception:
             return None
 

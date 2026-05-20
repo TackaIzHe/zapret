@@ -154,39 +154,6 @@ def get_running_runner_source(launch_method: str, orchestra_runner, direct_runne
         return ORCHESTRA_MODE, orchestra_runner
     return None, None
 
-def get_runner_pid(runner):
-    if not runner:
-        return "?"
-
-    try:
-        get_pid = getattr(runner, "get_pid", None)
-        if callable(get_pid):
-            pid = get_pid()
-            if pid:
-                return pid
-    except Exception:
-        pass
-
-    try:
-        get_info = getattr(runner, "get_current_strategy_info", None)
-        if callable(get_info):
-            info = get_info()
-            pid = info.get("pid") if isinstance(info, dict) else None
-            if pid:
-                return pid
-    except Exception:
-        pass
-
-    try:
-        process = getattr(runner, "running_process", None)
-        pid = getattr(process, "pid", None)
-        if pid:
-            return pid
-    except Exception:
-        pass
-
-    return "?"
-
 def get_orchestra_log_path(orchestra_runner):
     try:
         if orchestra_runner:
@@ -345,15 +312,25 @@ def build_stats_text_plan(stats: LogsStatsState, *, language: str) -> LogsStatsT
         )
     )
 
-def build_winws_output_plan(*, launch_method: str, orchestra_runner, direct_runner, language: str) -> LogsWinwsOutputPlan:
+def _format_process_pid(pid: int | None) -> str:
+    return str(pid) if isinstance(pid, int) else "?"
+
+
+def build_winws_output_plan(
+    *,
+    launch_method: str,
+    orchestra_runner,
+    direct_runner,
+    process_pid: int | None,
+    language: str,
+) -> LogsWinwsOutputPlan:
     source, runner = get_running_runner_source(launch_method, orchestra_runner, direct_runner)
 
     if source == ORCHESTRA_MODE and runner:
-        pid = get_runner_pid(runner)
         return LogsWinwsOutputPlan(
             action=ORCHESTRA_MODE,
             status_kind="running",
-            status_text=f"PID: {pid} | Оркестратор",
+            status_text=f"PID: {_format_process_pid(process_pid)} | Оркестратор",
             process=None,
         )
 
@@ -399,11 +376,10 @@ def build_winws_output_plan(*, launch_method: str, orchestra_runner, direct_runn
     strategy_name = strategy_info.get("name", "winws")
     if len(strategy_name) > 35:
         strategy_name = strategy_name[:32] + "..."
-    pid = strategy_info.get("pid") or get_runner_pid(runner)
 
     return LogsWinwsOutputPlan(
         action="start_worker",
         status_kind="running",
-        status_text=f"PID: {pid} | {strategy_name}",
+        status_text=f"PID: {_format_process_pid(process_pid)} | {strategy_name}",
         process=process,
     )

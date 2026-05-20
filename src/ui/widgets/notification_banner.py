@@ -8,10 +8,10 @@
 
 from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QSize
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QGraphicsOpacityEffect
-from qfluentwidgets import TransparentToolButton
+from qfluentwidgets import FluentIcon, TransparentToolButton
 
 from ui.animation_policy import register_managed_animation, start_managed_animation
-from ui.theme import get_cached_qta_pixmap, get_theme_tokens, get_themed_qta_icon
+from ui.theme import get_cached_qta_pixmap, get_theme_tokens
 from ui.theme_refresh import ThemeRefreshBinding
 
 
@@ -110,7 +110,7 @@ class NotificationBanner(QWidget):
             hover_bg = "rgba(245, 245, 245, 0.14)"
             pressed_bg = "rgba(245, 245, 245, 0.20)"
 
-        self.close_btn.setIcon(get_themed_qta_icon("mdi.close", color=icon_color))
+        self.close_btn.setIcon(FluentIcon.CLOSE)
         self.close_btn.setStyleSheet(f"""
             TransparentToolButton {{
                 background-color: transparent;

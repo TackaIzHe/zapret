@@ -54,7 +54,8 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         apply_payload = inspect.getsource(PresetSetupPageBase._apply_payload)
         handler = inspect.getsource(PresetSetupPageBase._on_add_user_profile_clicked)
 
-        self.assertIn('ThemedActionButton("Добавить"', apply_payload)
+        self.assertIn('PrimaryPushButton("Добавить"', apply_payload)
+        self.assertIn("icon=FluentIcon.ADD", apply_payload)
         self.assertIn("CreateUserProfileDialog", handler)
         self.assertIn("create_user_profile", handler)
         self.assertIn("refresh_from_preset_switch", handler)
@@ -137,6 +138,17 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         self.assertIn("_apply_list_file_editor_payload", apply_payload)
         self.assertIn("save_list_file_text", save_handler)
         self.assertIn("Неверные строки", validation)
+
+    def test_profile_setup_page_keeps_editor_tab_when_profile_has_no_filter_choice(self) -> None:
+        apply_editor = inspect.getsource(ProfileSetupPageBase._apply_list_file_editor_payload)
+        build = inspect.getsource(ProfileSetupPageBase._build_content)
+        apply_settings = inspect.getsource(ProfileSetupPageBase._apply_editable_settings)
+
+        self.assertNotIn("_set_list_file_editor_available", apply_editor)
+        self.assertIn('addItem("editor", "Редактор"', build)
+        self.assertNotIn('removeWidget("editor")', inspect.getsource(ProfileSetupPageBase))
+        self.assertIn("filter_switchable", apply_settings)
+        self.assertIn("setVisible(filter_switchable)", apply_settings)
 
     def test_strategy_list_rows_store_visual_description(self) -> None:
         set_rows = inspect.getsource(ProfileStrategyListWidget._rebuild_tree)

@@ -18,8 +18,6 @@ from qfluentwidgets import (
 from ui.pages.base_page import BasePage, ScrollBlockingPlainTextEdit
 from ui.fluent_widgets import (
     SettingsCard,
-    ActionButton,
-    PrimaryActionButton,
     QuickActionsBar,
     insert_widget_into_setting_card_group,
     set_tooltip,
@@ -84,6 +82,8 @@ class HostlistPage(BasePage):
         self._folder_info_loading = {"hostlist": False, "ipset": False}
         self._folder_info_loaded = {"hostlist": False, "ipset": False}
         self._folder_info_state = {"hostlist": None, "ipset": None}
+        self._editor_load_request_seq: dict[str, int] = {}
+        self._editor_load_workers: dict[tuple[str, int], object] = {}
         self.folder_info_loaded.connect(self._on_folder_info_loaded)
         self.folder_info_failed.connect(self._on_folder_info_failed)
 
@@ -256,7 +256,7 @@ class HostlistPage(BasePage):
             caption_label_cls=CaptionLabel,
             setting_card_group_cls=SettingCardGroup,
             quick_actions_bar_cls=QuickActionsBar,
-            action_button_cls=ActionButton,
+            action_button_cls=PushButton,
             insert_widget_into_setting_card_group_fn=insert_widget_into_setting_card_group,
             set_tooltip_fn=set_tooltip,
             desc_key="page.hostlist.hostlist.desc",
@@ -290,7 +290,7 @@ class HostlistPage(BasePage):
             caption_label_cls=CaptionLabel,
             setting_card_group_cls=SettingCardGroup,
             quick_actions_bar_cls=QuickActionsBar,
-            action_button_cls=ActionButton,
+            action_button_cls=PushButton,
             insert_widget_into_setting_card_group_fn=insert_widget_into_setting_card_group,
             set_tooltip_fn=set_tooltip,
             desc_key="page.hostlist.ipset.desc",
@@ -323,7 +323,7 @@ class HostlistPage(BasePage):
             primary_push_button_cls=PrimaryPushButton,
             setting_card_group_cls=SettingCardGroup,
             quick_actions_bar_cls=QuickActionsBar,
-            action_button_cls=ActionButton,
+            action_button_cls=PushButton,
             plain_text_edit_cls=ScrollBlockingPlainTextEdit,
             insert_widget_into_setting_card_group_fn=insert_widget_into_setting_card_group,
             set_tooltip_fn=set_tooltip,
@@ -366,7 +366,7 @@ class HostlistPage(BasePage):
             primary_push_button_cls=PrimaryPushButton,
             setting_card_group_cls=SettingCardGroup,
             quick_actions_bar_cls=QuickActionsBar,
-            action_button_cls=ActionButton,
+            action_button_cls=PushButton,
             plain_text_edit_cls=ScrollBlockingPlainTextEdit,
             insert_widget_into_setting_card_group_fn=insert_widget_into_setting_card_group,
             set_tooltip_fn=set_tooltip,
@@ -553,21 +553,59 @@ class HostlistPage(BasePage):
     # Domains editor logic
     # ──────────────────────────────────────────────────────────────────────────
 
+    def _request_editor_text(self, kind: str, on_loaded, on_failed=None) -> None:
+        normalized = str(kind or "").strip().lower()
+        request_seq = int(self._editor_load_request_seq.get(normalized, 0)) + 1
+        self._editor_load_request_seq[normalized] = request_seq
+        worker = self._lists_controller.create_text_load_worker(request_seq, normalized, self)
+        self._editor_load_workers[(normalized, request_seq)] = worker
+        worker.loaded.connect(lambda seq, loaded_kind, state: self._on_editor_text_loaded(seq, loaded_kind, state, on_loaded))
+        worker.failed.connect(lambda seq, loaded_kind, error: self._on_editor_text_failed(seq, loaded_kind, error, on_failed))
+        worker.finished.connect(lambda w=worker, k=normalized, s=request_seq: self._on_editor_text_worker_finished(k, s, w))
+        worker.start()
+
+    def _on_editor_text_loaded(self, request_seq: int, kind: str, state, on_loaded) -> None:
+        normalized = str(kind or "").strip().lower()
+        if self._cleanup_in_progress:
+            return
+        if int(self._editor_load_request_seq.get(normalized, 0)) != int(request_seq):
+            return
+        on_loaded(state)
+
+    def _on_editor_text_failed(self, request_seq: int, kind: str, error: str, on_failed) -> None:
+        normalized = str(kind or "").strip().lower()
+        if self._cleanup_in_progress:
+            return
+        if int(self._editor_load_request_seq.get(normalized, 0)) != int(request_seq):
+            return
+        if callable(on_failed):
+            on_failed(error)
+
+    def _on_editor_text_worker_finished(self, kind: str, request_seq: int, worker) -> None:
+        self._editor_load_workers.pop((kind, int(request_seq)), None)
+        worker.deleteLater()
+
     def _load_domains(self):
         if self._cleanup_in_progress:
             return
-        try:
-            state = self._lists_controller.load_text("domains")
-            domains_text = state.text
-            load_text_into_editor(self._d_editor, domains_text)
-            self._domains_update_status()
-            log(f"Загружено {state.lines_count} строк из lists/user/other.txt", "INFO")
-        except Exception as e:
-            log(f"Ошибка загрузки доменов: {e}", "ERROR")
-            if hasattr(self, "_d_status"):
-                self._d_status.setText(
-                    self._tr("page.hostlist.status.error", "❌ Ошибка: {error}", error=e)
-                )
+        self._request_editor_text(
+            "domains",
+            self._on_domains_loaded,
+            self._on_domains_load_failed,
+        )
+
+    def _on_domains_loaded(self, state) -> None:
+        domains_text = state.text
+        load_text_into_editor(self._d_editor, domains_text)
+        self._domains_update_status()
+        log(f"Загружено {state.lines_count} строк из lists/user/other.txt", "INFO")
+
+    def _on_domains_load_failed(self, error: str) -> None:
+        log(f"Ошибка загрузки доменов: {error}", "ERROR")
+        if hasattr(self, "_d_status"):
+            self._d_status.setText(
+                self._tr("page.hostlist.status.error", "❌ Ошибка: {error}", error=error)
+            )
 
     def _domains_on_text_changed(self):
         self._domains_save_timer.start(500)
@@ -670,18 +708,24 @@ class HostlistPage(BasePage):
     def _load_ips(self):
         if self._cleanup_in_progress:
             return
-        try:
-            state = self._lists_controller.load_text("ipset")
-            self._ip_base_set_cache = state.base_set
-            load_text_into_editor(self._i_editor, state.text)
-            self._ips_update_status()
-            log(f"Загружено {state.lines_count} строк из lists/user/ipset-all.txt", "INFO")
-        except Exception as e:
-            log(f"Ошибка загрузки lists/user/ipset-all.txt: {e}", "ERROR")
-            if hasattr(self, "_i_status"):
-                self._i_status.setText(
-                    self._tr("page.hostlist.status.error", "❌ Ошибка: {error}", error=e)
-                )
+        self._request_editor_text(
+            "ipset",
+            self._on_ips_loaded,
+            self._on_ips_load_failed,
+        )
+
+    def _on_ips_loaded(self, state) -> None:
+        self._ip_base_set_cache = state.base_set
+        load_text_into_editor(self._i_editor, state.text)
+        self._ips_update_status()
+        log(f"Загружено {state.lines_count} строк из lists/user/ipset-all.txt", "INFO")
+
+    def _on_ips_load_failed(self, error: str) -> None:
+        log(f"Ошибка загрузки lists/user/ipset-all.txt: {error}", "ERROR")
+        if hasattr(self, "_i_status"):
+            self._i_status.setText(
+                self._tr("page.hostlist.status.error", "❌ Ошибка: {error}", error=error)
+            )
 
     def _ips_on_text_changed(self):
         self._ips_save_timer.start(500)
@@ -772,7 +816,7 @@ class HostlistPage(BasePage):
             primary_push_button_cls=PrimaryPushButton,
             setting_card_group_cls=SettingCardGroup,
             quick_actions_bar_cls=QuickActionsBar,
-            action_button_cls=ActionButton,
+            action_button_cls=PushButton,
             plain_text_edit_cls=ScrollBlockingPlainTextEdit,
             insert_widget_into_setting_card_group_fn=insert_widget_into_setting_card_group,
             set_tooltip_fn=set_tooltip,
@@ -825,37 +869,47 @@ class HostlistPage(BasePage):
     def _load_exclusions(self):
         if self._cleanup_in_progress:
             return
-        try:
-            state = self._lists_controller.load_text("netrogat")
-            self._excl_base_set_cache = state.base_set
-            load_text_into_editor(self._excl_editor, state.text)
-            self._excl_update_status()
-            log(f"Загружено {state.lines_count} строк из lists/user/netrogat.txt", "INFO")
-        except Exception as e:
-            log(f"Ошибка загрузки netrogat: {e}", "ERROR")
-            if hasattr(self, "_excl_status"):
-                self._excl_status.setText(
-                    self._tr("page.hostlist.status.error", "❌ Ошибка: {error}", error=e)
-                )
-
+        self._request_editor_text(
+            "netrogat",
+            self._on_exclusions_loaded,
+            self._on_exclusions_load_failed,
+        )
         self._load_ipru_exclusions()
+
+    def _on_exclusions_loaded(self, state) -> None:
+        self._excl_base_set_cache = state.base_set
+        load_text_into_editor(self._excl_editor, state.text)
+        self._excl_update_status()
+        log(f"Загружено {state.lines_count} строк из lists/user/netrogat.txt", "INFO")
+
+    def _on_exclusions_load_failed(self, error: str) -> None:
+        log(f"Ошибка загрузки netrogat: {error}", "ERROR")
+        if hasattr(self, "_excl_status"):
+            self._excl_status.setText(
+                self._tr("page.hostlist.status.error", "❌ Ошибка: {error}", error=error)
+            )
 
     def _load_ipru_exclusions(self):
         if self._cleanup_in_progress:
             return
-        try:
-            state = self._lists_controller.load_text("ipru")
-            self._ipru_base_set_cache = state.base_set
+        self._request_editor_text(
+            "ipru",
+            self._on_ipru_exclusions_loaded,
+            self._on_ipru_exclusions_load_failed,
+        )
 
-            load_text_into_editor(self._ipru_editor, state.text)
-            self._ipru_update_status()
-            log(f"Загружено {state.lines_count} строк из lists/user/ipset-ru.txt", "INFO")
-        except Exception as e:
-            log(f"Ошибка загрузки lists/user/ipset-ru.txt: {e}", "ERROR")
-            if hasattr(self, "_ipru_status"):
-                self._ipru_status.setText(
-                    self._tr("page.hostlist.status.error", "❌ Ошибка: {error}", error=e)
-                )
+    def _on_ipru_exclusions_loaded(self, state) -> None:
+        self._ipru_base_set_cache = state.base_set
+        load_text_into_editor(self._ipru_editor, state.text)
+        self._ipru_update_status()
+        log(f"Загружено {state.lines_count} строк из lists/user/ipset-ru.txt", "INFO")
+
+    def _on_ipru_exclusions_load_failed(self, error: str) -> None:
+        log(f"Ошибка загрузки lists/user/ipset-ru.txt: {error}", "ERROR")
+        if hasattr(self, "_ipru_status"):
+            self._ipru_status.setText(
+                self._tr("page.hostlist.status.error", "❌ Ошибка: {error}", error=error)
+            )
 
     def _excl_on_text_changed(self):
         self._excl_save_timer.start(500)

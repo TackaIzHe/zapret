@@ -37,7 +37,7 @@ class LogTailWorker(QObject):
 
             start_offset = 0
             try:
-                if self.initial_max_bytes:
+                if self.initial_max_bytes is not None:
                     size = os.path.getsize(self.file_path)
                     if size > self.initial_max_bytes:
                         start_offset = max(0, size - self.initial_max_bytes)

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from qfluentwidgets import FluentIcon
+
 
 @dataclass(slots=True)
 class NetworkToolsWidgets:
@@ -46,11 +48,11 @@ def build_tools_card_ui(
     tools_card = setting_card_group_cls(tools_title, content_parent)
     actions_bar = quick_actions_bar_cls(content_parent)
 
-    test_btn = action_button_cls(test_text, "fa5s.wifi")
+    test_btn = action_button_cls(test_text, icon=FluentIcon.WIFI)
     test_btn.clicked.connect(on_test)
     set_tooltip_fn(test_btn, test_tooltip)
 
-    flush_btn = action_button_cls(flush_text, "fa5s.eraser")
+    flush_btn = action_button_cls(flush_text, icon=FluentIcon.ERASE_TOOL)
     flush_btn.clicked.connect(on_flush_dns)
     set_tooltip_fn(flush_btn, flush_tooltip)
 

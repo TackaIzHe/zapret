@@ -115,6 +115,8 @@ class PresetRawEditorPage(BasePage):
         self._preset_file_name = ""
         self._preset_path: Path | None = None
         self._is_loading = False
+        self._raw_load_request_id = 0
+        self._raw_load_worker = None
         self._cleanup_in_progress = False
         self._ui_state_store = None
 
@@ -348,15 +350,37 @@ class PresetRawEditorPage(BasePage):
         self.pathLabel.setText(str(self._preset_path or ""))
 
     def _load_file(self) -> None:
+        self._request_raw_preset_text()
+
+    def _request_raw_preset_text(self) -> None:
+        self._raw_load_request_id += 1
+        request_id = self._raw_load_request_id
         self._is_loading = True
-        try:
-            result = self._controller.load_text(self._preset_path)
-            self.editor.setPlainText(result.text)
-            self._set_footer(result.footer_text)
-        except Exception as e:
-            self._set_footer(f"Ошибка загрузки: {e}")
-        finally:
-            self._is_loading = False
+        self._set_footer("Загрузка...")
+        worker = self._controller.create_load_worker(request_id, self._preset_path, self)
+        self._raw_load_worker = worker
+        worker.loaded.connect(self._on_raw_preset_text_loaded)
+        worker.failed.connect(self._on_raw_preset_text_failed)
+        worker.finished.connect(lambda w=worker: self._on_raw_preset_worker_finished(w))
+        worker.start()
+
+    def _on_raw_preset_text_loaded(self, request_id: int, result) -> None:
+        if request_id != self._raw_load_request_id:
+            return
+        self.editor.setPlainText(result.text)
+        self._set_footer(result.footer_text)
+        self._is_loading = False
+
+    def _on_raw_preset_text_failed(self, request_id: int, error: str) -> None:
+        if request_id != self._raw_load_request_id:
+            return
+        self._set_footer(f"Ошибка загрузки: {error}")
+        self._is_loading = False
+
+    def _on_raw_preset_worker_finished(self, worker) -> None:
+        if self._raw_load_worker is worker:
+            self._raw_load_worker = None
+        worker.deleteLater()
 
     def _on_text_changed(self) -> None:
         if self._cleanup_in_progress:

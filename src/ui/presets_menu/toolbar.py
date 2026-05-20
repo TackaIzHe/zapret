@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from PyQt6.QtWidgets import QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
+from qfluentwidgets import PrimaryPushButton, PushButton
 
 
 class PresetsToolbarLayout:
@@ -38,15 +39,13 @@ class PresetsToolbarLayout:
     def create_action_button(
         self,
         text: str,
-        icon_name: str | None,
+        icon,
         *,
         accent: bool = False,
         fixed_height: int = 32,
     ) -> QWidget:
-        from ui.fluent_widgets import ActionButton, PrimaryActionButton
-
-        button_cls = PrimaryActionButton if accent else ActionButton
-        button = button_cls(text, icon_name, parent=self.container)
+        button_cls = PrimaryPushButton if accent else PushButton
+        button = button_cls(text, parent=self.container, icon=icon)
         button.setFixedHeight(int(fixed_height))
         return button
 

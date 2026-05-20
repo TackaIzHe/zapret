@@ -79,7 +79,7 @@ from qfluentwidgets import (
 )
 
 
-from ui.theme import get_cached_qta_pixmap, get_theme_tokens, get_themed_qta_icon
+from ui.theme import get_cached_qta_pixmap, get_theme_tokens
 from ui.theme_semantic import get_semantic_palette
 from log.log import log
 
@@ -453,7 +453,6 @@ class UserPresetsPageBase(BasePage):
             get_theme_tokens_fn=lambda: tokens or get_theme_tokens(),
             get_semantic_palette_fn=get_semantic_palette,
             get_cached_qta_pixmap_fn=get_cached_qta_pixmap,
-            get_themed_qta_icon_fn=get_themed_qta_icon,
             schedule_layout_resync_fn=self._schedule_layout_resync,
             configs_icon=getattr(self, "_configs_icon", None),
             reset_all_btn=getattr(self, "reset_all_btn", None),
@@ -553,8 +552,6 @@ class UserPresetsPageBase(BasePage):
             total_count=total_count,
             failed_count=failed_count,
             reset_all_btn=self.reset_all_btn,
-            themed_icon_fn=get_themed_qta_icon,
-            get_theme_tokens_fn=get_theme_tokens,
             single_shot_fn=QTimer.singleShot,
             restore_label_fn=lambda: (not self._cleanup_in_progress) and self._restore_reset_all_button_label(),
         )
@@ -564,8 +561,6 @@ class UserPresetsPageBase(BasePage):
             cleanup_in_progress=self._cleanup_in_progress,
             reset_all_btn=self.reset_all_btn,
             tr_fn=self._tr,
-            themed_icon_fn=get_themed_qta_icon,
-            get_theme_tokens_fn=get_theme_tokens,
             tr_prefix=self._config.tr_prefix,
         )
 

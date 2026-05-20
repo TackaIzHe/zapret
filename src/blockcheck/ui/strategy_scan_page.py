@@ -53,7 +53,7 @@ from qfluentwidgets import (
 )
 
 from ui.fluent_widgets import (
-    SettingsCard, ActionButton, InfoBarHelper, set_tooltip,
+    SettingsCard, InfoBarHelper, set_tooltip,
 )
 
 logger = logging.getLogger(__name__)
@@ -88,7 +88,7 @@ class StrategyScanPage(BasePage):
         self._scan_mode: str = "quick"
         self._scan_cursor: int = 0
         self._run_log_file: Path | None = None
-        self._quick_domain_btn: ActionButton | None = None
+        self._quick_domain_btn: PushButton | None = None
         self._target_label: QLabel | None = None
         self._games_scope_label: QLabel | None = None
         self._games_scope_combo = None

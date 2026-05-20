@@ -5,10 +5,10 @@ from __future__ import annotations
 import threading
 
 from PyQt6.QtCore import QMetaObject, Qt as QtNS
+from qfluentwidgets import FluentIcon
 
 import telegram_proxy.ui.page_runtime as telegram_proxy_page_runtime
 import telegram_proxy.settings as telegram_proxy_settings
-from ui.widgets.action_button import apply_themed_action_button
 
 
 def handle_toggle_proxy(
@@ -275,12 +275,8 @@ def apply_status_changed(
 
     status_label.setText(plan.status_text)
     btn_toggle.setText(plan.toggle_text)
-    apply_themed_action_button(
-        btn_toggle,
-        icon_name="fa5s.stop" if "Останов" in plan.toggle_text else "fa5s.play",
-        alignment="center",
-        min_width=140,
-    )
+    btn_toggle.setIcon(FluentIcon.CANCEL if "Останов" in plan.toggle_text else FluentIcon.PLAY)
+    btn_toggle.setMinimumWidth(140)
     port_spin.setEnabled(plan.port_spin_enabled)
     host_edit.setEnabled(plan.host_edit_enabled)
 

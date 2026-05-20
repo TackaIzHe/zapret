@@ -12,6 +12,8 @@ if str(PROJECT_SRC) not in sys.path:
 
 
 class ControlTopSummaryPlanTests(unittest.TestCase):
+    _app = None
+
     def test_profiles_value_is_translated(self) -> None:
         from presets.ui.control.top_summary_plan import build_profiles_value
 
@@ -36,8 +38,7 @@ class ControlTopSummaryPlanTests(unittest.TestCase):
             from PyQt6.QtWidgets import QApplication
             from presets.ui.control.top_summary_widget import ControlTopSummaryWidget
 
-            app = QApplication.instance() or QApplication([])
-            _ = app
+            self.__class__._app = QApplication.instance() or QApplication([])
             widget = ControlTopSummaryWidget(language="ru", mode_value="Zapret 2")
 
             for item in (

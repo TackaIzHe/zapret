@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
 )
 from ui.pages.base_page import BasePage
-from ui.fluent_widgets import SettingsCard, ActionButton
+from ui.fluent_widgets import SettingsCard
 from ui.theme import (
     get_cached_qta_pixmap,
     get_theme_tokens,
@@ -22,6 +22,8 @@ from app.text_catalog import tr as tr_catalog
 from autostart.ui.notifications import build_autostart_error_notification
 from log.log import log
 from qfluentwidgets import (
+    FluentIcon,
+    PushButton,
     SimpleCardWidget,
     StrongBodyLabel,
     BodyLabel,
@@ -294,9 +296,9 @@ class AutostartPage(BasePage):
 
         status_layout.addLayout(status_text_layout, 1)
 
-        self.disable_btn = ActionButton(
+        self.disable_btn = PushButton(
             self._tr("page.autostart.button.disable", "Отключить"),
-            "fa5s.times",
+            icon=FluentIcon.CLOSE,
         )
         self.disable_btn.setFixedHeight(36)
         self.disable_btn.setVisible(False)

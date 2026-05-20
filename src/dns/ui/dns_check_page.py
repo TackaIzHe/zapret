@@ -12,12 +12,13 @@ from PyQt6.QtGui import QFont, QTextCursor
 from ui.pages.base_page import BasePage, ScrollBlockingTextEdit
 import dns.dns_check_plans as dns_check_page_plans
 from ui.fluent_widgets import QuickActionsBar, SettingsCard, set_tooltip
-from ui.theme import get_cached_qta_pixmap, get_theme_tokens, get_themed_qta_icon
+from ui.theme import get_cached_qta_pixmap, get_theme_tokens
 from ui.theme_semantic import get_semantic_palette
 from app.text_catalog import tr as tr_catalog
 
 from qfluentwidgets import (
     IndeterminateProgressBar,
+    FluentIcon,
     InfoBar,
     PushButton,
     StrongBodyLabel,
@@ -136,9 +137,10 @@ class DNSCheckPage(BasePage):
 
         self._actions_bar = QuickActionsBar(self.content)
 
-        self.check_button = PushButton()
-        self.check_button.setText(tr_catalog("page.dns_check.button.start", language=self._ui_language, default="Начать проверку"))
-        self.check_button.setIcon(get_themed_qta_icon("fa5s.play", color="#4CAF50"))
+        self.check_button = PushButton(
+            tr_catalog("page.dns_check.button.start", language=self._ui_language, default="Начать проверку"),
+            icon=FluentIcon.PLAY,
+        )
         set_tooltip(
             self.check_button,
             tr_catalog(
@@ -150,9 +152,10 @@ class DNSCheckPage(BasePage):
         self.check_button.clicked.connect(self.start_check)
         self._actions_bar.add_button(self.check_button)
 
-        self.quick_check_button = PushButton()
-        self.quick_check_button.setText(tr_catalog("page.dns_check.button.quick", language=self._ui_language, default="Быстрая проверка"))
-        self.quick_check_button.setIcon(get_themed_qta_icon("fa5s.bolt", color="#60cdff"))
+        self.quick_check_button = PushButton(
+            tr_catalog("page.dns_check.button.quick", language=self._ui_language, default="Быстрая проверка"),
+            icon=FluentIcon.SPEED_HIGH,
+        )
         set_tooltip(
             self.quick_check_button,
             tr_catalog(
@@ -164,9 +167,10 @@ class DNSCheckPage(BasePage):
         self.quick_check_button.clicked.connect(self.quick_dns_check)
         self._actions_bar.add_button(self.quick_check_button)
 
-        self.save_button = PushButton()
-        self.save_button.setText(tr_catalog("page.dns_check.button.save", language=self._ui_language, default="Сохранить результаты"))
-        self.save_button.setIcon(get_themed_qta_icon("fa5s.save", color="#ff9800"))
+        self.save_button = PushButton(
+            tr_catalog("page.dns_check.button.save", language=self._ui_language, default="Сохранить результаты"),
+            icon=FluentIcon.SAVE,
+        )
         set_tooltip(
             self.save_button,
             tr_catalog(

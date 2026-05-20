@@ -8,15 +8,14 @@ from PyQt6.QtWidgets import (
 import qtawesome as qta
 
 from qfluentwidgets import (
-    BodyLabel, CaptionLabel, InfoBar, LineEdit, MessageBox, SettingCardGroup,
+    BodyLabel, CaptionLabel, FluentIcon, InfoBar, LineEdit, MessageBox, SettingCardGroup,
+    PrimaryPushButton, PushButton,
     StrongBodyLabel,
 )
 
 from ui.pages.base_page import BasePage, ScrollBlockingPlainTextEdit
 from ui.fluent_widgets import (
     SettingsCard,
-    ActionButton,
-    PrimaryActionButton,
     QuickActionsBar,
     insert_widget_into_setting_card_group,
     set_tooltip,
@@ -65,6 +64,8 @@ class CustomIpSetPage(BasePage):
         }
         self._invalid_line_items: list[tuple[int, str]] = []
         self._cleanup_in_progress = False
+        self._editor_load_request_seq = 0
+        self._editor_load_worker = None
 
         self._status_timer = QTimer(self)
         self._status_timer.setSingleShot(True)
@@ -121,7 +122,10 @@ class CustomIpSetPage(BasePage):
         self.input.returnPressed.connect(self._add_entry)
         add_layout.addWidget(self.input, 1)
 
-        self.add_btn = PrimaryActionButton(self._tr("page.custom_ipset.button.add", "Добавить"), "fa5s.plus")
+        self.add_btn = PrimaryPushButton(
+            self._tr("page.custom_ipset.button.add", "Добавить"),
+            icon=FluentIcon.ADD,
+        )
         self.add_btn.setFixedHeight(38)
         self.add_btn.clicked.connect(self._add_entry)
         add_layout.addWidget(self.add_btn)
@@ -136,9 +140,9 @@ class CustomIpSetPage(BasePage):
         )
         self._actions_group = actions_group
         self._actions_bar = QuickActionsBar(self.content)
-        self.open_btn = ActionButton(
+        self.open_btn = PushButton(
             self._tr("page.custom_ipset.button.open_file", "Открыть файл"),
-            "fa5s.external-link-alt",
+            icon=FluentIcon.LINK,
         )
         self.open_btn.clicked.connect(self._open_file)
         set_tooltip(
@@ -149,9 +153,9 @@ class CustomIpSetPage(BasePage):
             ),
         )
 
-        self.clear_btn = ActionButton(
+        self.clear_btn = PushButton(
             self._tr("page.custom_ipset.button.clear_all", "Очистить всё"),
-            "fa5s.trash-alt",
+            icon=FluentIcon.DELETE,
         )
         self.clear_btn.clicked.connect(self._clear_all)
         set_tooltip(
@@ -251,23 +255,42 @@ class CustomIpSetPage(BasePage):
         """Загружает пользовательский список из lists/user/ipset-all.txt."""
         if self._cleanup_in_progress:
             return
-        try:
-            state = self._lists_controller.load_text("ipset")
+        self._request_editor_text("ipset")
 
-            # Блокируем сигнал чтобы не срабатывало автосохранение
-            self.text_edit.blockSignals(True)
-            self.text_edit.setPlainText(state.text)
-            self.text_edit.blockSignals(False)
-            self._status_state["saved"] = False
-            self._update_status()
-            log(f"Загружено {state.lines_count} строк из lists/user/ipset-all.txt", "INFO")
-        except Exception as e:
-            log(f"Ошибка загрузки lists/user/ipset-all.txt: {e}", "ERROR")
-            self._status_state["error_key"] = "page.custom_ipset.status.error_load"
-            self._status_state["error_default"] = "❌ Ошибка загрузки: {error}"
-            self._status_state["error_kwargs"] = {"error": e}
-            self._status_state["error_text"] = ""
-            self._render_status_label()
+    def _request_editor_text(self, kind: str) -> None:
+        self._editor_load_request_seq += 1
+        request_seq = self._editor_load_request_seq
+        worker = self._lists_controller.create_text_load_worker(request_seq, kind, self)
+        self._editor_load_worker = worker
+        worker.loaded.connect(self._on_editor_text_loaded)
+        worker.failed.connect(self._on_editor_text_failed)
+        worker.finished.connect(lambda w=worker: self._on_editor_text_worker_finished(w))
+        worker.start()
+
+    def _on_editor_text_loaded(self, request_seq: int, _kind: str, state) -> None:
+        if self._cleanup_in_progress or request_seq != self._editor_load_request_seq:
+            return
+        self.text_edit.blockSignals(True)
+        self.text_edit.setPlainText(state.text)
+        self.text_edit.blockSignals(False)
+        self._status_state["saved"] = False
+        self._update_status()
+        log(f"Загружено {state.lines_count} строк из lists/user/ipset-all.txt", "INFO")
+
+    def _on_editor_text_failed(self, request_seq: int, _kind: str, error: str) -> None:
+        if self._cleanup_in_progress or request_seq != self._editor_load_request_seq:
+            return
+        log(f"Ошибка загрузки lists/user/ipset-all.txt: {error}", "ERROR")
+        self._status_state["error_key"] = "page.custom_ipset.status.error_load"
+        self._status_state["error_default"] = "❌ Ошибка загрузки: {error}"
+        self._status_state["error_kwargs"] = {"error": error}
+        self._status_state["error_text"] = ""
+        self._render_status_label()
+
+    def _on_editor_text_worker_finished(self, worker) -> None:
+        if self._editor_load_worker is worker:
+            self._editor_load_worker = None
+        worker.deleteLater()
 
     def _render_status_label(self) -> None:
         if self._status_state.get("error_key"):

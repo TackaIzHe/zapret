@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from qfluentwidgets import FluentIcon
+
 from ui.fluent_widgets import set_tooltip
 
 
@@ -79,7 +81,7 @@ def build_force_dns_card_ui(
 
     force_dns_reset_dhcp_btn = action_button_cls(
         tr_fn("page.network.force_dns.reset.button", "Сбросить DNS на DHCP"),
-        "fa5s.undo",
+        icon=FluentIcon.RETURN,
     )
     force_dns_reset_dhcp_btn.setFixedHeight(30)
     force_dns_reset_dhcp_btn.clicked.connect(on_confirm_reset)

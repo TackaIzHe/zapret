@@ -8,8 +8,8 @@ from collections.abc import Callable
 from PyQt6.QtWidgets import QLabel, QHBoxLayout, QVBoxLayout
 
 from ui.fluent_widgets import SettingsCard
-from qfluentwidgets import SubtitleLabel, StrongBodyLabel, CaptionLabel, PushButton, PrimaryPushButton
-from ui.theme import get_cached_qta_pixmap, get_themed_qta_icon
+from qfluentwidgets import CaptionLabel, FluentIcon, PrimaryPushButton, PushButton, StrongBodyLabel, SubtitleLabel
+from ui.theme import get_cached_qta_pixmap
 
 
 @dataclass(slots=True)
@@ -61,12 +61,10 @@ def build_about_page_about_content(
     text_layout.addWidget(about_version_value_label)
     version_layout.addLayout(text_layout, 1)
 
-    update_btn = PushButton()
-    update_btn.setText(
-        tr_fn("page.about.button.update_settings", "Настройка обновлений")
+    update_btn = PushButton(
+        tr_fn("page.about.button.update_settings", "Настройка обновлений"),
+        icon=FluentIcon.SYNC,
     )
-    update_btn.setIcon(get_themed_qta_icon("fa5s.sync-alt", color=tokens.accent_hex))
-    update_btn.setFixedHeight(36)
     update_btn.clicked.connect(on_open_updates)
     version_layout.addWidget(update_btn)
 
@@ -108,12 +106,10 @@ def build_about_page_about_content(
 
     sub_btns = QHBoxLayout()
     sub_btns.setSpacing(8)
-    premium_btn = PrimaryPushButton()
-    premium_btn.setText(
-        tr_fn("page.about.button.premium_vpn", "Premium и VPN")
+    premium_btn = PrimaryPushButton(
+        tr_fn("page.about.button.premium_vpn", "Premium и VPN"),
+        icon=FluentIcon.HEART,
     )
-    premium_btn.setIcon(get_themed_qta_icon("fa5s.star", color="#ffc107"))
-    premium_btn.setFixedHeight(36)
     premium_btn.clicked.connect(on_open_premium)
     sub_btns.addWidget(premium_btn)
     sub_btns.addStretch()

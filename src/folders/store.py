@@ -12,6 +12,8 @@ def normalize_folder_state(data: object, default_state: dict[str, Any]) -> dict[
     default_folders = _normalize_folders(defaults.get("folders"), fallback={})
     raw = data if isinstance(data, dict) else {}
     folders = _normalize_folders(raw.get("folders"), fallback=default_folders)
+    if default_folders:
+        folders = _merge_default_folders(folders, default_folders)
     if COMMON_FOLDER_KEY in default_folders:
         folders[COMMON_FOLDER_KEY] = {
             **default_folders[COMMON_FOLDER_KEY],
@@ -206,6 +208,41 @@ def _normalize_folders(value: object, *, fallback: dict[str, dict[str, Any]]) ->
     if folders:
         return folders
     return deepcopy(fallback)
+
+
+def _merge_default_folders(
+    folders: dict[str, dict[str, Any]],
+    default_folders: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    result = deepcopy(folders)
+    if not result:
+        return deepcopy(default_folders)
+
+    for key, default_folder in default_folders.items():
+        if key in result:
+            result[key] = {
+                **default_folder,
+                **result[key],
+                "system": bool(default_folder.get("system", False) or result[key].get("system", False)),
+            }
+            continue
+
+        folder = deepcopy(default_folder)
+        wanted_order = _as_int(folder.get("order"), len(result), minimum=0)
+        _make_order_slot(result, wanted_order)
+        folder["order"] = wanted_order
+        result[key] = folder
+
+    return result
+
+
+def _make_order_slot(folders: dict[str, dict[str, Any]], order: int) -> None:
+    for folder in folders.values():
+        if not isinstance(folder, dict):
+            continue
+        current_order = _as_int(folder.get("order"), 0, minimum=0)
+        if current_order >= order:
+            folder["order"] = current_order + 1
 
 
 def _clean_folder_name(value: object) -> str:

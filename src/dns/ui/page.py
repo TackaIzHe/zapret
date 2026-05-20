@@ -19,7 +19,6 @@ from ui.pages.base_page import BasePage
 from ui.widgets.win11_controls import Win11ToggleRow
 from ui.fluent_widgets import (
     SettingsCard,
-    ActionButton,
     QuickActionsBar,
     enable_setting_card_group_auto_height,
     insert_widget_into_setting_card_group,
@@ -340,7 +339,7 @@ class NetworkPage(BasePage):
             qhbox_layout_cls=QHBoxLayout,
             qframe_cls=QFrame,
             line_edit_cls=LineEdit,
-            action_button_cls=ActionButton,
+            action_button_cls=PushButton,
             indeterminate_progress_bar_cls=IndeterminateProgressBar,
             setting_card_group_cls=SettingCardGroup,
             quick_actions_bar_cls=QuickActionsBar,
@@ -664,7 +663,7 @@ class NetworkPage(BasePage):
             get_force_dns_status_fn=dns_feature.get_force_dns_status,
             setting_card_group_cls=SettingCardGroup,
             caption_label_cls=CaptionLabel,
-            action_button_cls=ActionButton,
+            action_button_cls=PushButton,
             win11_toggle_row_cls=Win11ToggleRow,
             qwidget_cls=QWidget,
             qvbox_layout_cls=QVBoxLayout,

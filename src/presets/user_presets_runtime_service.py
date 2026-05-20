@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Callable
 import weakref
 
+from PyQt6.QtCore import QThread, pyqtSignal
+
 from log.log import log
 from presets.icon_color import normalize_preset_icon_color
 
@@ -20,6 +22,29 @@ class UserPresetsRuntimeAdapter:
     delete_preset_item_meta: Callable[[str], None]
 
 
+class UserPresetsMetadataLoadWorker(QThread):
+    loaded = pyqtSignal(int, dict, float)
+    failed = pyqtSignal(int, str)
+
+    def __init__(self, request_id: int, load_all_metadata: Callable[[], dict[str, dict[str, object]]], parent=None):
+        super().__init__(parent)
+        self._request_id = int(request_id)
+        self._load_all_metadata = load_all_metadata
+
+    def run(self) -> None:
+        import time
+
+        started_at = time.perf_counter()
+        try:
+            all_presets = dict(self._load_all_metadata())
+            elapsed_ms = (time.perf_counter() - started_at) * 1000.0
+            log(f"user_presets.metadata.read: {elapsed_ms:.1f}ms ({len(all_presets)} presets)", "DEBUG")
+        except Exception as exc:
+            self.failed.emit(self._request_id, str(exc))
+            return
+        self.loaded.emit(self._request_id, all_presets, started_at)
+
+
 class UserPresetsRuntimeService:
     def __init__(self, *, scope_key: str = "") -> None:
         self._scope_key = str(scope_key or "").strip()
@@ -30,6 +55,8 @@ class UserPresetsRuntimeService:
         self._watcher_reload_timer = None
         self._attached_page_ref = None
         self._attached_adapter: UserPresetsRuntimeAdapter | None = None
+        self._metadata_load_request_id = 0
+        self._metadata_load_worker: UserPresetsMetadataLoadWorker | None = None
 
     def is_ui_dirty(self) -> bool:
         return bool(self._ui_dirty)
@@ -393,25 +420,10 @@ class UserPresetsRuntimeService:
 
     def reload_presets_from_watcher(self, page=None) -> None:
         page = self._resolve_page(page)
-        adapter = self._resolve_adapter()
-        try:
-            next_metadata = dict(adapter.load_all_metadata())
-            next_file_names = set(next_metadata.keys())
-            self.sync_watched_preset_files(page, next_file_names)
-            self._cached_presets_metadata = next_metadata
-        except Exception:
-            if page.isVisible():
-                self.load_presets(page)
-            else:
-                self._ui_dirty = True
-            return
-
         if not page.isVisible():
             self._ui_dirty = True
             return
-
-        self._ui_dirty = False
-        self.refresh_presets_view_from_cache(page)
+        self.load_presets(page)
 
     def sync_watched_preset_files(self, page=None, file_names: set[str] | None = None) -> None:
         page = self._resolve_page(page)
@@ -453,16 +465,43 @@ class UserPresetsRuntimeService:
         page = self._resolve_page(page)
         adapter = self._resolve_adapter()
         self._ui_dirty = False
-        try:
-            import time
+        worker = self._metadata_load_worker
+        if worker is not None and worker.isRunning():
+            return
 
-            started_at = time.perf_counter()
-            all_presets = adapter.load_all_metadata()
-            self._cached_presets_metadata = dict(all_presets)
-            self.sync_watched_preset_files(page, set(all_presets.keys()))
-            adapter.rebuild_rows(all_presets, started_at)
-        except Exception as e:
-            log(f"Ошибка загрузки пресетов: {e}", "ERROR")
+        self._metadata_load_request_id += 1
+        request_id = self._metadata_load_request_id
+        worker = UserPresetsMetadataLoadWorker(request_id, adapter.load_all_metadata, page)
+        self._metadata_load_worker = worker
+        worker.loaded.connect(lambda rid, all_presets, started_at, p=page: self._on_metadata_loaded(rid, all_presets, started_at, p))
+        worker.failed.connect(lambda rid, error, p=page: self._on_metadata_failed(rid, error, p))
+        worker.finished.connect(lambda w=worker: self._on_metadata_worker_finished(w))
+        worker.start()
+
+    def _on_metadata_loaded(self, request_id: int, all_presets: dict, started_at: float, page=None) -> None:
+        if request_id != self._metadata_load_request_id:
+            return
+        page = self._resolve_page(page)
+        adapter = self._resolve_adapter()
+        self._cached_presets_metadata = dict(all_presets)
+        self.sync_watched_preset_files(page, set(all_presets.keys()))
+        if not page.isVisible():
+            self._ui_dirty = True
+            return
+        self._ui_dirty = False
+        adapter.rebuild_rows(all_presets, started_at)
+
+    def _on_metadata_failed(self, request_id: int, error: str, page=None) -> None:
+        if request_id != self._metadata_load_request_id:
+            return
+        _ = self._resolve_page(page)
+        self._ui_dirty = True
+        log(f"Ошибка загрузки пресетов: {error}", "ERROR")
+
+    def _on_metadata_worker_finished(self, worker: UserPresetsMetadataLoadWorker) -> None:
+        if self._metadata_load_worker is worker:
+            self._metadata_load_worker = None
+        worker.deleteLater()
 
     def refresh_presets_view_if_possible(self, page=None) -> None:
         page = self._resolve_page(page)
