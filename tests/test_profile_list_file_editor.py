@@ -129,13 +129,41 @@ class ProfileListFileEditorTests(unittest.TestCase):
                     f"base-{name}\nuser-{name}\n",
                 )
 
-    def test_service_exclusion_ipset_file_is_not_gui_editable(self) -> None:
+    def test_service_exclusion_ipset_ru_file_is_gui_editable(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            lists_dir = root / "lists"
+            (lists_dir / "base").mkdir(parents=True)
+            (lists_dir / "user").mkdir()
+            (lists_dir / "base" / "ipset-ru.txt").write_text("1.1.1.1\n", encoding="utf-8")
+            (lists_dir / "user" / "ipset-ru.txt").write_text("2.2.2.2\n", encoding="utf-8")
+            store = _PresetStore(
+                "--name=Исключения\n"
+                "--filter-tcp=80,443-65535\n"
+                "--ipset-exclude=lists/ipset-ru.txt\n"
+                "--ipset-exclude=lists/ipset-dns.txt\n"
+                "--ipset-exclude=lists/ipset-exclude.txt\n"
+                "--lua-desync=pass\n"
+            )
+            feature = SimpleNamespace(
+                _presets_feature=store,
+                _app_paths=AppPaths(user_root=root, local_root=root),
+            )
+            service = ProfilePresetService(feature, "zapret2_mode")
+
+            list_editor = service.get_profile_list_file_editor_state("profile:0")
+
+            self.assertIsNotNone(list_editor)
+            self.assertTrue(list_editor.editable)
+            self.assertEqual(list_editor.kind, "ipset")
+            self.assertEqual(list_editor.display_path, "lists/user/ipset-ru.txt")
+            self.assertEqual(list_editor.text, "2.2.2.2\n")
+
+    def test_service_exclusion_dns_file_is_not_gui_editable(self) -> None:
         preset = parse_preset_text(
             "--name=Исключения\n"
             "--filter-tcp=80,443-65535\n"
-            "--ipset-exclude=lists/ipset-ru.txt\n"
             "--ipset-exclude=lists/ipset-dns.txt\n"
-            "--ipset-exclude=lists/ipset-exclude.txt\n"
             "--lua-desync=pass\n",
             engine=ENGINE_WINWS2,
         )
@@ -144,11 +172,11 @@ class ProfileListFileEditorTests(unittest.TestCase):
 
         self.assertFalse(reference.editable)
         self.assertEqual(reference.kind, "ipset")
-        self.assertEqual(reference.file_name, "ipset-ru.txt")
-        self.assertEqual(reference.display_path, "lists/ipset-ru.txt")
+        self.assertEqual(reference.file_name, "ipset-dns.txt")
+        self.assertEqual(reference.display_path, "lists/ipset-dns.txt")
         self.assertIn("служебный список", reference.error_text)
 
-    def test_service_exclusion_hostlist_file_is_not_gui_editable(self) -> None:
+    def test_service_exclusion_netrogat_file_is_gui_editable(self) -> None:
         preset = parse_preset_text(
             "--name=Исключения\n"
             "--filter-tcp=80,443-65535\n"
@@ -159,11 +187,10 @@ class ProfileListFileEditorTests(unittest.TestCase):
 
         reference = profile_list_file_reference(preset.profiles[0], Path("/tmp/lists"))
 
-        self.assertFalse(reference.editable)
+        self.assertTrue(reference.editable)
         self.assertEqual(reference.kind, "hostlist")
         self.assertEqual(reference.file_name, "netrogat.txt")
-        self.assertEqual(reference.display_path, "lists/netrogat.txt")
-        self.assertIn("служебный список", reference.error_text)
+        self.assertEqual(reference.display_path, "lists/user/netrogat.txt")
 
 
 if __name__ == "__main__":

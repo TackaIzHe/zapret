@@ -32,10 +32,8 @@ _FILE_MATCH_NAMES = {
 }
 
 _SERVICE_LIST_FILES = {
-    "ipset-ru.txt",
     "ipset-dns.txt",
     "ipset-exclude.txt",
-    "netrogat.txt",
 }
 
 
