@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout
 
 from ui.fluent_widgets import set_tooltip
 from ui.presets_menu.toolbar import PresetsToolbarLayout
-from qfluentwidgets import BodyLabel, FluentIcon, PrimaryPushButton, PrimaryToolButton, PushButton, SearchLineEdit
+from qfluentwidgets import FluentIcon, PrimaryPushButton, PrimaryToolButton, PushButton, SearchLineEdit
 
 
 @dataclass(slots=True)
@@ -143,12 +143,8 @@ def build_profile_shell(
     content_host_layout.setContentsMargins(0, 0, 0, 0)
     content_host_layout.setSpacing(8)
 
-    loading_label = BodyLabel(
-        tr_fn(loading_key, "Загрузка профилей выбранного пресета...")
-    )
-    loading_label.setWordWrap(True)
-    loading_label.hide()
-    content_host_layout.addWidget(loading_label)
+    _ = loading_key
+    loading_label = None
 
     content_layout.addWidget(content_host, 1)
 

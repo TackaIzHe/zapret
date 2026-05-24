@@ -158,8 +158,6 @@ class PresetSetupPageBase(BasePage):
         self._profile_payload_dirty = True
         self._profile_load_request_id += 1
         request_id = self._profile_load_request_id
-        if self._loading_label is not None:
-            self._loading_label.show()
         self._clear_dynamic_widgets()
         worker = self._profile.create_profile_list_load_worker(request_id, self.launch_method, self)
         self._profile_load_worker = worker
@@ -274,8 +272,9 @@ class PresetSetupPageBase(BasePage):
     def _clear_dynamic_widgets(self) -> None:
         if self._content_host_layout is None:
             return
-        while self._content_host_layout.count() > 1:
-            item = self._content_host_layout.takeAt(1)
+        preserved_widgets = 1 if self._loading_label is not None else 0
+        while self._content_host_layout.count() > preserved_widgets:
+            item = self._content_host_layout.takeAt(preserved_widgets)
             widget = item.widget() if item is not None else None
             if widget is not None:
                 widget.deleteLater()

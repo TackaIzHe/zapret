@@ -378,6 +378,15 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         self.assertIn("set_search_query", apply_payload)
         self.assertIn("on_profile_search_text_changed=self._on_profile_search_text_changed", build_content)
 
+    def test_preset_setup_page_does_not_show_loading_placeholder_text(self) -> None:
+        shell_builder = inspect.getsource(build_profile_shell)
+        request_profiles = inspect.getsource(PresetSetupPageBase._request_profiles_payload)
+        clear_dynamic_widgets = inspect.getsource(PresetSetupPageBase._clear_dynamic_widgets)
+
+        self.assertNotIn("Загрузка профилей выбранного пресета", shell_builder)
+        self.assertNotIn("self._loading_label.show()", request_profiles)
+        self.assertIn("preserved_widgets = 1 if self._loading_label is not None else 0", clear_dynamic_widgets)
+
     def test_profile_setup_page_has_update_user_profile_action(self) -> None:
         build = inspect.getsource(ProfileSetupPageBase._build_content)
         apply_payload = inspect.getsource(ProfileSetupPageBase._apply_payload)
