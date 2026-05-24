@@ -23,6 +23,7 @@ from ui.window_ui_session import get_window_ui_session
 
 SIDEBAR_SEARCH_AFTER_INTERACTIVE_MS = 1_000
 SIDEBAR_HIDDEN_MODE_ITEMS_AFTER_INTERACTIVE_MS = 1_600
+SIDEBAR_EXPANDED_UI_STATE_KEY = "sidebar_expanded"
 
 
 def _get_page_host(window):
@@ -46,6 +47,66 @@ def _ensure_page_in_stack(window, page: QWidget | None) -> None:
     page_host = _get_page_host(window)
     if page_host is not None:
         page_host.ensure_page_in_stacked_widget(page)
+
+
+def _is_expanded_display_mode(display_mode) -> bool | None:
+    mode_name = str(getattr(display_mode, "name", "") or "").upper()
+    if mode_name in {"EXPAND", "MENU"}:
+        return True
+    if mode_name in {"COMPACT", "MINIMAL"}:
+        return False
+    return None
+
+
+def _read_saved_sidebar_expanded() -> bool:
+    try:
+        from settings.store import get_ui_state_settings
+
+        ui_state = get_ui_state_settings()
+    except Exception:
+        return True
+    return bool(ui_state.get(SIDEBAR_EXPANDED_UI_STATE_KEY, True))
+
+
+def _save_sidebar_expanded(expanded: bool) -> None:
+    try:
+        from settings.store import set_ui_state_settings
+
+        set_ui_state_settings({SIDEBAR_EXPANDED_UI_STATE_KEY: bool(expanded)})
+    except Exception:
+        pass
+
+
+def _restore_sidebar_expanded_state(window) -> None:
+    nav = getattr(window, "navigationInterface", None)
+    if nav is None:
+        return
+
+    if _read_saved_sidebar_expanded():
+        expand = getattr(nav, "expand", None)
+        if callable(expand):
+            expand(False)
+        return
+
+    panel = getattr(nav, "panel", None)
+    collapse = getattr(panel, "collapse", None)
+    if callable(collapse):
+        collapse()
+
+
+def _bind_sidebar_expanded_state(window) -> None:
+    nav = getattr(window, "navigationInterface", None)
+    signal = getattr(nav, "displayModeChanged", None)
+    connect = getattr(signal, "connect", None)
+    if not callable(connect):
+        return
+
+    def _on_display_mode_changed(display_mode) -> None:
+        expanded = _is_expanded_display_mode(display_mode)
+        if expanded is not None:
+            _save_sidebar_expanded(expanded)
+
+    connect(_on_display_mode_changed)
 
 
 def _scroll_layout_index(window, widget) -> int:
@@ -384,6 +445,8 @@ def init_navigation(window) -> None:
             pump_startup_ui(window)
 
     window.navigationInterface.setMinimumExpandWidth(700)
+    _restore_sidebar_expanded_state(window)
+    _bind_sidebar_expanded_state(window)
     sync_nav_visibility(window)
 
 

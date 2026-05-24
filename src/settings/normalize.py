@@ -258,8 +258,11 @@ def normalize_premium(data: object) -> dict[str, Any]:
 
 
 def normalize_ui_state(data: object) -> dict[str, Any]:
-    _ = data
-    return {}
+    raw = as_dict(data)
+    defaults = schema.default_ui_state()
+    return {
+        "sidebar_expanded": as_bool(raw.get("sidebar_expanded"), defaults["sidebar_expanded"]),
+    }
 
 
 def normalize_profile_strategy_state(data: object) -> dict[str, Any]:

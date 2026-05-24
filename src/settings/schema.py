@@ -140,7 +140,9 @@ def default_premium() -> dict[str, Any]:
 
 
 def default_ui_state() -> dict[str, Any]:
-    return {}
+    return {
+        "sidebar_expanded": True,
+    }
 
 
 def default_profile_strategy_state() -> dict[str, Any]:
