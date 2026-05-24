@@ -2461,7 +2461,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "en": "Delete all custom domains ({count})?\n\nSystem domains will remain.",
     },
     "page.premium.subtitle": {
-        "ru": "Управление подпиской Zapret Premium",
+        "ru": "Управление подпиской Zapret Premium (премиум)",
         "en": "Manage Zapret Premium subscription",
     },
     "page.premium.section.subscription_status": {

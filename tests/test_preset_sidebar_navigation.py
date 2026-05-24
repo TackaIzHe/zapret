@@ -616,6 +616,61 @@ class PresetSidebarNavigationTests(unittest.TestCase):
 
         self.assertEqual(installed, [window])
 
+    def test_sidebar_search_prefers_current_page_handler_for_profile_queries(self) -> None:
+        import ui.navigation.search as sidebar_search
+
+        class CurrentPage:
+            def __init__(self) -> None:
+                self.queries = []
+
+            def apply_sidebar_search_query(self, query: str) -> bool:
+                self.queries.append(query)
+                return True
+
+        current_page = CurrentPage()
+        session = SimpleNamespace(
+            nav_search_query="",
+            page_host=SimpleNamespace(current_page=lambda: current_page),
+        )
+        window = SimpleNamespace(ui_session=session)
+
+        with (
+            patch.object(sidebar_search, "route_sidebar_search_by_text") as route_by_text,
+            patch.object(sidebar_search, "update_sidebar_search_suggestions") as update_suggestions,
+            patch("ui.navigation.sidebar_builder.apply_nav_visibility_filter") as apply_nav_visibility_filter,
+        ):
+            sidebar_search.on_sidebar_search_changed(window, "Discord")
+
+        self.assertEqual(session.nav_search_query, "Discord")
+        self.assertEqual(current_page.queries, ["Discord"])
+        route_by_text.assert_not_called()
+        apply_nav_visibility_filter.assert_not_called()
+        update_suggestions.assert_called_once_with(window)
+
+    def test_sidebar_search_finds_page_body_text(self) -> None:
+        from app.page_names import PageName
+        from app.text_catalog import find_search_entries
+        from settings.mode import ZAPRET2_MODE
+        from ui.navigation.schema import get_sidebar_search_pages_for_method
+
+        visible_pages = get_sidebar_search_pages_for_method(ZAPRET2_MODE, set(PageName))
+        matches = find_search_entries(
+            "премиум",
+            language="ru",
+            visible_pages=visible_pages,
+            max_results=10,
+        )
+
+        self.assertTrue(any(match.entry.page_name == PageName.PREMIUM for match in matches))
+
+    def test_preset_setup_page_exposes_sidebar_search_handler(self) -> None:
+        from profile.ui.preset_setup_page import PresetSetupPageBase
+
+        handler_source = inspect.getsource(PresetSetupPageBase.apply_sidebar_search_query)
+
+        self.assertIn("_profile_search_input", handler_source)
+        self.assertIn("_on_profile_search_text_changed(query)", handler_source)
+
     def test_hidden_mode_sidebar_items_are_delayed_until_interactive_ready(self) -> None:
         import ui.navigation.sidebar_builder as sidebar_builder
 

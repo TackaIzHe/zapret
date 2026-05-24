@@ -160,6 +160,9 @@ def on_sidebar_search_changed(window, text: str) -> None:
     if session is None:
         return
     session.nav_search_query = (text or "").strip()
+    if _apply_current_page_search_query(window, session.nav_search_query):
+        update_sidebar_search_suggestions(window)
+        return
     if route_sidebar_search_by_text(window, session.nav_search_query, prefer_first=False):
         return
     apply_nav_visibility_filter(window)
@@ -257,6 +260,23 @@ def _clear_sidebar_search(window) -> None:
     session = get_window_ui_session(window)
     if session is not None and session.sidebar_search_nav_widget is not None:
         session.sidebar_search_nav_widget.clear()
+
+
+def _apply_current_page_search_query(window, text: str) -> bool:
+    page_host = _get_page_host(window)
+    if page_host is None:
+        return False
+    try:
+        current_page = page_host.current_page()
+    except Exception:
+        return False
+    handler = getattr(current_page, "apply_sidebar_search_query", None)
+    if not callable(handler):
+        return False
+    try:
+        return bool(handler(text))
+    except Exception:
+        return False
 
 
 def _route_search_result_and_clear(window, page_name: PageName, tab_key: str = "") -> bool:

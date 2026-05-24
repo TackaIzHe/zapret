@@ -236,6 +236,19 @@ class PresetSetupPageBase(BasePage):
         if self._profiles_list is not None:
             self._profiles_list.set_search_query(self._profile_search_query)
 
+    def apply_sidebar_search_query(self, text: str) -> bool:
+        query = str(text or "")
+        search_input = self._profile_search_input
+        if search_input is not None:
+            try:
+                if str(search_input.text() or "") != query:
+                    search_input.setText(query)
+                    return True
+            except Exception:
+                pass
+        self._on_profile_search_text_changed(query)
+        return True
+
     def _log_ui_timing(self, label: str, started_at: float, *, extra: str = "") -> None:
         try:
             elapsed_ms = (time.perf_counter() - started_at) * 1000.0
