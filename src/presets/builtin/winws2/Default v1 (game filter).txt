@@ -101,17 +101,17 @@
 --name=googlevideo.com (CDN сервера)
 --filter-tcp=80,443
 --hostlist=lists/googlevideo.txt
+--out-range=-n8
 --payload=tls_client_hello
---out-range=-d8
---lua-desync=multidisorder:seqovl=700:seqovl_pattern=tls_google:tcp_flags_unset=ack
+--lua-desync=multidisorder:pos=100,midsld,sniext+1,endhost-2,-10
 
 --new
 
 --name=updates.discord.com
 --filter-tcp=443
 --hostlist=lists/discord-updates.txt
---payload=tls_client_hello
 --out-range=-d10
+--payload=tls_client_hello
 --lua-desync=hostfakesplit_multi:hosts=google.com,vimeo.com:tcp_ts=-1000:tcp_md5:repeats=2
 
 --new
@@ -119,8 +119,8 @@
 --name=discord.com
 --filter-tcp=80,443,1080,2053,2083,2087,2096,8443
 --hostlist=lists/discord.txt
---payload=tls_client_hello
 --out-range=-d10
+--payload=tls_client_hello
 --lua-desync=hostfakesplit_multi:hosts=google.com,vimeo.com:tcp_ts=-1000:tcp_md5:repeats=2
 
 --new
@@ -156,8 +156,8 @@
 --name=SoundCloud
 --filter-tcp=80,443
 --hostlist=lists/soundcloud.txt
---payload=tls_client_hello
 --out-range=-d10
+--payload=tls_client_hello
 --lua-desync=hostfakesplit_multi:hosts=google.com,vimeo.com:tcp_ts=-1000:tcp_md5:repeats=2
 
 --new
@@ -165,8 +165,8 @@
 --name=rutracker.org
 --filter-tcp=80,443
 --hostlist=lists/rutracker.txt
---payload=tls_client_hello
 --out-range=-d10
+--payload=tls_client_hello
 --lua-desync=hostfakesplit_multi:hosts=google.com,vimeo.com:tcp_ts=-1000:tcp_md5:repeats=2
 
 --new
@@ -174,8 +174,8 @@
 --name=rutor.info (.is)
 --filter-tcp=80,443
 --hostlist=lists/rutor.txt
---payload=tls_client_hello
 --out-range=-d10
+--payload=tls_client_hello
 --lua-desync=hostfakesplit_multi:hosts=google.com,vimeo.com:tcp_ts=-1000:tcp_md5:repeats=2
 
 --new
@@ -183,8 +183,8 @@
 --name=Roblox TCP
 --filter-tcp=80,443-65535
 --hostlist=lists/roblox.txt
---payload=tls_client_hello
 --out-range=-d10
+--payload=tls_client_hello
 --lua-desync=hostfakesplit_multi:hosts=google.com,vimeo.com:tcp_ts=-1000:tcp_md5:repeats=2
 
 --new
@@ -192,8 +192,8 @@
 --name=itch.io
 --filter-tcp=80,443
 --hostlist=lists/itch.txt
---payload=tls_client_hello
 --out-range=-d10
+--payload=tls_client_hello
 --lua-desync=hostfakesplit_multi:hosts=google.com,vimeo.com:tcp_ts=-1000:tcp_md5:repeats=2
 
 --new
@@ -201,8 +201,8 @@
 --name=Facebook
 --filter-tcp=80,443
 --hostlist=lists/facebook.txt
---payload=tls_client_hello
 --out-range=-d10
+--payload=tls_client_hello
 --lua-desync=hostfakesplit_multi:hosts=google.com,vimeo.com:tcp_ts=-1000:tcp_md5:repeats=2
 
 --new
@@ -210,8 +210,8 @@
 --name=Instagram
 --filter-tcp=80,443
 --hostlist=lists/instagram.txt
---payload=tls_client_hello
 --out-range=-d10
+--payload=tls_client_hello
 --lua-desync=hostfakesplit_multi:hosts=google.com,vimeo.com:tcp_ts=-1000:tcp_md5:repeats=2
 
 --new
@@ -219,8 +219,8 @@
 --name=WhatsApp
 --filter-tcp=80,443
 --hostlist=lists/whatsapp.txt
---payload=tls_client_hello
 --out-range=-d10
+--payload=tls_client_hello
 --lua-desync=hostfakesplit_multi:hosts=google.com,vimeo.com:tcp_ts=-1000:tcp_md5:repeats=2
 
 --new
@@ -228,8 +228,8 @@
 --name=discord.media
 --filter-tcp=80,443,1080,2053,2083,2087,2096,8443
 --hostlist-domains=discord.media
---payload=tls_client_hello
 --out-range=-d10
+--payload=tls_client_hello
 --lua-desync=hostfakesplit_multi:hosts=google.com,vimeo.com:tcp_ts=-1000:tcp_md5:repeats=2
 
 --new
@@ -264,8 +264,8 @@
 --name=Russia blacklist TCP 443
 --filter-tcp=443
 --hostlist=lists/russia-blacklist.txt
---payload=tls_client_hello
 --out-range=-d10
+--payload=tls_client_hello
 --lua-desync=multidisorder:pos=1,host+2,sld+2,sld+5,sniext+1,sniext+2,endhost-2:seqovl=1
 
 --new

@@ -133,7 +133,7 @@ author = community
 label = game
 description = Базовая стратегия для многих игр
 blobs = quic_google
---lua-desync=fake:blob=quic_google:repeats=6:payload=unknown
+--lua-desync=fake:blob=quic_google:repeats=6:payload=all
 
 [fake_2_n2_test]
 name = fake_2_n2_test
@@ -141,14 +141,14 @@ author = community
 label = recommended
 description = 2 повтора с quic_test_00.bin, cutoff n2
 blobs = quic_google
---lua-desync=fake:blob=quic_google:repeats=2:payload=unknown
+--lua-desync=fake:blob=quic_google:repeats=2:payload=all
 
 [fake_4_google]
 name = Fake x4 Google
 author = community
 description = 4 повтора с Google QUIC
 blobs = quic_google
---lua-desync=fake:blob=quic_google:repeats=4:payload=unknown
+--lua-desync=fake:blob=quic_google:repeats=4:payload=all
 
 [fake_4_quic1]
 name = Fake x4 QUIC1
@@ -163,7 +163,7 @@ author = community
 label = recommended
 description = Для Battlefield 6
 blobs = quic_google
---lua-desync=fake:blob=quic_google:repeats=9:ip_autottl=2,3-20:ip6_autottl=2,3-20:payload=unknown
+--lua-desync=fake:blob=quic_google:repeats=9:ip_autottl=2,3-20:ip6_autottl=2,3-20:payload=all
 
 [ipset_fake_12_n2_apex]
 name = Apex legends & Rockstar v2
@@ -171,7 +171,7 @@ author = community
 label = game
 description = UDP 443+ с ipset-all, 12 повторов, cutoff n2
 blobs = quic_google
---lua-desync=fake:blob=quic_google:repeats=12:ip_autottl=2,3-20:ip6_autottl=2,3-20:payload=unknown
+--lua-desync=fake:blob=quic_google:repeats=12:ip_autottl=2,3-20:ip6_autottl=2,3-20:payload=all
 
 [ipset_fake_10_n2]
 name = IPSET Fake x10 N2 (Apex legends & Battlefield 6)
@@ -179,7 +179,7 @@ author = community
 label = game
 description = UDP 443+ с ipset-all, 10 повторов, cutoff n2
 blobs = quic_google
---lua-desync=fake:blob=quic_google:repeats=10:ip_autottl=2,3-20:ip6_autottl=2,3-20:payload=unknown
+--lua-desync=fake:blob=quic_google:repeats=10:ip_autottl=2,3-20:ip6_autottl=2,3-20:payload=all
 
 [ipset_fake_14_n3]
 name = IPSET Fake x14 N3 (Apex legends)
@@ -187,7 +187,7 @@ author = community
 label = game
 description = UDP 443+ с ipset-all, 14 повторов, cutoff n3
 blobs = quic_google
---lua-desync=fake:blob=quic_google:repeats=14:ip_autottl=2,3-20:ip6_autottl=2,3-20:payload=unknown
+--lua-desync=fake:blob=quic_google:repeats=14:ip_autottl=2,3-20:ip6_autottl=2,3-20:payload=all
 
 [ipset_fake_tamper_11]
 name = IPSET Fake+Tamper x11 (DHT)
@@ -203,7 +203,7 @@ author = community
 label = game
 description = UDP 443+ с ipset-all, quic_6.bin, TTL 7
 blobs = quic6
---lua-desync=fake:blob=quic6:repeats=2:ip_ttl=7:ip6_ttl=7:payload=unknown
+--lua-desync=fake:blob=quic6:repeats=2:ip_ttl=7:ip6_ttl=7:payload=all
 
 [fake_2_n2_test_2]
 name = Rockstar v3

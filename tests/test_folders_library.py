@@ -47,6 +47,7 @@ class FolderDefaultsTests(unittest.TestCase):
         self.assertEqual(classify_profile_folder("Valorant game filter"), "games")
         self.assertEqual(classify_profile_folder("itch.io --hostlist=lists/itch.txt"), "games")
         self.assertEqual(classify_profile_folder("roblox --ipset=lists/ipset-roblox.txt"), "games")
+        self.assertEqual(classify_profile_folder("Tanki X --hostlist=lists/tankix.txt"), "games")
         self.assertEqual(classify_profile_folder("lol-ru --ipset=lists/ipset-lol-ru.txt"), "games")
         self.assertEqual(classify_profile_folder("cloudflare --ipset=lists/ipset-cloudflare.txt"), "hosters")
         self.assertEqual(classify_profile_folder("amazon --ipset=lists/ipset-amazon.txt"), "hosters")

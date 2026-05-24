@@ -75,7 +75,7 @@ def classify_profile_folder(text: object) -> str:
         return "messengers"
     if any(token in value for token in ("facebook", "instagram", "tiktok", "twitter", "x.com", "vk.com", "vk ")):
         return "social"
-    if any(token in value for token in ("game", "valorant", "riot", "steam", "itch.io", "roblox", "lol", "league of legends", "battlenet", "battle.net", "wow", "dead by daylight")):
+    if any(token in value for token in ("game", "valorant", "riot", "steam", "itch.io", "roblox", "tanki", "tankix", "lol", "league of legends", "battlenet", "battle.net", "wow", "dead by daylight")):
         return "games"
     if any(token in value for token in ("amazon", "cloudflare", "ovh", "warp")):
         return "hosters"

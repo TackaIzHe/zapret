@@ -692,6 +692,12 @@ blobs = dtls_w3
 name = Split Position
 author = hz
 description = Обратная стратегия с нестандартной нарезкой и фейком TLS
+--lua-desync=multidisorder:pos=100,midsld,sniext+1,endhost-2,-10
+
+[multidisorder_pos_100_fake]
+name = Split Position + fake
+author = hz
+description = Обратная стратегия с нестандартной нарезкой и фейком TLS
 --lua-desync=fake:blob=fake_default_tls:repeats=3:ip_ttl=4:ip6_ttl=4:tls_mod=rnd,dupsid
 --lua-desync=multidisorder:pos=100,midsld,sniext+1,endhost-2,-10
 
