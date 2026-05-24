@@ -13,6 +13,7 @@ from settings.mode import DEFAULT_LAUNCH_METHOD, ENGINE_WINWS2, PRESET_LAUNCH_ME
 from .match_filters import ports_label_from_match_lines, protocol_label_from_match_lines, strategy_catalog_from_match_lines
 from .folders import (
     load_profile_folder_state,
+    move_profile_after_in_folder_state,
     move_profile_before_in_folder_state,
     move_profile_to_end_in_folder_state,
     move_profile_to_folder_in_folder_state,
@@ -524,6 +525,23 @@ class ProfilePresetService:
         folder_state = load_profile_folder_state()
         destination_folder_key, _folder_name, _order = profile_folder_for_profile(destination.profile, folder_state)
         move_profile_before_in_folder_state(
+            source.profile.persistent_key,
+            destination.profile.persistent_key,
+            [item.profile.persistent_key for item in sources],
+            destination_folder_key=destination_folder_key,
+        )
+        self._invalidate_profile_list_snapshot()
+        return source.key
+
+    def move_profile_after(self, source_profile_key: str, destination_profile_key: str) -> str | None:
+        sources = self._profile_sources_for_folder_order()
+        source = _find_profile_list_source(sources, source_profile_key)
+        destination = _find_profile_list_source(sources, destination_profile_key)
+        if source is None or destination is None:
+            return None
+        folder_state = load_profile_folder_state()
+        destination_folder_key, _folder_name, _order = profile_folder_for_profile(destination.profile, folder_state)
+        move_profile_after_in_folder_state(
             source.profile.persistent_key,
             destination.profile.persistent_key,
             [item.profile.persistent_key for item in sources],

@@ -17,6 +17,7 @@ class ProfilesList(QWidget):
     profile_selected = pyqtSignal(str)
     profile_context_requested = pyqtSignal(str, QPoint)
     profile_move_requested = pyqtSignal(str, str)
+    profile_move_after_requested = pyqtSignal(str, str)
     profile_move_to_folder_requested = pyqtSignal(str, str)
     profile_move_to_end_requested = pyqtSignal(str)
     folder_context_requested = pyqtSignal(str, QPoint)
@@ -61,6 +62,7 @@ class ProfilesList(QWidget):
         self._view.profile_context_requested.connect(self.profile_context_requested)
         self._view.folder_context_requested.connect(self.folder_context_requested)
         self._view.profile_move_requested.connect(self.profile_move_requested)
+        self._view.profile_move_after_requested.connect(self.profile_move_after_requested)
         self._view.profile_move_to_folder_requested.connect(self.profile_move_to_folder_requested)
         self._view.profile_move_to_end_requested.connect(self.profile_move_to_end_requested)
         # Страница обычно показывает все profile-ы, поэтому вертикальная прокрутка

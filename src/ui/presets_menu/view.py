@@ -6,7 +6,7 @@ from PyQt6.QtCore import QPoint, Qt, pyqtSignal
 from PyQt6.QtGui import QDrag
 from PyQt6.QtWidgets import QApplication
 
-from .common import PRESET_DROP_MARKER_PROPERTY, preset_drop_marker_for_target
+from .common import PRESET_DROP_MARKER_PROPERTY, preset_drop_marker_for_target, preset_drop_target_for_position
 from .model import PresetListModel
 from qfluentwidgets import ListView
 
@@ -27,10 +27,31 @@ class LinkedWheelListView(ListView):
 
     def set_drop_marker(self, row: int, destination_kind: str) -> None:
         marker = preset_drop_marker_for_target(row, destination_kind)
+        self.set_drop_marker_payload(marker)
+
+    def set_drop_marker_payload(self, marker: dict[str, object]) -> None:
         if self.property(PRESET_DROP_MARKER_PROPERTY) == marker:
             return
         self.setProperty(PRESET_DROP_MARKER_PROPERTY, marker)
         self.viewport().update()
+
+    def _drop_target_at(self, point: QPoint) -> tuple[dict[str, object], str]:
+        drop_index = self.indexAt(point)
+        if not drop_index.isValid():
+            return {"marker": {"row": -1, "mode": ""}, "destination_kind": "end", "destination_row": -1}, ""
+        destination_kind = str(drop_index.data(PresetListModel.KindRole) or "")
+        target = preset_drop_target_for_position(
+            drop_index.row(),
+            destination_kind,
+            y=point.y(),
+            row_top=self.visualRect(drop_index).top(),
+            row_height=self.visualRect(drop_index).height(),
+        )
+        if target["destination_kind"] in {"preset", "preset_after"}:
+            return target, str(drop_index.data(PresetListModel.FileNameRole) or "")
+        if target["destination_kind"] == "folder":
+            return target, str(drop_index.data(PresetListModel.FolderKeyRole) or "")
+        return target, ""
 
     def wheelEvent(self, event):
         scrollbar = self.verticalScrollBar()
@@ -156,9 +177,8 @@ class LinkedWheelListView(ListView):
 
     def dragMoveEvent(self, event):
         if event.mimeData().hasFormat("application/x-zapret-preset-item"):
-            drop_index = self.indexAt(event.position().toPoint())
-            destination_kind = str(drop_index.data(PresetListModel.KindRole) or "") if drop_index.isValid() else ""
-            self.set_drop_marker(drop_index.row() if drop_index.isValid() else -1, destination_kind)
+            target, _destination_id = self._drop_target_at(event.position().toPoint())
+            self.set_drop_marker_payload(dict(target.get("marker") or {}))
             event.acceptProposedAction()
             return
         super().dragMoveEvent(event)
@@ -187,22 +207,14 @@ class LinkedWheelListView(ListView):
             event.ignore()
             return
 
-        drop_index = self.indexAt(event.position().toPoint())
+        target, destination_id = self._drop_target_at(event.position().toPoint())
         destination_kind = "end"
-        destination_id = ""
-        if drop_index.isValid():
-            destination_kind = str(drop_index.data(PresetListModel.KindRole) or "")
-            if destination_kind == "preset":
-                destination_id = str(drop_index.data(PresetListModel.FileNameRole) or "")
-            elif destination_kind == "folder":
-                destination_id = str(drop_index.data(PresetListModel.FolderKeyRole) or "")
-            else:
-                destination_kind = "end"
-                destination_id = ""
+        if str(target.get("destination_kind") or "") in {"folder", "preset", "preset_after"}:
+            destination_kind = str(target.get("destination_kind") or "")
 
         self.item_dropped.emit(source_kind, source_id, destination_kind, destination_id)
         self.set_drop_marker(-1, "")
         event.acceptProposedAction()
 
 
-__all__ = ["LinkedWheelListView", "preset_drop_marker_for_target"]
+__all__ = ["LinkedWheelListView", "preset_drop_marker_for_target", "preset_drop_target_for_position"]

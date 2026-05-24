@@ -11,6 +11,7 @@ from profile.folders import (
     delete_profile_folder,
     load_profile_folder_state,
     move_profile_before_in_folder_state,
+    move_profile_after_in_folder_state,
     move_profile_folder_by_step,
     rename_profile_folder,
     reset_profile_folders,
@@ -93,6 +94,21 @@ class ProfileFolderActionTests(unittest.TestCase):
                     move_profile_before_in_folder_state("d", "a", ["a", "b", "c", "d"])
 
         self.assertEqual(save_calls, 1)
+
+    def test_profile_move_after_matches_lower_drop_marker(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            with patch("settings.store.MAIN_DIRECTORY", str(Path(temp_dir))):
+                state = load_profile_folder_state()
+                for index, key in enumerate(("a", "b", "c")):
+                    state["items"][key] = {"folder_key": COMMON_FOLDER_KEY, "order": index, "rating": 0}
+                save_profile_folder_state(state)
+
+                move_profile_after_in_folder_state("a", "b", ["a", "b", "c"])
+                state = load_profile_folder_state()
+
+        self.assertEqual(state["items"]["b"]["order"], 0)
+        self.assertEqual(state["items"]["a"]["order"], 1)
+        self.assertEqual(state["items"]["c"]["order"], 2)
 
 
 if __name__ == "__main__":

@@ -346,6 +346,13 @@ class PresetListDelegate(QStyledItemDelegate):
             painter.setPen(pen)
             y = line_rect.top() + 2
             painter.drawLine(line_rect.left(), y, line_rect.right(), y)
+        elif marker.get("mode") == "after":
+            line_rect = profile_hover_row_rect(option.rect).adjusted(12, 0, -12, 0)
+            pen = QPen(accent, 3)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            painter.setPen(pen)
+            y = line_rect.bottom() - 2
+            painter.drawLine(line_rect.left(), y, line_rect.right(), y)
 
         painter.restore()
 

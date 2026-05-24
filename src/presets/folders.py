@@ -128,6 +128,31 @@ def move_preset_before(scope_key: str, source_file_name: str, destination_file_n
     return True
 
 
+def move_preset_after(scope_key: str, source_file_name: str, destination_file_name: str) -> bool:
+    state = load_preset_folder_state(scope_key)
+    source = str(source_file_name or "").strip()
+    destination = str(destination_file_name or "").strip()
+    items = state.setdefault("items", {})
+    if not source or not destination or source == destination:
+        return False
+    destination_meta = items.setdefault(destination, {"folder_key": "common", "order": None, "rating": 0})
+    folder_key = str(destination_meta.get("folder_key") or "common")
+    source_meta = items.setdefault(source, {"folder_key": folder_key, "order": None, "rating": 0})
+    source_meta["folder_key"] = folder_key
+    ordered = [
+        key
+        for key, meta in _ordered_item_meta(items)
+        if str(meta.get("folder_key") or "common") == folder_key and key != source
+    ]
+    if destination not in ordered:
+        ordered.append(destination)
+    ordered.insert(ordered.index(destination) + 1, source)
+    for index, key in enumerate(ordered):
+        items.setdefault(key, {"folder_key": folder_key, "order": None, "rating": 0})["order"] = index
+    save_preset_folder_state(scope_key, state)
+    return True
+
+
 def move_preset_to_end(scope_key: str, file_name: str) -> bool:
     state = load_preset_folder_state(scope_key)
     source = str(file_name or "").strip()
@@ -423,6 +448,7 @@ __all__ = [
     "move_preset_by_step",
     "move_preset_folder_by_step",
     "move_preset_before",
+    "move_preset_after",
     "move_preset_to_end",
     "move_preset_to_folder",
     "rename_preset_folder",

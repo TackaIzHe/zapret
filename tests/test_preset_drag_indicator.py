@@ -22,6 +22,16 @@ class PresetDragIndicatorTests(unittest.TestCase):
             {"row": -1, "mode": ""},
         )
 
+    def test_drop_target_uses_lower_half_as_after_row(self) -> None:
+        self.assertEqual(
+            preset_view.preset_drop_target_for_position(4, "preset", y=109, row_top=100, row_height=20),
+            {"marker": {"row": 4, "mode": "before"}, "destination_kind": "preset", "destination_row": 4},
+        )
+        self.assertEqual(
+            preset_view.preset_drop_target_for_position(4, "preset", y=112, row_top=100, row_height=20),
+            {"marker": {"row": 4, "mode": "after"}, "destination_kind": "preset_after", "destination_row": 4},
+        )
+
     def test_view_clears_drop_marker_when_drag_finishes_or_leaves(self) -> None:
         view_source = inspect.getsource(preset_view.LinkedWheelListView)
 
@@ -35,6 +45,7 @@ class PresetDragIndicatorTests(unittest.TestCase):
         self.assertIn("_paint_drop_marker", delegate_source)
         self.assertIn('marker.get("mode") == "folder"', delegate_source)
         self.assertIn('marker.get("mode") == "before"', delegate_source)
+        self.assertIn('marker.get("mode") == "after"', delegate_source)
 
 
 if __name__ == "__main__":

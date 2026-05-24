@@ -214,6 +214,7 @@ class PresetSetupPageBase(BasePage):
         profiles_list.profile_selected.connect(self._on_profile_clicked)
         profiles_list.profile_context_requested.connect(self._on_profile_context_requested)
         profiles_list.profile_move_requested.connect(self._on_profile_move_requested)
+        profiles_list.profile_move_after_requested.connect(self._on_profile_move_after_requested)
         profiles_list.profile_move_to_folder_requested.connect(self._on_profile_move_to_folder_requested)
         profiles_list.profile_move_to_end_requested.connect(self._on_profile_move_to_end_requested)
         profiles_list.folder_context_requested.connect(self._on_folder_context_requested)
@@ -426,6 +427,17 @@ class PresetSetupPageBase(BasePage):
             self.refresh_from_preset_switch()
         except Exception as exc:
             log(f"{self.__class__.__name__}: не удалось переместить профиль: {exc}", "ERROR")
+
+    def _on_profile_move_after_requested(self, source_profile_key: str, destination_profile_key: str) -> None:
+        try:
+            self._profile.move_profile_after(
+                self.launch_method,
+                source_profile_key,
+                destination_profile_key,
+            )
+            self.refresh_from_preset_switch()
+        except Exception as exc:
+            log(f"{self.__class__.__name__}: не удалось переместить профиль ниже: {exc}", "ERROR")
 
     def _on_profile_move_to_end_requested(self, profile_key: str) -> None:
         try:

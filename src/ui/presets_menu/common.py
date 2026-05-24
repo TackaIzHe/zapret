@@ -34,7 +34,37 @@ def preset_drop_marker_for_target(row: int, destination_kind: str) -> dict[str, 
         return {"row": row_index, "mode": "folder"}
     if kind == "preset":
         return {"row": row_index, "mode": "before"}
+    if kind == "preset_after":
+        return {"row": row_index, "mode": "after"}
     return {"row": -1, "mode": ""}
+
+
+def preset_drop_target_for_position(
+    row: int,
+    destination_kind: str,
+    *,
+    y: int,
+    row_top: int,
+    row_height: int,
+) -> dict[str, object]:
+    kind = str(destination_kind or "").strip()
+    try:
+        row_index = int(row)
+    except Exception:
+        row_index = -1
+    if row_index < 0:
+        return {"marker": {"row": -1, "mode": ""}, "destination_kind": "end", "destination_row": -1}
+    if kind == "folder":
+        return {"marker": {"row": row_index, "mode": "folder"}, "destination_kind": "folder", "destination_row": row_index}
+    if kind == "preset":
+        try:
+            lower_half = int(y) >= int(row_top) + max(1, int(row_height)) / 2
+        except Exception:
+            lower_half = False
+        if lower_half:
+            return {"marker": {"row": row_index, "mode": "after"}, "destination_kind": "preset_after", "destination_row": row_index}
+        return {"marker": {"row": row_index, "mode": "before"}, "destination_kind": "preset", "destination_row": row_index}
+    return {"marker": {"row": -1, "mode": ""}, "destination_kind": "end", "destination_row": -1}
 
 
 def tr_text(key: str, language: str, default: str, **kwargs) -> str:
@@ -202,6 +232,7 @@ __all__ = [
     "normalize_preset_icon_color",
     "pick_contrast_color",
     "preset_drop_marker_for_target",
+    "preset_drop_target_for_position",
     "to_qcolor",
     "tr_text",
 ]

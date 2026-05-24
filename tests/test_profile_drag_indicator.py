@@ -21,6 +21,16 @@ class ProfileDragIndicatorTests(unittest.TestCase):
             {"row": -1, "mode": ""},
         )
 
+    def test_drop_target_uses_lower_half_as_after_row(self) -> None:
+        self.assertEqual(
+            profile_list_view.profile_drop_target_for_position(4, "profile", y=109, row_top=100, row_height=20),
+            {"marker": {"row": 4, "mode": "before"}, "destination_kind": "profile", "destination_row": 4},
+        )
+        self.assertEqual(
+            profile_list_view.profile_drop_target_for_position(4, "profile", y=112, row_top=100, row_height=20),
+            {"marker": {"row": 4, "mode": "after"}, "destination_kind": "profile_after", "destination_row": 4},
+        )
+
     def test_view_supports_folder_drop_and_clears_marker(self) -> None:
         view_source = inspect.getsource(profile_list_view.ProfileListView)
 
@@ -35,6 +45,7 @@ class ProfileDragIndicatorTests(unittest.TestCase):
         self.assertIn("_paint_drop_marker", delegate_source)
         self.assertIn('marker.get("mode") == "folder"', delegate_source)
         self.assertIn('marker.get("mode") == "before"', delegate_source)
+        self.assertIn('marker.get("mode") == "after"', delegate_source)
 
 
 if __name__ == "__main__":

@@ -835,13 +835,16 @@ class UserPresetsPageRuntime:
         if source_kind != "preset":
             return False
 
-        from presets.folders import move_preset_before, move_preset_to_end, move_preset_to_folder
+        from presets.folders import move_preset_after, move_preset_before, move_preset_to_end, move_preset_to_folder
 
         if destination_kind == "folder" and destination_id:
             return move_preset_to_folder(self._config.folder_scope, source_id, destination_id)
 
         if destination_kind == "preset" and destination_id:
             return move_preset_before(self._config.folder_scope, source_id, destination_id)
+
+        if destination_kind == "preset_after" and destination_id:
+            return move_preset_after(self._config.folder_scope, source_id, destination_id)
 
         return move_preset_to_end(self._config.folder_scope, source_id)
 

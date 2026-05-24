@@ -25,7 +25,37 @@ def profile_drop_marker_for_target(row: int, destination_kind: str) -> dict[str,
         return {"row": row_index, "mode": "folder"}
     if kind == "profile":
         return {"row": row_index, "mode": "before"}
+    if kind == "profile_after":
+        return {"row": row_index, "mode": "after"}
     return {"row": -1, "mode": ""}
+
+
+def profile_drop_target_for_position(
+    row: int,
+    destination_kind: str,
+    *,
+    y: int,
+    row_top: int,
+    row_height: int,
+) -> dict[str, object]:
+    kind = str(destination_kind or "").strip()
+    try:
+        row_index = int(row)
+    except Exception:
+        row_index = -1
+    if row_index < 0:
+        return {"marker": {"row": -1, "mode": ""}, "destination_kind": "end", "destination_row": -1}
+    if kind == "folder":
+        return {"marker": {"row": row_index, "mode": "folder"}, "destination_kind": "folder", "destination_row": row_index}
+    if kind == "profile":
+        try:
+            lower_half = int(y) >= int(row_top) + max(1, int(row_height)) / 2
+        except Exception:
+            lower_half = False
+        if lower_half:
+            return {"marker": {"row": row_index, "mode": "after"}, "destination_kind": "profile_after", "destination_row": row_index}
+        return {"marker": {"row": row_index, "mode": "before"}, "destination_kind": "profile", "destination_row": row_index}
+    return {"marker": {"row": -1, "mode": ""}, "destination_kind": "end", "destination_row": -1}
 
 
 class ProfileListView(ListView):
@@ -33,6 +63,7 @@ class ProfileListView(ListView):
     profile_context_requested = pyqtSignal(str, QPoint)
     folder_context_requested = pyqtSignal(str, QPoint)
     profile_move_requested = pyqtSignal(str, str)
+    profile_move_after_requested = pyqtSignal(str, str)
     profile_move_to_folder_requested = pyqtSignal(str, str)
     profile_move_to_end_requested = pyqtSignal(str)
 
@@ -43,10 +74,32 @@ class ProfileListView(ListView):
 
     def set_drop_marker(self, row: int, destination_kind: str) -> None:
         marker = profile_drop_marker_for_target(row, destination_kind)
+        self.set_drop_marker_payload(marker)
+
+    def set_drop_marker_payload(self, marker: dict[str, object]) -> None:
         if self.property(PROFILE_DROP_MARKER_PROPERTY) == marker:
             return
         self.setProperty(PROFILE_DROP_MARKER_PROPERTY, marker)
         self.viewport().update()
+
+    def _drop_target_at(self, point: QPoint) -> tuple[dict[str, object], str]:
+        drop_index = self.indexAt(point)
+        if not drop_index.isValid():
+            return {"marker": {"row": -1, "mode": ""}, "destination_kind": "end", "destination_row": -1}, ""
+        destination_kind = str(drop_index.data(ProfileListModel.KindRole) or "")
+        rect = self.visualRect(drop_index)
+        target = profile_drop_target_for_position(
+            drop_index.row(),
+            destination_kind,
+            y=point.y(),
+            row_top=rect.top(),
+            row_height=rect.height(),
+        )
+        if target["destination_kind"] in {"profile", "profile_after"}:
+            return target, str(drop_index.data(ProfileListModel.ProfileKeyRole) or "")
+        if target["destination_kind"] == "folder":
+            return target, str(drop_index.data(ProfileListModel.GroupRole) or "")
+        return target, ""
 
     def wheelEvent(self, event):  # noqa: N802
         scrollbar = self.verticalScrollBar()
@@ -142,9 +195,8 @@ class ProfileListView(ListView):
 
     def dragMoveEvent(self, event):  # noqa: N802
         if event.mimeData().hasFormat(ProfileListModel.MIME_TYPE):
-            drop_index = self.indexAt(event.position().toPoint())
-            destination_kind = str(drop_index.data(ProfileListModel.KindRole) or "") if drop_index.isValid() else ""
-            self.set_drop_marker(drop_index.row() if drop_index.isValid() else -1, destination_kind)
+            target, _destination_id = self._drop_target_at(event.position().toPoint())
+            self.set_drop_marker_payload(dict(target.get("marker") or {}))
             event.acceptProposedAction()
             return
         super().dragMoveEvent(event)
@@ -164,23 +216,27 @@ class ProfileListView(ListView):
             event.ignore()
             return
 
-        drop_index = self.indexAt(event.position().toPoint())
-        if drop_index.isValid():
-            destination_kind = str(drop_index.data(ProfileListModel.KindRole) or "")
-            if destination_kind == "folder":
-                folder_key = str(drop_index.data(ProfileListModel.GroupRole) or "")
-                if folder_key:
-                    self.profile_move_to_folder_requested.emit(source_key, folder_key)
-                    self.set_drop_marker(-1, "")
-                    event.acceptProposedAction()
-                    return
-            if destination_kind == "profile":
-                destination_key = str(drop_index.data(ProfileListModel.ProfileKeyRole) or "")
-                if destination_key and destination_key != source_key:
-                    self.profile_move_requested.emit(source_key, destination_key)
-                    self.set_drop_marker(-1, "")
-                    event.acceptProposedAction()
-                    return
+        target, destination_id = self._drop_target_at(event.position().toPoint())
+        destination_kind = str(target.get("destination_kind") or "")
+        if destination_kind == "folder" and destination_id:
+            self.profile_move_to_folder_requested.emit(source_key, destination_id)
+            self.set_drop_marker(-1, "")
+            event.acceptProposedAction()
+            return
+        if destination_kind == "profile" and destination_id and destination_id != source_key:
+            self.profile_move_requested.emit(source_key, destination_id)
+            self.set_drop_marker(-1, "")
+            event.acceptProposedAction()
+            return
+        if destination_kind == "profile_after" and destination_id and destination_id != source_key:
+            self.profile_move_after_requested.emit(source_key, destination_id)
+            self.set_drop_marker(-1, "")
+            event.acceptProposedAction()
+            return
+        if destination_kind in {"profile", "profile_after"} and destination_id == source_key:
+            self.set_drop_marker(-1, "")
+            event.acceptProposedAction()
+            return
 
         self.profile_move_to_end_requested.emit(source_key)
         self.set_drop_marker(-1, "")
@@ -195,4 +251,9 @@ def _profile_key_from_mime(mime) -> str:
     return str(payload.get("profile_key") or "").strip()
 
 
-__all__ = ["PROFILE_DROP_MARKER_PROPERTY", "ProfileListView", "profile_drop_marker_for_target"]
+__all__ = [
+    "PROFILE_DROP_MARKER_PROPERTY",
+    "ProfileListView",
+    "profile_drop_marker_for_target",
+    "profile_drop_target_for_position",
+]

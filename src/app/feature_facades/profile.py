@@ -207,6 +207,19 @@ class ProfileFeature:
             destination_profile_key,
         )
 
+    def move_profile_after(
+        self,
+        launch_method: str,
+        source_profile_key: str,
+        destination_profile_key: str,
+    ) -> str | None:
+        return self._commands().move_profile_after(
+            self,
+            launch_method,
+            source_profile_key,
+            destination_profile_key,
+        )
+
     def move_profile_to_end(self, launch_method: str, profile_key: str) -> str | None:
         return self._commands().move_profile_to_end(self, launch_method, profile_key)
 

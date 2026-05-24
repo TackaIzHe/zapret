@@ -197,6 +197,18 @@ def move_profile_before(
     )
 
 
+def move_profile_after(
+    profile_services,
+    launch_method: str,
+    source_profile_key: str,
+    destination_profile_key: str,
+) -> str | None:
+    return _profile_preset_service(profile_services, launch_method).move_profile_after(
+        source_profile_key,
+        destination_profile_key,
+    )
+
+
 def move_profile_to_end(profile_services, launch_method: str, profile_key: str) -> str | None:
     return _profile_preset_service(profile_services, launch_method).move_profile_to_end(profile_key)
 
