@@ -10,6 +10,7 @@ from profile.ui.profile_setup_page import (
     ProfileSetupPageBase,
     ProfileStrategyListDelegate,
     ProfileStrategyListWidget,
+    _profile_has_list_file_editor,
     _match_tab_text,
     _profile_editor_tab_title,
 )
@@ -579,14 +580,27 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         self.assertEqual(_profile_editor_tab_title(regular_payload), "Редактор")
         self.assertEqual(_profile_editor_tab_title(exclude_payload), "Исключения")
 
-    def test_profile_setup_page_keeps_editor_tab_when_profile_has_no_filter_choice(self) -> None:
-        apply_editor = inspect.getsource(ProfileSetupPageBase._apply_list_file_editor_state)
+    def test_profile_setup_page_hides_editor_tab_when_profile_has_no_list_file(self) -> None:
         build = inspect.getsource(ProfileSetupPageBase._build_content)
+        apply_payload = inspect.getsource(ProfileSetupPageBase._apply_payload)
         apply_settings = inspect.getsource(ProfileSetupPageBase._apply_editable_settings)
+        page_source = inspect.getsource(ProfileSetupPageBase)
+        l7_payload = SimpleNamespace(
+            item=SimpleNamespace(
+                match_lines=("--filter-l7=stun,discord", "--payload=stun,discord_ip_discovery"),
+            ),
+        )
+        hostlist_payload = SimpleNamespace(
+            item=SimpleNamespace(
+                match_lines=("--filter-tcp=443", "--hostlist=lists/discord.txt"),
+            ),
+        )
 
-        self.assertNotIn("_set_list_file_editor_available", apply_editor)
         self.assertIn('addItem("editor", "Редактор"', build)
-        self.assertNotIn('removeWidget("editor")', inspect.getsource(ProfileSetupPageBase))
+        self.assertIn("_set_list_file_editor_available(_profile_has_list_file_editor(payload))", apply_payload)
+        self.assertIn('removeWidget("editor")', page_source)
+        self.assertFalse(_profile_has_list_file_editor(l7_payload))
+        self.assertTrue(_profile_has_list_file_editor(hostlist_payload))
         self.assertIn("filter_switchable", apply_settings)
         self.assertIn("setVisible(filter_switchable)", apply_settings)
 

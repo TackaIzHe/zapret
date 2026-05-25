@@ -132,7 +132,7 @@ def _editable_filter_is_file_based(profile: Profile) -> bool:
             "--ipset-exclude-ip",
         }:
             return False
-    return True
+    return False
 
 
 def _editable_filter_role(profile: Profile) -> str:

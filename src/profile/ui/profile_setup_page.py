@@ -385,6 +385,15 @@ def _profile_editor_tab_title(payload) -> str:
     return "Редактор"
 
 
+def _profile_has_list_file_editor(payload) -> bool:
+    item = getattr(payload, "item", None)
+    match_lines = tuple(str(line or "").strip().lower() for line in getattr(item, "match_lines", ()) or ())
+    return any(
+        line.startswith(("--hostlist=", "--ipset=", "--hostlist-exclude=", "--ipset-exclude="))
+        for line in match_lines
+    )
+
+
 def _list_file_entries_count(text: str) -> int:
     return len([
         line
@@ -427,6 +436,7 @@ class ProfileSetupPageBase(BasePage):
         self._strategy_tab = None
         self._list_file_editor_placeholder = None
         self._match_tab_placeholder = None
+        self._editor_tab_available = True
         self._editor_tab_built = False
         self._match_tab_built = False
         self._list_file_dirty = True
@@ -567,6 +577,10 @@ class ProfileSetupPageBase(BasePage):
         self.layout.addWidget(self._strategy_stack, 1)
 
     def _switch_strategy_tab(self, index: int) -> None:
+        if index == 1 and not self._editor_tab_available:
+            index = 0
+            if self._strategy_tabs is not None:
+                self._strategy_tabs.setCurrentItem("strategies")
         if index == 1:
             self._ensure_editor_tab_built()
             self._request_list_file_editor_state()
@@ -1018,6 +1032,7 @@ class ProfileSetupPageBase(BasePage):
             if self._delete_user_profile_button is not None:
                 self._delete_user_profile_button.setVisible(bool(_user_profile_id_from_payload(self._profile_key, payload)))
             self._apply_editable_settings(payload)
+            self._set_list_file_editor_available(_profile_has_list_file_editor(payload))
             self._sync_editor_tab_label(payload)
 
             self._strategy_list.set_rows(
@@ -1034,9 +1049,27 @@ class ProfileSetupPageBase(BasePage):
         finally:
             self._loading = False
 
+    def _set_list_file_editor_available(self, available: bool) -> None:
+        if self._strategy_tabs is None or self._strategy_stack is None:
+            self._editor_tab_available = available
+            return
+        if available == self._editor_tab_available:
+            return
+
+        self._editor_tab_available = available
+        if available:
+            editor_title = _profile_editor_tab_title(self._payload)
+            self._strategy_tabs.insertItem(1, "editor", editor_title, lambda: self._switch_strategy_tab(1))
+            return
+
+        if self._strategy_stack.currentIndex() == 1:
+            self._strategy_stack.setCurrentIndex(0)
+            self._strategy_tabs.setCurrentItem("strategies")
+        self._strategy_tabs.removeWidget("editor")
+
     def _sync_editor_tab_label(self, payload) -> None:
         editor_title = _profile_editor_tab_title(payload)
-        if self._strategy_tabs is not None:
+        if self._strategy_tabs is not None and self._editor_tab_available:
             self._strategy_tabs.setItemText("editor", editor_title)
             set_tooltip(
                 self._strategy_tabs,

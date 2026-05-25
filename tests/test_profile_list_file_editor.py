@@ -56,6 +56,31 @@ class ProfileListFileEditorTests(unittest.TestCase):
         self.assertEqual(reference.kind, "hostlist")
         self.assertEqual(reference.file_name, "youtube.txt")
 
+    def test_l7_voice_profile_has_no_editable_list_file(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "lists").mkdir()
+            store = _PresetStore(
+                "--filter-l7=stun,discord\n"
+                "--payload=stun,discord_ip_discovery\n"
+                "--lua-desync=pass\n"
+            )
+            feature = SimpleNamespace(
+                _presets_feature=store,
+                _app_paths=AppPaths(user_root=root, local_root=root),
+            )
+            service = ProfilePresetService(feature, "zapret2_mode")
+
+            setup = service.get_profile_setup("profile:0")
+            list_editor = service.get_profile_list_file_editor_state("profile:0")
+
+            self.assertIsNotNone(setup)
+            self.assertIsNotNone(list_editor)
+            self.assertFalse(setup.editable_filter_enabled)
+            self.assertEqual(setup.editable_filter_value, "")
+            self.assertFalse(list_editor.editable)
+            self.assertIn("нет отдельного hostlist/ipset-файла", list_editor.error_text)
+
     def test_service_loads_and_saves_current_profile_list_file(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
