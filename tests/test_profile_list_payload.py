@@ -763,6 +763,105 @@ class ProfileListPayloadTests(unittest.TestCase):
         moved_youtube = next(item for item in moved_payload.items if "youtube" in " ".join(item.match_lines).lower())
         self.assertEqual(moved_youtube.group, "common")
 
+    def test_preset_order_profiles_use_raw_preset_order_without_templates_or_deduplication(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            templates_dir = root / "profile" / "templates"
+            templates_dir.mkdir(parents=True)
+            (templates_dir / "all_profiles.txt").write_text(
+                "\n".join(
+                    (
+                        "--name=Не добавлен",
+                        "--filter-tcp=443",
+                        "--hostlist=lists/not-added.txt",
+                        "--lua-desync=pass",
+                        "",
+                    )
+                ),
+                encoding="utf-8",
+            )
+            store = _PresetStore(
+                "\n".join(
+                    (
+                        "--name=YouTube pass",
+                        "--filter-tcp=80,443",
+                        "--hostlist=lists/youtube.txt",
+                        "--lua-desync=pass",
+                        "",
+                        "--new",
+                        "--name=YouTube fake",
+                        "--filter-tcp=80,443",
+                        "--hostlist=lists/youtube.txt",
+                        "--lua-desync=fake",
+                        "",
+                        "--new",
+                        "--name=Telegram",
+                        "--filter-tcp=443",
+                        "--hostlist=lists/telegram.txt",
+                        "--lua-desync=pass",
+                        "",
+                    )
+                )
+            )
+            feature = SimpleNamespace(
+                _presets_feature=store,
+                _app_paths=AppPaths(user_root=root, local_root=root),
+            )
+
+            with patch("settings.store.MAIN_DIRECTORY", str(root)):
+                payload = ProfilePresetService(feature, "zapret2_mode").list_preset_order_profiles()
+
+        self.assertEqual([item.profile_name for item in payload.items], ["YouTube pass", "YouTube fake", "Telegram"])
+        self.assertTrue(all(item.in_preset for item in payload.items))
+        self.assertEqual(sum("youtube.txt" in " ".join(item.match_lines).lower() for item in payload.items), 2)
+        self.assertNotIn("Не добавлен", [item.profile_name for item in payload.items])
+
+    def test_preset_order_move_rewrites_preset_file_order(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            templates_dir = root / "profile" / "templates"
+            templates_dir.mkdir(parents=True)
+            (templates_dir / "all_profiles.txt").write_text("", encoding="utf-8")
+            store = _PresetStore(
+                "\n".join(
+                    (
+                        "--name=YouTube",
+                        "--filter-tcp=80,443",
+                        "--hostlist=lists/youtube.txt",
+                        "--lua-desync=pass",
+                        "",
+                        "--new",
+                        "--name=Discord",
+                        "--filter-tcp=443",
+                        "--hostlist=lists/discord.txt",
+                        "--lua-desync=fake",
+                        "",
+                        "--new",
+                        "--name=Telegram",
+                        "--filter-tcp=443",
+                        "--hostlist=lists/telegram.txt",
+                        "--lua-desync=pass",
+                        "",
+                    )
+                )
+            )
+            feature = SimpleNamespace(
+                _presets_feature=store,
+                _app_paths=AppPaths(user_root=root, local_root=root),
+            )
+
+            with patch("settings.store.MAIN_DIRECTORY", str(root)):
+                service = ProfilePresetService(feature, "zapret2_mode")
+                payload = service.list_preset_order_profiles()
+                youtube, _discord, telegram = payload.items
+                moved = service.move_preset_profile_before(telegram.key, youtube.key)
+                moved_payload = service.list_preset_order_profiles()
+
+        self.assertEqual(moved, telegram.key)
+        self.assertEqual([item.profile_name for item in moved_payload.items], ["Telegram", "YouTube", "Discord"])
+        self.assertLess(store.text.index("--name=Telegram"), store.text.index("--name=YouTube"))
+        self.assertLess(store.text.index("--name=YouTube"), store.text.index("--name=Discord"))
+
     def test_profile_setup_reads_strategy_feedback_in_one_batch(self) -> None:
         class _StateStore:
             def __init__(self) -> None:

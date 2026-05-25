@@ -25,6 +25,10 @@ def get_cached_profile_list(profile_services, launch_method: str):
     return _profile_preset_service(profile_services, launch_method).get_cached_profile_list()
 
 
+def list_preset_order_profiles(profile_services, launch_method: str):
+    return _profile_preset_service(profile_services, launch_method).list_preset_order_profiles()
+
+
 def count_enabled_profiles(profile_services, launch_method: str) -> int:
     return _profile_preset_service(profile_services, launch_method).count_enabled_profiles()
 
@@ -225,6 +229,34 @@ def move_profile_to_end(profile_services, launch_method: str, profile_key: str) 
 
 def move_profile_to_folder(profile_services, launch_method: str, profile_key: str, folder_key: str) -> str | None:
     return _profile_preset_service(profile_services, launch_method).move_profile_to_folder(profile_key, folder_key)
+
+
+def move_preset_profile_before(
+    profile_services,
+    launch_method: str,
+    source_profile_key: str,
+    destination_profile_key: str,
+) -> str | None:
+    return _profile_preset_service(profile_services, launch_method).move_preset_profile_before(
+        source_profile_key,
+        destination_profile_key,
+    )
+
+
+def move_preset_profile_after(
+    profile_services,
+    launch_method: str,
+    source_profile_key: str,
+    destination_profile_key: str,
+) -> str | None:
+    return _profile_preset_service(profile_services, launch_method).move_preset_profile_after(
+        source_profile_key,
+        destination_profile_key,
+    )
+
+
+def move_preset_profile_to_end(profile_services, launch_method: str, profile_key: str) -> str | None:
+    return _profile_preset_service(profile_services, launch_method).move_preset_profile_to_end(profile_key)
 
 
 def create_user_profile(profile_services, *, name: str, protocol: str, ports: str) -> str:

@@ -37,6 +37,7 @@ from .serializer import (
     with_profile_deleted,
     with_profile_duplicated,
     with_profile_enabled,
+    with_profile_moved,
     with_profile_raw_text,
     with_profile_strategy_lines,
     with_profile_user_match,
@@ -136,6 +137,26 @@ class ProfilePresetService:
             return snapshot
         finally:
             self._profile_list_lock.release()
+
+    def list_preset_order_profiles(self) -> ProfileListPayload:
+        preset, manifest = self.load_selected_preset()
+        catalogs = load_strategy_catalogs(self._app_paths, self._engine)
+        items = [
+            self._item_for_profile(
+                profile,
+                catalogs=catalogs,
+                in_preset=True,
+                key=profile.key,
+                order=profile.index,
+            )
+            for profile in tuple(preset.profiles)
+        ]
+        items.sort(key=lambda item: int(getattr(item, "profile_index", 0) or 0))
+        return ProfileListPayload(
+            items=tuple(items),
+            selected_preset_file_name=str(getattr(manifest, "file_name", "") or ""),
+            selected_preset_name=str(getattr(manifest, "name", "") or ""),
+        )
 
     def _current_profile_list_revision(self) -> tuple[object, ...]:
         preset_revision, _manifest, _source_text = self._selected_preset_revision()
@@ -654,11 +675,43 @@ class ProfilePresetService:
         self._invalidate_profile_list_snapshot()
         return source.key
 
+    def move_preset_profile_before(self, source_profile_key: str, destination_profile_key: str) -> str | None:
+        preset, _manifest = self.load_selected_preset()
+        source_index = _profile_index_for_key(preset, source_profile_key)
+        destination_index = _profile_index_for_key(preset, destination_profile_key)
+        return self._move_preset_profile_to_index(preset, source_index, destination_index)
+
+    def move_preset_profile_after(self, source_profile_key: str, destination_profile_key: str) -> str | None:
+        preset, _manifest = self.load_selected_preset()
+        source_index = _profile_index_for_key(preset, source_profile_key)
+        destination_index = _profile_index_for_key(preset, destination_profile_key)
+        if destination_index is not None:
+            destination_index += 1
+        return self._move_preset_profile_to_index(preset, source_index, destination_index)
+
+    def move_preset_profile_to_end(self, profile_key: str) -> str | None:
+        preset, _manifest = self.load_selected_preset()
+        source_index = _profile_index_for_key(preset, profile_key)
+        return self._move_preset_profile_to_index(preset, source_index, len(preset.profiles))
+
     def create_user_profile(self, *, name: str, protocol: str, ports: str) -> str:
         profile_id = create_user_profile(self._app_paths, name=name, protocol=protocol, ports=ports)
         self._load_profile_templates.cache_clear()
         self._invalidate_profile_list_snapshot()
         return profile_id
+
+    def _move_preset_profile_to_index(self, preset: Preset, source_index: int | None, destination_index: int | None) -> str | None:
+        if source_index is None or destination_index is None:
+            return None
+        if source_index < 0 or source_index >= len(preset.profiles):
+            return None
+        destination = max(0, min(int(destination_index), len(preset.profiles)))
+        if source_index == destination or source_index + 1 == destination:
+            return preset.profiles[source_index].key
+        updated = with_profile_moved(preset, source_index, destination)
+        moved_key = preset.profiles[source_index].key
+        self.save_selected_preset(updated)
+        return moved_key
 
     def update_user_profile(self, profile_id: str, *, name: str, protocol: str, ports: str) -> int:
         old_name, row = update_user_profile(self._app_paths, profile_id, name=name, protocol=protocol, ports=ports)

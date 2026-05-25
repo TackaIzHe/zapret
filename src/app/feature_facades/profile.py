@@ -28,6 +28,9 @@ class ProfileFeature:
     def get_cached_profile_list(self, launch_method: str):
         return self._commands().get_cached_profile_list(self, launch_method)
 
+    def list_preset_order_profiles(self, launch_method: str):
+        return self._commands().list_preset_order_profiles(self, launch_method)
+
     def count_enabled_profiles(self, launch_method: str) -> int:
         return int(self._commands().count_enabled_profiles(self, launch_method))
 
@@ -234,6 +237,35 @@ class ProfileFeature:
 
     def move_profile_to_folder(self, launch_method: str, profile_key: str, folder_key: str) -> str | None:
         return self._commands().move_profile_to_folder(self, launch_method, profile_key, folder_key)
+
+    def move_preset_profile_before(
+        self,
+        launch_method: str,
+        source_profile_key: str,
+        destination_profile_key: str,
+    ) -> str | None:
+        return self._commands().move_preset_profile_before(
+            self,
+            launch_method,
+            source_profile_key,
+            destination_profile_key,
+        )
+
+    def move_preset_profile_after(
+        self,
+        launch_method: str,
+        source_profile_key: str,
+        destination_profile_key: str,
+    ) -> str | None:
+        return self._commands().move_preset_profile_after(
+            self,
+            launch_method,
+            source_profile_key,
+            destination_profile_key,
+        )
+
+    def move_preset_profile_to_end(self, launch_method: str, profile_key: str) -> str | None:
+        return self._commands().move_preset_profile_to_end(self, launch_method, profile_key)
 
     def create_user_profile(self, *, name: str, protocol: str, ports: str) -> str:
         return self._commands().create_user_profile(
