@@ -1068,6 +1068,7 @@ class StartupRuntimeSetupTests(unittest.TestCase):
         control_page._deferred_sections_built = False
         control_page._deferred_sections_hydrated = False
         control_page._startup_deferred_sections_waiting = False
+        control_page._startup_deferred_sections_allowed = False
         control_page._startup_showevent_profile_logged = False
         control_page._refresh_runtime = SimpleNamespace(additional_settings_dirty=False)
         control_page.deferred_show_requested = SimpleNamespace(emit=Mock())
@@ -1095,7 +1096,8 @@ class StartupRuntimeSetupTests(unittest.TestCase):
             connected[0]("ui_ready")
 
         self.assertEqual(len(scheduled), 1)
-        self.assertGreaterEqual(scheduled[0][0], 150)
+        self.assertGreaterEqual(scheduled[0][0], zapret2_page.STARTUP_DEFERRED_SECTIONS_AFTER_INTERACTIVE_MS)
+        control_page.deferred_show_requested.emit.assert_not_called()
         scheduled[0][1]()
 
         control_page.deferred_show_requested.emit.assert_called_once()

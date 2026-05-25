@@ -207,6 +207,7 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
         self._deferred_sections_built = False
         self._deferred_sections_hydrated = False
         self._startup_deferred_sections_waiting = False
+        self._startup_deferred_sections_allowed = False
         self._startup_top_summary_waiting = False
         self._startup_initial_ui_state_waiting = False
         self._refresh_runtime = zapret2_page_runtime.create_refresh_runtime()
@@ -291,12 +292,24 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
             return True
         if state is None:
             return True
-        return bool(getattr(state, "interactive_logged", False))
+        if not bool(getattr(state, "interactive_logged", False)):
+            return False
+        return bool(self._startup_deferred_sections_allowed)
 
     def _wait_for_startup_interactive_before_deferred_sections(self) -> None:
         if bool(self._startup_deferred_sections_waiting):
             return
         self._startup_deferred_sections_waiting = True
+        try:
+            state = getattr(self.window(), "startup_state", None)
+            if state is not None and bool(getattr(state, "interactive_logged", False)):
+                QTimer.singleShot(
+                    STARTUP_DEFERRED_SECTIONS_AFTER_INTERACTIVE_MS,
+                    self._request_deferred_sections_after_startup,
+                )
+                return
+        except Exception:
+            pass
         try:
             signal = getattr(self.window(), "startup_interactive_ready", None)
             signal.connect(
@@ -317,12 +330,19 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
 
     def _request_deferred_sections_after_startup(self) -> None:
         self._startup_deferred_sections_waiting = False
+        self._startup_deferred_sections_allowed = True
         if self._cleanup_in_progress:
             return
         self.run_when_page_ready(self._apply_pending_mode_refresh_if_ready)
 
     def _startup_can_refresh_top_summary(self) -> bool:
-        return self._startup_can_run_deferred_sections()
+        try:
+            state = getattr(self.window(), "startup_state", None)
+        except Exception:
+            return True
+        if state is None:
+            return True
+        return bool(getattr(state, "interactive_logged", False))
 
     def _wait_for_startup_interactive_before_top_summary(self) -> None:
         if bool(self._startup_top_summary_waiting):
