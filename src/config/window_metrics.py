@@ -2,6 +2,8 @@ import ctypes
 
 BASE_WIDTH = 1000
 BASE_HEIGHT = 950
+FULL_HD_WINDOW_WIDTH = 1280
+FULL_HD_WINDOW_HEIGHT = 720
 MIN_WIDTH = 680
 MIN_HEIGHT = 580
 
@@ -81,6 +83,9 @@ def get_scaled_window_size():
     """Возвращает размер окна с учетом масштаба и разрешения экрана."""
     scale = get_display_scale()
     screen_width, screen_height = get_screen_resolution()
+
+    if screen_width == DEFAULT_SCREEN_WIDTH and screen_height == DEFAULT_SCREEN_HEIGHT:
+        return FULL_HD_WINDOW_WIDTH, FULL_HD_WINDOW_HEIGHT
 
     reference_width = DEFAULT_SCREEN_WIDTH
     reference_height = DEFAULT_SCREEN_HEIGHT
