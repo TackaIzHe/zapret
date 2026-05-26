@@ -1,12 +1,9 @@
 # winws_runtime/runners/zapret2_runner.py
 """
-Strategy runner for Zapret 2 (winws2.exe) with hot-reload support.
+Strategy runner for Zapret 2 (winws2.exe).
 
-This version:
-- Supports hot-reload via ConfigFileWatcher
-- Monitors the preset file for changes
-- Automatically restarts process when config changes
-- Uses winws2.exe executable
+Preset changes are applied by the runtime preset coordinator. The runner only
+starts, stops, and switches to the concrete preset file it is given.
 """
 
 import os
@@ -21,7 +18,6 @@ from settings.mode import ENGINE_WINWS2, ZAPRET2_MODE
 
 from .runner_base import StrategyRunnerBase
 from .preset_runner_support import (
-    ConfigFileWatcher,
     PreparedPresetArtifact,
     PresetRunnerState,
     PresetRunnerStateMachine,
@@ -57,10 +53,9 @@ def _strip_outer_quotes(value: str) -> str:
 
 class Winws2StrategyRunner(StrategyRunnerBase):
     """
-    Runner for Zapret 2 (winws2.exe) with hot-reload support.
+    Runner for Zapret 2 (winws2.exe).
 
     Features:
-    - Hot-reload: automatically restarts when the preset file changes
     - Full Lua support
     - Uses winws2.exe executable
     """
@@ -73,7 +68,6 @@ class Winws2StrategyRunner(StrategyRunnerBase):
             winws_exe_path: Path to winws2.exe
         """
         super().__init__(winws_exe_path)
-        self._config_watcher: Optional[ConfigFileWatcher] = None
         self._preset_file_path: Optional[str] = None
         # Human-readable last start error (for UI/status).
         self.last_error: Optional[str] = None
@@ -83,7 +77,7 @@ class Winws2StrategyRunner(StrategyRunnerBase):
         self._last_spawn_exit_code: Optional[int] = None
         self._last_spawn_stderr: str = ""
 
-        log(f"Winws2StrategyRunner initialized with hot-reload support", "INFO")
+        log("Winws2StrategyRunner initialized", "INFO")
 
     def _set_last_error(self, message: Optional[str], *, notify: bool = True) -> None:
         try:
@@ -417,81 +411,9 @@ class Winws2StrategyRunner(StrategyRunnerBase):
 
         return is_winws2_circular_preset_text(source_content)
 
-    def _on_config_changed(self):
-        """
-        Called when config file changes.
-        Restarts process with new config.
-        """
-        if self.launch_transition_in_progress(ZAPRET2_MODE):
-            log(f"Hot-reload пропущен: runtime уже выполняет transition для {ZAPRET2_MODE}", "DEBUG")
-            return
-        log("Hot-reload triggered: config file changed", "INFO")
-
-        with self._state_lock:
-            preset_path = str(self._preset_file_path or "").strip()
-            strategy_name = str(self.current_launch_label or "Preset").strip() or "Preset"
-
-            if not preset_path or not os.path.exists(preset_path):
-                log("Preset file not found, cannot hot-reload", "WARNING")
-                return
-
-            artifact = self._compile_preset_artifact(preset_path)
-            if not artifact.validation_ok:
-                self._set_runner_state_locked(
-                    PresetRunnerState.FAILED,
-                    preset_path=preset_path,
-                    strategy_name=strategy_name,
-                    error=artifact.validation_report,
-                    reason="watcher_compile_failed",
-                )
-                for line in (artifact.validation_report or "").splitlines():
-                    if line.strip():
-                        log(line, "ERROR")
-                try:
-                    self._set_last_error((artifact.validation_report or "").splitlines()[0].strip())
-                except Exception:
-                    self._set_last_error("Preset содержит ссылки на отсутствующие файлы")
-                return
-
-            cleanup_required = self._stop_process_only_locked()
-            if cleanup_required:
-                self._perform_standard_windivert_cleanup()
-            success = self._spawn_process_locked(
-                artifact,
-                strategy_name,
-                hot_reload=True,
-                notify_failure=False,
-            )
-            if success:
-                return
-
-            exit_code = int(self._last_spawn_exit_code or -1)
-            stderr_output = str(self._last_spawn_stderr or "")
-            if self._is_windivert_conflict_error(stderr_output, exit_code):
-                log(
-                    "Hot-reload hit WinDivert/filter conflict, retrying via full start path with cleanup",
-                    "WARNING",
-                )
-                self._start_from_preset_file_locked(
-                    preset_path,
-                    strategy_name,
-                    force_cleanup=True,
-                    retry_count=0,
-                )
-                return
-
-            message = str(self.last_error or "").strip()
-            if not message:
-                if exit_code >= 0:
-                    message = f"Hot-reload failed (код {exit_code})"
-                else:
-                    message = "Hot-reload failed"
-            self._set_last_error(message, notify=True)
-
     def _stop_process_only_locked(self) -> bool:
         """
-        Stops the process without stopping the config watcher.
-        Used for hot-reload to keep monitoring the config file.
+        Stops only the running winws2 process.
         """
         try:
             cleanup_needed = False
@@ -508,15 +430,15 @@ class Winws2StrategyRunner(StrategyRunnerBase):
                     reason="stop_process_only",
                 )
 
-                log(f"Hot-reload: stopping process '{strategy_name}' (PID: {pid})", "INFO")
+                log(f"Preset switch: stopping process '{strategy_name}' (PID: {pid})", "INFO")
 
                 # Soft stop
                 self.running_process.terminate()
 
                 if wait_for_process_exit(self.running_process, timeout=3.0):
-                    log(f"Process stopped for hot-reload (PID: {pid})", "SUCCESS")
+                    log(f"Process stopped for preset switch (PID: {pid})", "SUCCESS")
                 else:
-                    log("Soft stop timeout, force killing for hot-reload", "WARNING")
+                    log("Soft stop timeout, force killing for preset switch", "WARNING")
                     self.running_process.kill()
                     cleanup_needed = not wait_for_process_exit(self.running_process, timeout=1.0)
 
@@ -535,11 +457,11 @@ class Winws2StrategyRunner(StrategyRunnerBase):
                         cleanup_needed = False
 
             if cleanup_needed:
-                log("Hot-reload fallback cleanup: detected lingering winws process", "DEBUG")
+                log("Preset switch fallback cleanup: detected lingering winws process", "DEBUG")
                 self._kill_all_winws_processes()
             return had_running_process or cleanup_needed
         except Exception as e:
-            log(f"Error stopping process for hot-reload: {e}", "ERROR")
+            log(f"Error stopping process for preset switch: {e}", "ERROR")
             return False
 
     def _clear_process_state_locked(self) -> None:
@@ -574,23 +496,23 @@ class Winws2StrategyRunner(StrategyRunnerBase):
         artifact: PreparedPresetArtifact,
         strategy_name: str,
         *,
-        hot_reload: bool,
+        preset_switch: bool,
         notify_failure: bool = True,
     ) -> bool:
         if not artifact.launch_args:
             message = "Не удалось подготовить аргументы запуска из preset файла"
             self._set_last_error(message, notify=notify_failure)
-            if hot_reload:
+            if preset_switch:
                 log("Cannot start from preset: no launch arguments produced", "ERROR")
             else:
                 log(message, "ERROR")
             return False
 
         cmd = [self.winws_exe, *artifact.launch_args]
-        start_label = "Hot-reload" if hot_reload else "Starting"
+        start_label = "Preset switch" if preset_switch else "Starting"
 
         log(f"{start_label}: starting from preset {artifact.preset_path}", "INFO")
-        if not hot_reload:
+        if not preset_switch:
             log(f"Strategy: {strategy_name}", "INFO")
 
         try:
@@ -599,7 +521,7 @@ class Winws2StrategyRunner(StrategyRunnerBase):
                 PresetRunnerState.STARTING,
                 preset_path=artifact.preset_path,
                 strategy_name=strategy_name,
-                reason="hot_reload_start" if hot_reload else "start_from_preset",
+                reason="preset_switch_start" if preset_switch else "start_from_preset",
             )
             self.running_process = subprocess.Popen(
                 cmd,
@@ -628,16 +550,16 @@ class Winws2StrategyRunner(StrategyRunnerBase):
                     pid=self.running_process.pid,
                     reason="start_confirmed",
                 )
-                if hot_reload:
-                    log(f"Hot-reload successful (PID: {self.running_process.pid})", "SUCCESS")
+                if preset_switch:
+                    log(f"Preset switch successful (PID: {self.running_process.pid})", "SUCCESS")
                 else:
                     log(f"Strategy '{strategy_name}' started from preset (PID: {self.running_process.pid})", "SUCCESS")
                 return True
 
             exit_code = self.running_process.returncode
             failure_log_level = "ERROR" if notify_failure else "WARNING"
-            if hot_reload:
-                log(f"Hot-reload failed: process exited (code: {exit_code})", failure_log_level)
+            if preset_switch:
+                log(f"Preset switch failed: process exited (code: {exit_code})", failure_log_level)
             else:
                 log(f"Strategy '{strategy_name}' exited immediately (code: {exit_code})", failure_log_level)
 
@@ -660,7 +582,7 @@ class Winws2StrategyRunner(StrategyRunnerBase):
                 publish_failure=notify_failure,
             )
 
-            if not hot_reload:
+            if not preset_switch:
                 from winws_runtime.health.process_health_check import diagnose_winws_exit
 
                 diag = diagnose_winws_exit(exit_code, stderr_output)
@@ -685,12 +607,12 @@ class Winws2StrategyRunner(StrategyRunnerBase):
                 except Exception:
                     first_line = ""
                 if first_line:
-                    self._set_last_error(f"Hot-reload failed: {first_line[:200]}", notify=notify_failure)
+                    self._set_last_error(f"Preset switch failed: {first_line[:200]}", notify=notify_failure)
                 else:
-                    self._set_last_error(f"Hot-reload failed (код {exit_code})", notify=notify_failure)
+                    self._set_last_error(f"Preset switch failed (код {exit_code})", notify=notify_failure)
 
             self._clear_process_state_locked()
-            if artifact.preset_path and not hot_reload:
+            if artifact.preset_path and not preset_switch:
                 self._preset_file_path = None
             return False
 
@@ -716,7 +638,7 @@ class Winws2StrategyRunner(StrategyRunnerBase):
             import traceback
             log(traceback.format_exc(), "DEBUG")
             self._clear_process_state_locked()
-            if not hot_reload:
+            if not preset_switch:
                 self._preset_file_path = None
             return False
 
@@ -728,7 +650,6 @@ class Winws2StrategyRunner(StrategyRunnerBase):
             return False
 
         self._set_last_error(None)
-        self._stop_config_watcher()
 
         with self._state_lock:
             artifact = self._compile_preset_artifact(preset_path)
@@ -771,7 +692,7 @@ class Winws2StrategyRunner(StrategyRunnerBase):
             success = self._spawn_process_locked(
                 artifact,
                 strategy_name,
-                hot_reload=True,
+                preset_switch=True,
                 notify_failure=False,
             )
             if not success:
@@ -779,8 +700,6 @@ class Winws2StrategyRunner(StrategyRunnerBase):
                     artifact,
                     strategy_name,
                 )
-        if success:
-            self._start_config_watcher()
         return success
 
     def _retry_fast_switch_after_failed_spawn_locked(self, artifact: PreparedPresetArtifact, strategy_name: str) -> bool:
@@ -816,7 +735,7 @@ class Winws2StrategyRunner(StrategyRunnerBase):
             self._spawn_process_locked(
                 artifact,
                 strategy_name,
-                hot_reload=True,
+                preset_switch=True,
                 notify_failure=False,
             )
         )
@@ -834,10 +753,8 @@ class Winws2StrategyRunner(StrategyRunnerBase):
         Это основной путь для обычного запуска zapret2_mode: берём готовый
         preset-файл, а не собираем аргументы из старых категорий.
 
-        Возможности:
-        - hot-reload следит за изменениями preset-файла;
-        - реестр готовых стратегий для запуска не нужен;
-        - preset-файл уже содержит все аргументы.
+        Важно: изменения preset-файла применяет runtime preset coordinator.
+        Runner не следит за файлом сам, чтобы не было двух перезапусков подряд.
 
         Args:
             preset_path: путь к preset-файлу
@@ -852,7 +769,6 @@ class Winws2StrategyRunner(StrategyRunnerBase):
             return False
 
         self._set_last_error(None)
-        self._stop_config_watcher()
 
         with self._state_lock:
             return self._start_from_preset_file_locked(
@@ -979,10 +895,9 @@ class Winws2StrategyRunner(StrategyRunnerBase):
         success = self._spawn_process_locked(
             artifact,
             strategy_name,
-            hot_reload=False,
+            preset_switch=False,
         )
         if success:
-            self._start_config_watcher()
             return True
 
         return self._maybe_retry_after_failed_spawn_locked(
@@ -992,53 +907,10 @@ class Winws2StrategyRunner(StrategyRunnerBase):
             retry_count=retry_count,
         )
 
-    def _start_config_watcher(self):
-        """Start watching the preset file for changes or retarget existing watcher."""
-        with self._state_lock:
-            preset_path = str(self._preset_file_path or "").strip()
-            watcher = self._config_watcher
-
-        if not preset_path or not os.path.exists(preset_path):
-            return
-
-        if watcher:
-            watcher.update_file_path(preset_path)
-            log(f"Config watcher retargeted to: {preset_path}", "DEBUG")
-            return
-
-        watcher = ConfigFileWatcher(
-            preset_path,
-            self._on_config_changed,
-            interval=1.0,
-            content_changed_callback=self.publish_active_preset_content_changed,
-        )
-        with self._state_lock:
-            self._config_watcher = watcher
-        watcher.start()
-        log(f"Config watcher started for: {preset_path}", "DEBUG")
-
-    def _stop_config_watcher(self):
-        """Stop watching the preset file"""
-        with self._state_lock:
-            watcher = self._config_watcher
-            self._config_watcher = None
-        if watcher:
-            watcher.stop()
-            log("Config watcher stopped", "DEBUG")
-
     def stop_background_watchers(self) -> None:
-        self._stop_config_watcher()
+        return None
 
     def stop(self, *, cleanup_services: bool = True) -> bool:
-        """
-        Stops running process and config watcher.
-
-        Overrides base class to also stop the hot-reload watcher.
-        """
-        # Stop config watcher first
-        self._stop_config_watcher()
-
-        # Clear preset file path
         with self._state_lock:
             if self.running_process and self.is_running():
                 self._set_runner_state_locked(

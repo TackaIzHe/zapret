@@ -180,11 +180,17 @@ def create_preset_runtime_coordinator(
         get_launch_method=get_launch_method,
         get_active_preset_path=get_active_preset_path,
         refresh_after_switch=refresh_after_switch,
-        request_runtime_content_apply=lambda launch_method, reason, preset_file_name: request_selected_source_preset_apply(
+        request_selected_source_preset_apply=lambda launch_method, reason, preset_file_name: request_selected_source_preset_apply(
             runtime_feature=runtime_feature,
             launch_method=launch_method,
             reason=reason,
             preset_file_name=preset_file_name,
+        ),
+        request_preset_content_apply=lambda launch_method, reason, preset_file_name: request_preset_runtime_content_apply(
+            runtime_feature=runtime_feature,
+            launch_method=launch_method,
+            reason=reason,
+            profile_key=None,
         ),
     )
 

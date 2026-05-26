@@ -11,11 +11,12 @@ class PresetRuntimeCoordinatorTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls._app = QApplication.instance() or QApplication([])
 
-    def test_saving_active_preset_requests_apply_even_when_path_is_same(self) -> None:
+    def test_saving_active_preset_uses_content_apply_not_preset_switch(self) -> None:
         from core.runtime.preset_runtime_coordinator import PresetRuntimeCoordinator
         from settings.mode import ZAPRET2_MODE
 
-        calls: list[tuple[str, str, str]] = []
+        switch_calls: list[tuple[str, str, str]] = []
+        content_calls: list[tuple[str, str, str]] = []
         active_path = "C:/Zapret/Dev/presets/winws2/Default v5.txt"
         presets_feature = SimpleNamespace(
             is_selected_source_preset_file=lambda method, file_name: (
@@ -36,7 +37,11 @@ class PresetRuntimeCoordinatorTests(unittest.TestCase):
             get_launch_method=lambda: ZAPRET2_MODE,
             get_active_preset_path=lambda: active_path,
             refresh_after_switch=lambda: None,
-            request_runtime_content_apply=lambda method, reason, file_name: calls.append(
+            request_selected_source_preset_apply=lambda method, reason, file_name: switch_calls.append(
+                (method, reason, file_name)
+            )
+            or True,
+            request_preset_content_apply=lambda method, reason, file_name: content_calls.append(
                 (method, reason, file_name)
             )
             or True,
@@ -46,7 +51,8 @@ class PresetRuntimeCoordinatorTests(unittest.TestCase):
 
         coordinator.handle_preset_content_changed(ZAPRET2_MODE, "Default v5.txt")
 
-        self.assertEqual(calls, [(ZAPRET2_MODE, "preset_content_changed", "Default v5.txt")])
+        self.assertEqual(content_calls, [(ZAPRET2_MODE, "preset_content_changed", "Default v5.txt")])
+        self.assertEqual(switch_calls, [])
         self.assertEqual(ui_state.content_revision, 1)
 
     def test_active_preset_revision_is_published_after_click_event(self) -> None:
@@ -67,7 +73,8 @@ class PresetRuntimeCoordinatorTests(unittest.TestCase):
             get_launch_method=lambda: ZAPRET2_MODE,
             get_active_preset_path=lambda: "",
             refresh_after_switch=lambda: None,
-            request_runtime_content_apply=lambda *_args: True,
+            request_selected_source_preset_apply=lambda *_args: True,
+            request_preset_content_apply=lambda *_args: True,
         )
         coordinator.setup_active_preset_file_watcher = lambda: None
 
@@ -122,6 +129,45 @@ class PresetRuntimeCoordinatorTests(unittest.TestCase):
             [(ZAPRET2_MODE, "Default v5.txt", "--new\n--filter-tcp=80\n", False)],
         )
         self.assertEqual(publish_calls, [(ZAPRET2_MODE, "Default v5.txt")])
+
+    def test_preset_content_apply_switches_running_preset_once(self) -> None:
+        from pathlib import Path
+        import tempfile
+        from unittest.mock import Mock
+
+        from winws_runtime.flow.apply_policy import request_preset_runtime_content_apply
+        from settings.mode import ZAPRET2_MODE
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            preset_path = Path(tmp_dir) / "selected.txt"
+            preset_path.write_text(
+                "--wf-tcp-out=80,443\n--filter-tcp=80\n--hostlist=list.txt\n--lua-desync=fake\n",
+                encoding="utf-8",
+            )
+
+            launch_runtime = SimpleNamespace(
+                is_running=Mock(return_value=True),
+                switch_presets_async=Mock(),
+                stop_dpi_async=Mock(),
+            )
+            presets_feature = SimpleNamespace(
+                get_launch_snapshot=Mock(return_value=SimpleNamespace(preset_path=str(preset_path)))
+            )
+            runtime_feature = SimpleNamespace(
+                objects=SimpleNamespace(launch_runtime=launch_runtime),
+                dependencies=SimpleNamespace(presets_feature=presets_feature),
+            )
+
+            self.assertTrue(
+                request_preset_runtime_content_apply(
+                    runtime_feature=runtime_feature,
+                    launch_method=ZAPRET2_MODE,
+                    reason="preset_content_changed",
+                )
+            )
+
+            launch_runtime.switch_presets_async.assert_called_once_with(ZAPRET2_MODE)
+            launch_runtime.stop_dpi_async.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ def build_profiles_value(enabled_count: int | None, *, language: str) -> str:
         return tr_catalog(
             "page.control.summary.profiles.unavailable",
             language=language,
-            default="Не удалось проверить",
+            default="Проверяем...",
         )
     return tr_catalog(
         "page.control.summary.profiles.enabled_template",

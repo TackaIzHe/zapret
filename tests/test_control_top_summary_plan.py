@@ -23,8 +23,8 @@ class ControlTopSummaryPlanTests(unittest.TestCase):
     def test_profiles_value_handles_missing_count(self) -> None:
         from presets.ui.control.top_summary_plan import build_profiles_value
 
-        self.assertEqual(build_profiles_value(None, language="ru"), "Не удалось проверить")
-        self.assertEqual(build_profiles_value(None, language="en"), "Could not check")
+        self.assertEqual(build_profiles_value(None, language="ru"), "Проверяем...")
+        self.assertEqual(build_profiles_value(None, language="en"), "Checking...")
 
     def test_premium_summary_keeps_free_and_premium_labels_as_is(self) -> None:
         from presets.ui.control.top_summary_plan import build_premium_summary

@@ -5,9 +5,8 @@ from enum import Enum
 import os
 import re
 import subprocess
-import threading
 import time
-from typing import Callable, Optional
+from typing import Callable
 
 from log.log import log
 
@@ -62,101 +61,6 @@ def launch_args_from_preset_text(content: str) -> list[str]:
             continue
         args.extend(_split_launch_line(stripped))
     return args
-
-
-class ConfigFileWatcher:
-    """
-    Monitors preset file changes for hot-reload.
-
-    Watches a config file and calls callback when modification time changes.
-    Runs in a background thread with configurable polling interval.
-    """
-
-    def __init__(
-        self,
-        file_path: str,
-        callback: Callable[[], None],
-        interval: float = 1.0,
-        *,
-        thread_name: str = "ConfigFileWatcher",
-        content_changed_callback=None,
-    ):
-        self._file_path = file_path
-        self._callback = callback
-        self._content_changed_callback = content_changed_callback
-        self._interval = interval
-        self._thread_name = str(thread_name or "ConfigFileWatcher")
-        self._running = False
-        self._thread: Optional[threading.Thread] = None
-        self._stop_event = threading.Event()
-        self._last_mtime: Optional[float] = None
-
-        if os.path.exists(self._file_path):
-            self._last_mtime = os.path.getmtime(self._file_path)
-
-    def start(self):
-        """Start watching the file in background thread."""
-        if self._running:
-            log("ConfigFileWatcher already running", "DEBUG")
-            return
-
-        self._running = True
-        self._stop_event.clear()
-        self._thread = threading.Thread(target=self._watch_loop, daemon=True, name=self._thread_name)
-        self._thread.start()
-        log(f"ConfigFileWatcher started for: {self._file_path}", "DEBUG")
-
-    def update_file_path(self, file_path: str) -> None:
-        """Switch watched file without restarting watcher thread."""
-        self._file_path = str(file_path or "")
-        self._last_mtime = None
-        try:
-            if self._file_path and os.path.exists(self._file_path):
-                self._last_mtime = os.path.getmtime(self._file_path)
-        except Exception:
-            self._last_mtime = None
-
-    def stop(self):
-        """Stop watching the file."""
-        if not self._running:
-            return
-
-        self._running = False
-        self._stop_event.set()
-        watcher_thread = self._thread
-        if watcher_thread and watcher_thread.is_alive():
-            if watcher_thread is threading.current_thread():
-                log(f"{self._thread_name}.stop called from watcher thread; skip self-join", "DEBUG")
-            else:
-                watcher_thread.join(timeout=2.0)
-        self._thread = None
-        log("ConfigFileWatcher stopped", "DEBUG")
-
-    def _watch_loop(self):
-        """Main watch loop - polls file for changes."""
-        while self._running:
-            try:
-                if os.path.exists(self._file_path):
-                    current_mtime = os.path.getmtime(self._file_path)
-                    if self._last_mtime is not None and current_mtime != self._last_mtime:
-                        log(f"Config file changed: {self._file_path}", "INFO")
-                        self._last_mtime = current_mtime
-                        content_changed_callback = self._content_changed_callback
-                        if callable(content_changed_callback):
-                            try:
-                                content_changed_callback(self._file_path)
-                            except Exception:
-                                pass
-                        try:
-                            self._callback()
-                        except Exception as e:
-                            log(f"Error in config change callback: {e}", "ERROR")
-                    self._last_mtime = current_mtime
-            except Exception as e:
-                log(f"Error checking file modification: {e}", "DEBUG")
-
-            self._stop_event.wait(max(0.1, float(self._interval or 1.0)))
-
 
 @dataclass(frozen=True)
 class PreparedPresetArtifact:

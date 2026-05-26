@@ -35,7 +35,8 @@ class PresetRuntimeCoordinator(QObject):
         get_launch_method: Callable[[], str],
         get_active_preset_path: Callable[[], str],
         refresh_after_switch: Callable[[], None],
-        request_runtime_content_apply: Callable[[str, str, str], bool],
+        request_selected_source_preset_apply: Callable[[str, str, str], bool],
+        request_preset_content_apply: Callable[[str, str, str], bool],
     ) -> None:
         super().__init__(parent)
         self._presets_feature = presets_feature
@@ -43,7 +44,8 @@ class PresetRuntimeCoordinator(QObject):
         self._get_launch_method = get_launch_method
         self._get_active_preset_path = get_active_preset_path
         self._refresh_after_switch = refresh_after_switch
-        self._request_runtime_content_apply = request_runtime_content_apply
+        self._request_selected_source_preset_apply_callback = request_selected_source_preset_apply
+        self._request_preset_content_apply = request_preset_content_apply
 
         self._active_preset_file_watcher: QFileSystemWatcher | None = None
         self._active_preset_file_refresh_timer: QTimer | None = None
@@ -145,11 +147,7 @@ class PresetRuntimeCoordinator(QObject):
                 "INFO",
             )
 
-        self._request_selected_source_preset_apply(
-            launch_method=method,
-            reason="preset_content_changed",
-            preset_file_name=updated_file_name,
-        )
+        self._request_preset_content_apply(method, "preset_content_changed", updated_file_name)
 
     def _request_selected_source_preset_apply(
         self,
@@ -162,7 +160,7 @@ class PresetRuntimeCoordinator(QObject):
             method = normalize_launch_method(launch_method, default="")
             if not self._is_current_preset_method(method):
                 return
-            self._request_runtime_content_apply(
+            self._request_selected_source_preset_apply_callback(
                 method,
                 reason,
                 str(preset_file_name or "").strip(),

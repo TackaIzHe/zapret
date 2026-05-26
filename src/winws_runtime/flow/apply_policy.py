@@ -68,7 +68,8 @@ def request_preset_runtime_content_apply(
 
     profile_info = f" [{profile_key}]" if profile_key else ""
     log(
-        f"Preset runtime apply{profile_info} ({method}, reason={reason}) - watcher-driven hot-reload should apply changes automatically",
+        f"Preset runtime apply{profile_info} ({method}, reason={reason}) -> preset mode switch pipeline",
         "INFO",
     )
+    launch_runtime.switch_presets_async(method)
     return True

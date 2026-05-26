@@ -2,9 +2,8 @@
 """
 Strategy runner for Zapret 1 (winws.exe).
 
-Supports hot-reload via ConfigFileWatcher when the preset file changes.
-Does NOT support Lua functionality.
-Launches winws.exe via @preset-file syntax.
+Preset changes are applied by the runtime preset coordinator. The runner only
+starts, stops, and switches to the concrete preset file it is given.
 """
 
 import os
@@ -19,7 +18,6 @@ from settings.mode import EXE_NAME_WINWS1, ZAPRET1_MODE
 from .constants import CREATE_NO_WINDOW
 from .runner_base import StrategyRunnerBase
 from .preset_runner_support import (
-    ConfigFileWatcher,
     PreparedPresetArtifact,
     PresetRunnerState,
     PresetRunnerStateMachine,
@@ -39,7 +37,7 @@ from winws_runtime.runtime.system_ops import get_process_pids_by_name
 class Winws1StrategyRunner(StrategyRunnerBase):
     """
     Runner for Zapret 1 (winws.exe).
-    Simple version without hot-reload and Lua functionality.
+    Simple version without Lua functionality.
     """
 
     def __init__(self, winws_exe_path: str):
@@ -50,7 +48,6 @@ class Winws1StrategyRunner(StrategyRunnerBase):
         super().__init__(winws_exe_path)
         # Human-readable last start error (for UI/status).
         self.last_error: Optional[str] = None
-        self._config_watcher: Optional[ConfigFileWatcher] = None
         self._preset_file_path: Optional[str] = None
         self._prepared_preset_cache: dict[tuple[str, int, int], PreparedPresetArtifact] = {}
         self._state_lock = threading.RLock()
@@ -104,33 +101,6 @@ class Winws1StrategyRunner(StrategyRunnerBase):
             )
         return snapshot
 
-    def _on_config_changed(self) -> None:
-        """Called when the preset file changes. Performs full restart."""
-        if self.launch_transition_in_progress(ZAPRET1_MODE):
-            log(f"Hot-reload пропущен: runtime уже выполняет transition для {ZAPRET1_MODE}", "DEBUG")
-            return
-        log(f"Preset file changed, restarting {EXE_NAME_WINWS1}...", "INFO")
-        try:
-            with self._state_lock:
-                preset_path = str(self._preset_file_path or "").strip()
-                strategy_name = str(self.current_launch_label or "Preset").strip() or "Preset"
-                if not preset_path or not os.path.exists(preset_path):
-                    return
-                artifact = self._compile_preset_artifact(preset_path)
-                if not artifact.validation_ok:
-                    self._set_runner_state_locked(
-                        PresetRunnerState.FAILED,
-                        preset_path=preset_path,
-                        strategy_name=strategy_name,
-                        error=artifact.validation_report,
-                        reason="watcher_compile_failed",
-                    )
-                    return
-                self._stop_process_only_locked()
-                self._spawn_process_locked(artifact, strategy_name)
-        except Exception as e:
-            log(f"Error restarting after config change: {e}", "ERROR")
-
     def _compile_preset_artifact(self, preset_path: str) -> PreparedPresetArtifact:
         p = str(preset_path or "").strip()
         if not p:
@@ -169,36 +139,8 @@ class Winws1StrategyRunner(StrategyRunnerBase):
 
         return artifact
 
-    def _start_config_watcher(self, preset_file: str) -> None:
-        """Starts config file watcher for hot-reload or retargets existing watcher."""
-        with self._state_lock:
-            watcher = self._config_watcher
-
-        if watcher:
-            watcher.update_file_path(preset_file)
-            log(f"ConfigFileWatcherWinws1 retargeted to: {preset_file}", "DEBUG")
-            return
-
-        watcher = ConfigFileWatcher(
-            file_path=preset_file,
-            callback=self._on_config_changed,
-            interval=1.0,
-            thread_name="ConfigFileWatcherWinws1",
-            content_changed_callback=self.publish_active_preset_content_changed,
-        )
-        with self._state_lock:
-            self._config_watcher = watcher
-        watcher.start()
-
-    def _stop_config_watcher(self) -> None:
-        with self._state_lock:
-            watcher = self._config_watcher
-            self._config_watcher = None
-        if watcher:
-            watcher.stop()
-
     def stop_background_watchers(self) -> None:
-        self._stop_config_watcher()
+        return None
 
     def _stop_process_only_locked(self) -> None:
         """Stops only the current winws.exe process without heavy driver/service cleanup."""
@@ -384,7 +326,6 @@ class Winws1StrategyRunner(StrategyRunnerBase):
             return False
 
         self._set_last_error(None)
-        self._stop_config_watcher()
 
         with self._state_lock:
             artifact = self._compile_preset_artifact(preset_path)
@@ -425,8 +366,6 @@ class Winws1StrategyRunner(StrategyRunnerBase):
                     artifact,
                     strategy_name,
                 )
-        if success:
-            self._start_config_watcher(preset_path)
         return success
 
     def _retry_fast_switch_after_failed_spawn_locked(self, artifact: PreparedPresetArtifact, strategy_name: str) -> bool:
@@ -473,7 +412,6 @@ class Winws1StrategyRunner(StrategyRunnerBase):
             return False
 
         self._set_last_error(None)
-        self._stop_config_watcher()
 
         with self._state_lock:
             return self._start_from_preset_file_locked(
@@ -571,7 +509,6 @@ class Winws1StrategyRunner(StrategyRunnerBase):
         self._preset_file_path = preset_path
         success = self._spawn_process_locked(artifact, strategy_name)
         if success:
-            self._start_config_watcher(preset_path)
             return True
 
         return self._maybe_retry_after_failed_spawn_locked(
@@ -582,8 +519,7 @@ class Winws1StrategyRunner(StrategyRunnerBase):
         )
 
     def stop(self, *, cleanup_services: bool = True) -> bool:
-        """Stops running process and hot-reload watcher."""
-        self._stop_config_watcher()
+        """Stops the running winws.exe process."""
         with self._state_lock:
             if self.running_process and self.is_running():
                 self._set_runner_state_locked(

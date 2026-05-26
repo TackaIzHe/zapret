@@ -142,8 +142,8 @@ TEXTS: dict[str, dict[str, str]] = {
         "en": "{count} enabled",
     },
     "page.control.summary.profiles.unavailable": {
-        "ru": "Не удалось проверить",
-        "en": "Could not check",
+        "ru": "Проверяем...",
+        "en": "Checking...",
     },
     "page.control.summary.mode.caption": {
         "ru": "Текущий режим",
