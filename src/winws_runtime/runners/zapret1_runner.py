@@ -238,8 +238,8 @@ class Winws1StrategyRunner(StrategyRunnerBase):
             )
             self.running_process = subprocess.Popen(
                 cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
                 stdin=subprocess.DEVNULL,
                 startupinfo=self._create_startup_info(),
                 creationflags=CREATE_NO_WINDOW,
@@ -255,7 +255,6 @@ class Winws1StrategyRunner(StrategyRunnerBase):
                 self.running_process,
                 readiness_check=lambda: self._spawn_readiness_check_locked(self.running_process),
             ):
-                self._start_process_output_drainers(self.running_process)
                 self._set_runner_state_locked(
                     PresetRunnerState.RUNNING,
                     preset_path=artifact.preset_path,

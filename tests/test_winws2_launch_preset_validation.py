@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 import tempfile
-import time
 import unittest
 
 
@@ -481,38 +480,115 @@ class Winws2LaunchPresetValidationTests(unittest.TestCase):
 
         self.assertEqual(output, "winws stdout diagnostic")
 
-    def test_runner_drains_long_running_process_output_without_logs_page(self) -> None:
+    def test_winws2_long_running_spawn_uses_devnull_not_pipes(self) -> None:
+        import subprocess
+        from types import SimpleNamespace
+        from unittest.mock import Mock, patch
+
         from winws_runtime.runners.zapret2_runner import Winws2StrategyRunner
 
-        class FakeStream:
-            def __init__(self, lines):
-                self._lines = list(lines)
+        runner = object.__new__(Winws2StrategyRunner)
+        runner.winws_exe = "winws2.exe"
+        runner.work_dir = "C:/Zapret/Dev"
+        runner.running_process = None
+        runner.current_launch_label = None
+        runner.current_strategy_args = None
+        runner._last_spawn_exit_code = None
+        runner._last_spawn_stderr = ""
+        runner._prepare_state_for_spawn_locked = Mock()
+        runner._set_runner_state_locked = Mock()
+        runner._log_winws2_launch_command = Mock()
+        runner._create_startup_info = Mock(return_value=None)
+        runner._set_last_error = Mock()
+        runner._run_preset_dry_run_locked = Mock(return_value=True)
 
-            def readline(self):
-                if self._lines:
-                    return self._lines.pop(0)
-                return b""
+        fake_process = SimpleNamespace(pid=2468, returncode=None)
+        artifact = SimpleNamespace(
+            launch_args=("@config.txt",),
+            preset_path="preset.txt",
+            normalized_text="--wf-tcp-out=443\n",
+        )
 
-        class FakeProcess:
-            pid = 2468
+        with (
+            patch("winws_runtime.runners.zapret2_runner.subprocess.Popen", return_value=fake_process) as popen_mock,
+            patch("winws_runtime.runners.zapret2_runner.wait_for_process_stable_start", return_value=True),
+        ):
+            self.assertTrue(
+                runner._spawn_process_locked(
+                    artifact,
+                    "Preset",
+                    preset_switch=False,
+                )
+            )
 
-            def __init__(self):
-                self.stdout = FakeStream([b"stdout line\n"])
-                self.stderr = FakeStream([b"stderr line\n"])
+        kwargs = popen_mock.call_args.kwargs
+        self.assertIs(kwargs["stdout"], subprocess.DEVNULL)
+        self.assertIs(kwargs["stderr"], subprocess.DEVNULL)
+
+    def test_winws2_dry_run_artifact_stays_inside_at_config(self) -> None:
+        from winws_runtime.runners.preset_runner_support import PreparedPresetArtifact
+        from winws_runtime.runners.zapret2_runner import Winws2StrategyRunner
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runner = object.__new__(Winws2StrategyRunner)
+            runner.work_dir = str(root)
+
+            artifact = PreparedPresetArtifact(
+                preset_path=str(root / "selected.txt"),
+                cache_key=None,
+                normalized_text="--wf-tcp-out=443\n",
+                launch_args=("@original.txt",),
+                validation_ok=True,
+                validation_report="",
+            )
+
+            dry_run_artifact = runner._artifact_for_dry_run_locked(artifact)
+            dry_run_config = Path(str(dry_run_artifact.launch_args[0])[1:]).read_text(encoding="utf-8")
+
+        self.assertEqual(len(dry_run_artifact.launch_args), 1)
+        self.assertTrue(str(dry_run_artifact.launch_args[0]).startswith("@"))
+        self.assertIn("--wf-tcp-out=443", dry_run_config)
+        self.assertIn("--wf-dup-check=0", dry_run_config)
+        self.assertIn("--dry-run", dry_run_config)
+
+    def test_winws2_spawn_stops_before_real_process_when_dry_run_fails(self) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import Mock, patch
+
+        from winws_runtime.runners.zapret2_runner import Winws2StrategyRunner
 
         runner = object.__new__(Winws2StrategyRunner)
-        runner._start_process_output_drainers(FakeProcess())
+        runner.winws_exe = "winws2.exe"
+        runner.work_dir = "C:/Zapret/Dev"
+        runner.running_process = None
+        runner.current_launch_label = None
+        runner.current_strategy_args = None
+        runner._last_spawn_exit_code = None
+        runner._last_spawn_stderr = ""
+        runner._set_last_error = Mock()
+        runner._prepare_state_for_spawn_locked = Mock()
+        runner._set_runner_state_locked = Mock()
+        runner._log_winws2_launch_command = Mock()
+        runner._create_startup_info = Mock(return_value=None)
+        runner._run_preset_dry_run_locked = Mock(return_value=False)
 
-        deadline = time.perf_counter() + 1.0
-        output = []
-        while time.perf_counter() < deadline:
-            output = runner.get_recent_process_output()
-            if len(output) >= 2:
-                break
-            time.sleep(0.01)
+        artifact = SimpleNamespace(
+            launch_args=("@config.txt",),
+            preset_path="preset.txt",
+            normalized_text="--wf-tcp-out=443\n",
+        )
 
-        self.assertIn(("stdout", "stdout line"), output)
-        self.assertIn(("stderr", "stderr line"), output)
+        with patch("winws_runtime.runners.zapret2_runner.subprocess.Popen") as popen_mock:
+            self.assertFalse(
+                runner._spawn_process_locked(
+                    artifact,
+                    "Preset",
+                    preset_switch=False,
+                )
+            )
+
+        popen_mock.assert_not_called()
 
     def test_winws1_compile_resolves_bare_list_paths_for_launch(self) -> None:
         from threading import RLock

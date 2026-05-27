@@ -564,6 +564,104 @@ class Winws2StrategyRunner(StrategyRunnerBase):
             validation_report=artifact.validation_report,
         )
 
+    def _artifact_for_dry_run_locked(self, artifact: PreparedPresetArtifact) -> PreparedPresetArtifact:
+        text = str(getattr(artifact, "normalized_text", "") or "").rstrip()
+        if not text:
+            return artifact
+        dry_run_text = f"{text}\n--wf-dup-check=0\n--dry-run\n"
+        at_config_path = self._write_winws2_at_config(artifact.preset_path, dry_run_text)
+        return PreparedPresetArtifact(
+            preset_path=artifact.preset_path,
+            cache_key=None,
+            normalized_text=dry_run_text,
+            launch_args=(f"@{at_config_path}",),
+            validation_ok=artifact.validation_ok,
+            validation_report=artifact.validation_report,
+        )
+
+    @staticmethod
+    def _decode_process_output(data) -> str:
+        if isinstance(data, bytes):
+            return data.decode("utf-8", errors="replace")
+        return str(data or "")
+
+    def _run_preset_dry_run_locked(
+        self,
+        artifact: PreparedPresetArtifact,
+        strategy_name: str,
+        *,
+        preset_switch: bool,
+        notify_failure: bool,
+    ) -> bool:
+        dry_run_artifact = self._artifact_for_dry_run_locked(artifact)
+        if not dry_run_artifact.launch_args:
+            return True
+
+        cmd = [self.winws_exe, *dry_run_artifact.launch_args]
+        try:
+            result = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                stdin=subprocess.DEVNULL,
+                startupinfo=self._create_startup_info(),
+                creationflags=CREATE_NO_WINDOW,
+                cwd=self.work_dir,
+                timeout=6.0,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            message = "Preset dry-run timeout"
+            self._last_spawn_exit_code = 124
+            self._last_spawn_stderr = message
+            log(message, "WARNING" if not notify_failure else "ERROR")
+            self._set_last_error(message, notify=notify_failure)
+            return False
+        except Exception as exc:
+            message = f"Preset dry-run failed: {exc}"
+            self._last_spawn_exit_code = None
+            self._last_spawn_stderr = message
+            log(message, "WARNING" if not notify_failure else "ERROR")
+            self._set_last_error(message, notify=notify_failure)
+            return False
+
+        output = "\n".join(
+            part.strip()
+            for part in (
+                self._decode_process_output(getattr(result, "stdout", b"")),
+                self._decode_process_output(getattr(result, "stderr", b"")),
+            )
+            if part and part.strip()
+        )
+        self._last_spawn_exit_code = int(getattr(result, "returncode", -1))
+        self._last_spawn_stderr = output
+        if self._last_spawn_exit_code == 0:
+            return True
+
+        failure_log_level = "ERROR" if notify_failure else "WARNING"
+        first_line = next((line.strip() for line in output.splitlines() if line.strip()), "")
+        log(
+            f"Preset dry-run failed before winws2 start (code: {self._last_spawn_exit_code})"
+            + (f": {first_line[:300]}" if first_line else ""),
+            failure_log_level,
+        )
+        self._set_runner_state_locked(
+            PresetRunnerState.FAILED,
+            preset_path=artifact.preset_path,
+            strategy_name=strategy_name,
+            error=output,
+            reason="dry_run_failed_before_spawn",
+            publish_failure=notify_failure,
+        )
+        if first_line:
+            self._set_last_error(f"Preset dry-run failed: {first_line[:200]}", notify=notify_failure)
+        else:
+            self._set_last_error(
+                f"Preset dry-run failed (код {self._last_spawn_exit_code})",
+                notify=notify_failure,
+            )
+        return False
+
     def _restore_process_state_locked(
         self,
         *,
@@ -672,6 +770,14 @@ class Winws2StrategyRunner(StrategyRunnerBase):
         if not preset_switch:
             log(f"Strategy: {strategy_name}", "INFO")
 
+        if not self._run_preset_dry_run_locked(
+            artifact,
+            strategy_name,
+            preset_switch=preset_switch,
+            notify_failure=notify_failure,
+        ):
+            return False
+
         try:
             self._prepare_state_for_spawn_locked(artifact.preset_path, strategy_name)
             self._set_runner_state_locked(
@@ -682,8 +788,8 @@ class Winws2StrategyRunner(StrategyRunnerBase):
             )
             self.running_process = subprocess.Popen(
                 cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
                 stdin=subprocess.DEVNULL,
                 startupinfo=self._create_startup_info(),
                 creationflags=CREATE_NO_WINDOW,
@@ -700,7 +806,6 @@ class Winws2StrategyRunner(StrategyRunnerBase):
             )
 
             if stable_ok:
-                self._start_process_output_drainers(self.running_process)
                 self._set_runner_state_locked(
                     PresetRunnerState.RUNNING,
                     preset_path=artifact.preset_path,

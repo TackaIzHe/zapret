@@ -1,10 +1,8 @@
 # winws_runtime/runners/runner_base.py
 """Base class for strategy runners with shared functionality"""
 
-from collections import deque
 import os
 import subprocess
-import threading
 import time
 from abc import ABC, abstractmethod
 from typing import Optional, List, Dict
@@ -54,9 +52,6 @@ class StrategyRunnerBase(ABC):
         self._runner_failure_callback = None
         self._launch_error_callback = None
         self._active_preset_content_changed_callback = None
-        self._process_output_lock = threading.Lock()
-        self._process_output_tail = deque(maxlen=500)
-        self._process_output_threads: list[threading.Thread] = []
 
         # Verify exe exists
         if not os.path.exists(self.winws_exe):
@@ -205,72 +200,6 @@ class StrategyRunnerBase(ABC):
             elif chunk:
                 data += str(chunk).encode("utf-8", errors="replace")
         return data.decode("utf-8", errors="replace").strip()
-
-    def _ensure_process_output_state(self) -> None:
-        if not hasattr(self, "_process_output_lock"):
-            self._process_output_lock = threading.Lock()
-        if not hasattr(self, "_process_output_tail"):
-            self._process_output_tail = deque(maxlen=500)
-        if not hasattr(self, "_process_output_threads"):
-            self._process_output_threads = []
-
-    def _remember_process_output_line(self, stream_name: str, line: str) -> None:
-        text = str(line or "").rstrip()
-        if not text:
-            return
-        self._ensure_process_output_state()
-        with self._process_output_lock:
-            self._process_output_tail.append((str(stream_name or "stdout"), text))
-
-    def _drain_process_output_stream(self, process: subprocess.Popen, stream, stream_name: str) -> None:
-        try:
-            for raw_line in iter(stream.readline, b""):
-                if isinstance(raw_line, bytes):
-                    line = raw_line.decode("utf-8", errors="replace")
-                else:
-                    line = str(raw_line)
-                self._remember_process_output_line(stream_name, line)
-        except Exception as exc:
-            log(f"Winws {stream_name} drain stopped: {exc}", "DEBUG")
-
-    def _start_process_output_drainers(self, process: subprocess.Popen | None) -> None:
-        """Keep winws stdout/stderr drained even when the Logs page is closed."""
-        if process is None:
-            return
-        self._ensure_process_output_state()
-        try:
-            pid = int(getattr(process, "pid", 0) or 0)
-        except Exception:
-            pid = 0
-
-        started_threads: list[threading.Thread] = []
-        for stream_name in ("stdout", "stderr"):
-            stream = getattr(process, stream_name, None)
-            if stream is None:
-                continue
-            thread = threading.Thread(
-                target=self._drain_process_output_stream,
-                args=(process, stream, stream_name),
-                name=f"{self.__class__.__name__}-{pid}-{stream_name}-drain",
-                daemon=True,
-            )
-            thread.start()
-            started_threads.append(thread)
-
-        if started_threads:
-            with self._process_output_lock:
-                self._process_output_threads = [
-                    thread for thread in self._process_output_threads if thread.is_alive()
-                ]
-                self._process_output_threads.extend(started_threads)
-
-    def get_recent_process_output(self, limit: int = 200) -> list[tuple[str, str]]:
-        self._ensure_process_output_state()
-        with self._process_output_lock:
-            items = list(self._process_output_tail)
-        if limit <= 0:
-            return items
-        return items[-int(limit):]
 
     def _fast_cleanup_services(self):
         """Fast service cleanup via Win API (for normal startup)"""
