@@ -869,8 +869,8 @@ class ProfilePresetService:
             filter_value=filter_value or current.filter_value,
             out_range="-d8",
         )
-        updated = append_profile_from_template(preset, template, enabled=True, position="bottom")
-        return updated, updated.profiles[-1].key if updated.profiles else ""
+        updated = append_profile_from_template(preset, template, enabled=True, position="top")
+        return updated, updated.profiles[0].key if updated.profiles else ""
 
     def _profile_with_filter_override(
         self,

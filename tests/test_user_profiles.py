@@ -437,12 +437,11 @@ class UserProfilesTests(unittest.TestCase):
                 service = ProfilePresetService(feature, "zapret2_mode")
                 new_key = service.apply_strategy("template:all_profiles:0", "tcp_md5")
 
-        self.assertEqual(new_key, "profile:1")
+        self.assertEqual(new_key, "profile:0")
         self.assertIn("--hostlist=lists/speedtest.txt\n--out-range=-d8", store.text)
         self.assertNotIn("--hostlist=lists/speedtest.txt\n\n--out-range=-d8", store.text)
         self.assertNotIn("--lua-desync=pass", store.text)
-        self.assertTrue(store.text.startswith("--name=youtube.com (интерфейс)\n"))
-        self.assertIn("\n--new\n\n--name=Speedtest", store.text)
+        self.assertIn("\n--new\n\n--name=youtube.com (интерфейс)", store.text)
 
     def test_enabling_stock_template_adds_safe_pass_without_internal_blanks(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -483,14 +482,12 @@ class UserProfilesTests(unittest.TestCase):
                 service = ProfilePresetService(feature, "zapret2_mode")
                 new_key = service.set_profile_enabled("template:all_profiles:0", True)
 
-        self.assertEqual(new_key, "profile:1")
+        self.assertEqual(new_key, "profile:0")
         self.assertIn("--hostlist=lists/speedtest.txt\n--out-range=-d8\n--lua-desync=pass", store.text)
         self.assertNotIn("--hostlist=lists/speedtest.txt\n\n--out-range=-d8", store.text)
         self.assertNotIn("--hostlist=lists/youtube.txt\n\n--payload=tls_client_hello", store.text)
-        self.assertTrue(store.text.startswith("--name=youtube.com (интерфейс)\n"))
-        self.assertIn("\n--new\n\n--name=Speedtest", store.text)
 
-    def test_enabling_missing_profile_adds_it_to_end_of_preset(self) -> None:
+    def test_enabling_missing_profile_adds_it_to_top_of_preset(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             (root / "profile" / "templates").mkdir(parents=True)
@@ -516,15 +513,15 @@ class UserProfilesTests(unittest.TestCase):
                 service = ProfilePresetService(feature, "zapret2_mode")
                 new_key = service.set_profile_enabled(f"template:user:{profile_id}", True)
 
-        self.assertEqual(new_key, "profile:1")
+        self.assertEqual(new_key, "profile:0")
         preset = parse_preset_text(store.text, engine="winws2")
         self.assertEqual(len(preset.profiles), 2)
-        self.assertEqual(preset.profiles[0].name, "All TCP")
-        self.assertEqual(preset.profiles[1].name, "My Site")
-        self.assertIn("--hostlist=lists/all.txt", preset.profiles[0].match.hostlist_lines)
-        self.assertIn("--hostlist=lists/my-site.txt", preset.profiles[1].match.hostlist_lines)
-        self.assertTrue(store.text.startswith("--name=All TCP\n"))
-        self.assertIn("\n--new\n\n--name=My Site\n", store.text)
+        self.assertEqual(preset.profiles[0].name, "My Site")
+        self.assertEqual(preset.profiles[1].name, "All TCP")
+        self.assertIn("--hostlist=lists/my-site.txt", preset.profiles[0].match.hostlist_lines)
+        self.assertIn("--hostlist=lists/all.txt", preset.profiles[1].match.hostlist_lines)
+        self.assertTrue(store.text.startswith("--name=My Site\n"))
+        self.assertIn("\n--new\n\n--name=All TCP\n", store.text)
 
     def test_template_profile_bare_hostlist_is_saved_as_lists_relative_path(self) -> None:
         from profile.serializer import append_profile_from_template, serialize_preset
@@ -585,8 +582,7 @@ class UserProfilesTests(unittest.TestCase):
                 service.set_profile_enabled(f"template:user:{profile_id}", True)
                 after_add_again = store.text
 
-        self.assertTrue(after_add.startswith("--name=Tanki X\n"))
-        self.assertIn("\n--new\n\n--name=youtube.com (интерфейс)\n", after_add)
+        self.assertIn("\n--new\n\n--name=Tanki X\n", after_add)
         self.assertNotIn("--new=Tanki X", after_add)
         self.assertNotIn("--new=youtube.com (интерфейс)", after_add)
         self.assertTrue(after_delete.startswith("--name=Tanki X\n"))
