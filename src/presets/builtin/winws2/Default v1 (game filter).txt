@@ -85,7 +85,7 @@
 --hostlist=lists/youtube.txt
 --out-range=-d8
 --payload=tls_client_hello
---lua-desync=multisplit:pos=2,midsld-2:seqovl=1:seqovl_pattern=tls7
+--lua-desync=multisplit_tls:payload=tls_client_hello:seqovl=680:sni=www.google.com:tls_mod=rnd,rndsni,dupsid:pos=2
 
 --new
 
@@ -165,11 +165,10 @@
 
 --name=Мои сайты
 --filter-tcp=80,443-65535
---ipset=lists/ipset-all.txt
+--hostlist=lists/other.txt
 --out-range=-d10
 --payload=tls_client_hello
---lua-desync=fake:blob=tls_google:repeats=6:tcp_ts=-600000
---lua-desync=fakedsplit:pattern=0x00:repeats=6:tcp_ts=-600000
+--lua-desync=fakedsplit:pos=1:tcp_ack=-66000:repeats=10:ip_ttl=4:ip6_ttl=4
 
 --new
 
@@ -271,6 +270,14 @@
 
 --new
 
+--name=Twitter Images (twimg.com)
+--filter-tcp=80,443
+--hostlist=lists/twimg.txt
+--out-range=-d8
+--lua-desync=fake:blob=tls7:tcp_ack=-66000:tcp_ts_up:tls_mod=rnd
+
+--new
+
 --name=Russia blacklist TCP 443
 --filter-tcp=443
 --hostlist=lists/russia-blacklist.txt
@@ -285,8 +292,9 @@
 --ipset=lists/ipset-cloudflare.txt
 --out-range=-d10
 --payload=tls_client_hello
---lua-desync=fake:blob=tls_google:repeats=6:tcp_ts=-600000
---lua-desync=fakedsplit:pattern=0x00:repeats=6:tcp_ts=-600000
+--lua-desync=send:repeats=2
+--lua-desync=syndata:blob=stun_pat
+--lua-desync=tls_multisplit_sni:seqovl=652:seqovl_pattern=stun_pat
 
 --new
 
@@ -405,7 +413,7 @@
 --ipset=lists/ipset-discord.txt
 --out-range=-n8
 --payload=all
---lua-desync=fake:blob=quic_google:ip_autottl=-2,3-20:ip6_autottl=-2,3-20:repeats=10:payload=all
+--lua-desync=fake:blob=quic_google:repeats=12:ip_autottl=2,3-20:ip6_autottl=2,3-20:payload=all
 
 --new
 
