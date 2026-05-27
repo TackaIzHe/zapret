@@ -388,7 +388,7 @@ class PresetSidebarNavigationTests(unittest.TestCase):
             signal.emit()
 
             self.assertEqual(len(scheduled), 1)
-            self.assertGreaterEqual(scheduled[0][0], 200)
+            self.assertGreaterEqual(scheduled[0][0], 4_000)
             scheduled[0][1]()
 
         self.assertIn(PageName.NETWORK, added_pages)
