@@ -21,8 +21,8 @@ from app.ui_texts import tr as tr_catalog
 from ui.window_ui_session import get_window_ui_session
 
 
-SIDEBAR_SEARCH_AFTER_INTERACTIVE_MS = 1_000
-SIDEBAR_HIDDEN_MODE_ITEMS_AFTER_INTERACTIVE_MS = 1_600
+SIDEBAR_SEARCH_AFTER_INTERACTIVE_MS = 2_500
+SIDEBAR_HIDDEN_MODE_ITEMS_AFTER_INTERACTIVE_MS = 6_000
 SIDEBAR_EXPANDED_UI_STATE_KEY = "sidebar_expanded"
 
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 from ui.navigation.sidebar_builder import init_navigation
 from ui.window_ui_session import get_window_ui_session
 from ui.window_bootstrap_runtime import (
@@ -35,6 +37,13 @@ class WindowUiRoot:
         _ = width
         _ = height
 
+        def _metric(marker: str, started_at: float) -> None:
+            try:
+                self._window.log_startup_metric(marker, f"{(time.perf_counter() - started_at) * 1000:.0f}ms")
+            except Exception:
+                pass
+
+        started_at = time.perf_counter()
         initialize_build_ui_state(
             self._window,
             runtime_deps=self._runtime_bootstrap_deps,
@@ -45,13 +54,16 @@ class WindowUiRoot:
             nav_scroll_position=nav_scroll_position,
             sidebar_search_widget_cls=sidebar_search_widget_cls,
         )
+        _metric("StartupWindowUiRootInitialize", started_at)
         session = get_window_ui_session(self._window)
         if session is not None:
+            started_at = time.perf_counter()
             session.preset_runtime_coordinator = create_preset_runtime_coordinator(
                 self._window,
                 self._runtime_bootstrap_deps,
             )
             session.page_host.mark_stack_bootstrap_pending()
+            _metric("StartupWindowUiRootRuntimeCoordinator", started_at)
 
         try:
             launch_method = self._window.get_launch_method()
@@ -59,10 +71,16 @@ class WindowUiRoot:
             launch_method = ""
 
         if session is not None:
+            started_at = time.perf_counter()
             session.page_host.create_eager_pages(get_eager_page_names_for_method(launch_method))
+            _metric("StartupWindowUiRootEagerPages", started_at)
 
+        started_at = time.perf_counter()
         init_navigation(self._window)
+        _metric("StartupWindowUiRootNavigation", started_at)
+        started_at = time.perf_counter()
         finalize_page_stack_bootstrap(self._window)
+        _metric("StartupWindowUiRootStack", started_at)
         ensure_session_memory_defaults(self._window)
 
     def finish_bootstrap(self) -> None:
