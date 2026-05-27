@@ -18,6 +18,7 @@ from profile.profile_setup_loader import (
     ProfileEnabledSaveWorker,
     ProfileListFileValidationWorker,
     ProfileListFileSaveWorker,
+    ProfilePresetProfileActionWorker,
     ProfileRawTextSaveWorker,
     ProfileSettingsSaveWorker,
     ProfileStrategyFeedbackSaveWorker,
@@ -758,16 +759,99 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         enable_handler = inspect.getsource(PresetSetupPageBase._set_profile_enabled_from_menu)
         duplicate_handler = inspect.getsource(PresetSetupPageBase._duplicate_profile_from_menu)
         delete_handler = inspect.getsource(PresetSetupPageBase._delete_profile_from_menu)
+        request_handler = inspect.getsource(PresetSetupPageBase._request_profile_context_action)
+        finish_handler = inspect.getsource(PresetSetupPageBase._on_profile_context_action_finished)
         sync_handler = inspect.getsource(PresetSetupPageBase._sync_profile_list_locally)
 
-        self.assertIn("_refresh_profile_item_locally", enable_handler)
-        self.assertIn("_sync_profile_list_locally", enable_handler)
-        self.assertIn("_sync_profile_list_locally", duplicate_handler)
-        self.assertIn("_sync_profile_list_locally", delete_handler)
+        self.assertIn("_request_profile_context_action", enable_handler)
+        self.assertIn("_request_profile_context_action", duplicate_handler)
+        self.assertIn("_request_profile_context_action", delete_handler)
+        self.assertIn("create_profile_context_action_worker", request_handler)
+        self.assertIn("_refresh_profile_item_locally", finish_handler)
+        self.assertIn("_sync_profile_list_locally", finish_handler)
+        self.assertNotIn("_profile.set_profile_enabled", enable_handler)
+        self.assertNotIn("_profile.duplicate_profile", duplicate_handler)
+        self.assertNotIn("_profile.delete_profile", delete_handler)
         self.assertIn("update_profiles", sync_handler)
         self.assertNotIn("build_profiles", sync_handler)
         self.assertNotIn("_add_profile_item_locally", duplicate_handler)
         self.assertNotIn("_remove_profile_item_locally", delete_handler)
+
+    def test_profile_context_actions_start_worker_without_direct_profile_calls(self) -> None:
+        class _Signal:
+            def __init__(self) -> None:
+                self.callbacks = []
+
+            def connect(self, callback) -> None:
+                self.callbacks.append(callback)
+
+        class _Worker:
+            def __init__(self) -> None:
+                self.finished_action = _Signal()
+                self.failed = _Signal()
+                self.finished = _Signal()
+                self.start = Mock()
+
+            def isRunning(self) -> bool:
+                return False
+
+        page = PresetSetupPageBase.__new__(PresetSetupPageBase)
+        page.launch_method = "zapret2_mode"
+        page._profile = Mock()
+        page._profile.set_profile_enabled.side_effect = AssertionError("enable must run in worker")
+        page._profile.duplicate_profile.side_effect = AssertionError("duplicate must run in worker")
+        page._profile.delete_profile.side_effect = AssertionError("delete must run in worker")
+        page._profile_context_action_request_id = 0
+        page._profile_context_action_worker = None
+        worker = _Worker()
+        page._create_profile_context_action_worker = Mock(return_value=worker)
+
+        PresetSetupPageBase._request_profile_context_action(
+            page,
+            "set_enabled",
+            "profile-1",
+            enabled=True,
+        )
+
+        page._profile.set_profile_enabled.assert_not_called()
+        page._profile.duplicate_profile.assert_not_called()
+        page._profile.delete_profile.assert_not_called()
+        page._create_profile_context_action_worker.assert_called_once_with(
+            1,
+            "zapret2_mode",
+            action="set_enabled",
+            profile_key="profile-1",
+            enabled=True,
+            parent=page,
+        )
+        worker.start.assert_called_once()
+
+    def test_profile_context_action_worker_emits_result(self) -> None:
+        profile = Mock()
+        profile.set_profile_enabled.return_value = "profile-2"
+        worker = ProfilePresetProfileActionWorker(
+            6,
+            profile,
+            "zapret2_mode",
+            action="set_enabled",
+            profile_key="profile-1",
+            enabled=True,
+        )
+        finished = []
+
+        worker.finished_action.connect(
+            lambda request_id, action, profile_key, result: finished.append((
+                request_id,
+                action,
+                profile_key,
+                result,
+            ))
+        )
+
+        worker.run()
+
+        profile.set_profile_enabled.assert_called_once_with("zapret2_mode", "profile-1", True)
+        self.assertEqual(finished, [(6, "set_enabled", "profile-1", "profile-2")])
 
     def test_strategy_list_repaints_viewport_rect_after_current_strategy_changes(self) -> None:
         source = inspect.getsource(ProfileStrategyListWidget.set_current_strategy_id)

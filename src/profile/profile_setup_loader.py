@@ -211,6 +211,50 @@ class ProfileEnabledSaveWorker(QThread):
         self.saved.emit(self._request_id, str(profile_key or ""), self._enabled)
 
 
+class ProfilePresetProfileActionWorker(QThread):
+    finished_action = pyqtSignal(int, str, str, object)
+    failed = pyqtSignal(int, str)
+
+    def __init__(
+        self,
+        request_id: int,
+        profile,
+        launch_method: str,
+        *,
+        action: str,
+        profile_key: str,
+        enabled: bool | None = None,
+        parent=None,
+    ):
+        super().__init__(parent)
+        self._request_id = int(request_id)
+        self._profile = profile
+        self._launch_method = str(launch_method or "").strip()
+        self._action = str(action or "").strip()
+        self._profile_key = str(profile_key or "").strip()
+        self._enabled = enabled
+
+    def run(self) -> None:
+        try:
+            if self._action == "set_enabled":
+                result = self._profile.set_profile_enabled(
+                    self._launch_method,
+                    self._profile_key,
+                    bool(self._enabled),
+                )
+            elif self._action == "duplicate":
+                result = self._profile.duplicate_profile(self._launch_method, self._profile_key)
+            elif self._action == "delete":
+                result = bool(self._profile.delete_profile(self._launch_method, self._profile_key))
+            else:
+                raise ValueError(f"Неизвестное действие profile: {self._action}")
+        except Exception as exc:
+            log(f"ProfilePresetProfileActionWorker: не удалось выполнить действие profile: {exc}", "ERROR")
+            self.failed.emit(self._request_id, str(exc))
+            return
+        self.finished_action.emit(self._request_id, self._action, self._profile_key, result)
+
+
 class ProfileUserProfileCreateWorker(QThread):
     created = pyqtSignal(int, str)
     failed = pyqtSignal(int, str)

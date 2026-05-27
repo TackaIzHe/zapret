@@ -10,6 +10,7 @@ from profile.match_filters import filter_values
 from profile.ui.profile_context_menu import ProfileContextMenuActions, show_profile_context_menu
 from profile.ui.profile_folder_menu import show_profile_folder_menu
 from profile.profile_setup_loader import (
+    ProfilePresetProfileActionWorker,
     ProfileUserProfileCreateWorker,
     ProfileUserProfileDeleteWorker,
     ProfileUserProfileUpdateWorker,
@@ -67,6 +68,8 @@ class PresetSetupPageBase(BasePage):
         self._toolbar_actions_bar = None
         self._profile_load_request_id = 0
         self._profile_load_worker = None
+        self._profile_context_action_request_id = 0
+        self._profile_context_action_worker = None
         self._user_profile_create_request_id = 0
         self._user_profile_create_worker = None
         self._user_profile_update_request_id = 0
@@ -366,24 +369,10 @@ class PresetSetupPageBase(BasePage):
         )
 
     def _set_profile_enabled_from_menu(self, profile_key: str, enabled: bool) -> None:
-        try:
-            new_key = self._profile.set_profile_enabled(self.launch_method, profile_key, bool(enabled))
-            target_key = new_key or profile_key
-            if str(profile_key or "").startswith("profile:") and str(target_key or "") == str(profile_key or ""):
-                self._refresh_profile_item_locally(profile_key, target_key)
-            else:
-                self._sync_profile_list_locally()
-        except Exception as exc:
-            log(f"{self.__class__.__name__}: не удалось изменить состояние profile: {exc}", "ERROR")
-            InfoBar.error(title="Ошибка", content=str(exc), parent=self.window())
+        self._request_profile_context_action("set_enabled", profile_key, enabled=bool(enabled))
 
     def _duplicate_profile_from_menu(self, profile_key: str) -> None:
-        try:
-            self._profile.duplicate_profile(self.launch_method, profile_key)
-            self._sync_profile_list_locally()
-        except Exception as exc:
-            log(f"{self.__class__.__name__}: не удалось дублировать profile: {exc}", "ERROR")
-            InfoBar.error(title="Ошибка", content=str(exc), parent=self.window())
+        self._request_profile_context_action("duplicate", profile_key)
 
     def _delete_profile_from_menu(self, profile_key: str) -> None:
         dialog = MessageBox(
@@ -395,12 +384,81 @@ class PresetSetupPageBase(BasePage):
         dialog.cancelButton.setText("Отмена")
         if not dialog.exec():
             return
-        try:
-            if self._profile.delete_profile(self.launch_method, profile_key):
+        self._request_profile_context_action("delete", profile_key)
+
+    def _request_profile_context_action(self, action: str, profile_key: str, *, enabled: bool | None = None) -> None:
+        profile_key = str(profile_key or "").strip()
+        if not profile_key:
+            return
+        worker = self.__dict__.get("_profile_context_action_worker")
+        if worker is not None:
+            try:
+                if worker.isRunning():
+                    return
+            except Exception:
+                return
+        self._profile_context_action_request_id = int(getattr(self, "_profile_context_action_request_id", 0) or 0) + 1
+        request_id = self._profile_context_action_request_id
+        worker = self._create_profile_context_action_worker(
+            request_id,
+            self.launch_method,
+            action=str(action or ""),
+            profile_key=profile_key,
+            enabled=enabled,
+            parent=self,
+        )
+        self._profile_context_action_worker = worker
+        worker.finished_action.connect(self._on_profile_context_action_finished)
+        worker.failed.connect(self._on_profile_context_action_failed)
+        worker.finished.connect(lambda w=worker: self._on_profile_context_action_worker_finished(w))
+        worker.start()
+
+    def _on_profile_context_action_finished(self, request_id: int, action: str, profile_key: str, result) -> None:
+        if request_id != int(getattr(self, "_profile_context_action_request_id", 0) or 0):
+            return
+        if action == "set_enabled":
+            target_key = str(result or profile_key)
+            if str(profile_key or "").startswith("profile:") and target_key == str(profile_key or ""):
+                self._refresh_profile_item_locally(profile_key, target_key)
+            else:
                 self._sync_profile_list_locally()
-        except Exception as exc:
-            log(f"{self.__class__.__name__}: не удалось удалить profile из preset: {exc}", "ERROR")
-            InfoBar.error(title="Ошибка", content=str(exc), parent=self.window())
+            return
+        if action == "duplicate":
+            self._sync_profile_list_locally()
+            return
+        if action == "delete" and bool(result):
+            self._sync_profile_list_locally()
+
+    def _on_profile_context_action_failed(self, request_id: int, error: str) -> None:
+        if request_id != int(getattr(self, "_profile_context_action_request_id", 0) or 0):
+            return
+        log(f"{self.__class__.__name__}: не удалось выполнить действие profile: {error}", "ERROR")
+        InfoBar.error(title="Ошибка", content=str(error), parent=self.window())
+
+    def _on_profile_context_action_worker_finished(self, worker) -> None:
+        if self.__dict__.get("_profile_context_action_worker") is worker:
+            self._profile_context_action_worker = None
+        worker.deleteLater()
+
+    def _create_profile_context_action_worker(
+        self,
+        request_id: int,
+        launch_method: str,
+        *,
+        action: str,
+        profile_key: str,
+        enabled: bool | None = None,
+        parent=None,
+    ):
+        return ProfilePresetProfileActionWorker(
+            request_id,
+            self._profile,
+            launch_method,
+            action=action,
+            profile_key=profile_key,
+            enabled=enabled,
+            parent=parent,
+        )
 
     def _sync_profile_list_locally(self) -> None:
         profiles_list = self._profiles_list
