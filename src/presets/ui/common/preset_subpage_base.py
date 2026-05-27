@@ -165,6 +165,8 @@ class PresetRawEditorPage(BasePage):
         self._raw_save_succeeded = True
         self._raw_activate_request_id = 0
         self._raw_activate_worker = None
+        self._raw_action_request_id = 0
+        self._raw_action_worker = None
         self._cleanup_in_progress = False
         self._ui_state_store = None
         self._ui_state_unsubscribe = None
@@ -851,6 +853,75 @@ class PresetRawEditorPage(BasePage):
         if self.activateButton is not None:
             self.activateButton.setEnabled(True)
 
+    def _request_raw_preset_action(self, action: str, **payload) -> None:
+        worker = self._raw_action_worker
+        if worker is not None:
+            try:
+                if worker.isRunning():
+                    return
+            except Exception:
+                return
+        self._raw_action_request_id += 1
+        request_id = self._raw_action_request_id
+        worker = self._controller.create_action_worker(
+            request_id,
+            action=action,
+            payload=payload,
+            parent=self,
+        )
+        self._raw_action_worker = worker
+        worker.completed.connect(self._on_raw_preset_action_finished)
+        worker.failed.connect(self._on_raw_preset_action_failed)
+        worker.finished.connect(lambda w=worker: self._on_raw_preset_action_worker_finished(w))
+        worker.start()
+
+    def _on_raw_preset_action_finished(self, request_id: int, action: str, result, payload) -> None:
+        if request_id != self._raw_action_request_id:
+            return
+        if action == "rename":
+            updated, path = result
+            self._notify_preset_structure_changed()
+            self._preset_name = updated.name
+            self._preset_file_name = updated.file_name
+            self._preset_path = path
+            self._load_file()
+            self._refresh_header()
+            self._show_success(f"Пресет переименован: {payload.get('new_name') or updated.name}")
+        elif action == "duplicate":
+            duplicated, path = result
+            self._notify_preset_structure_changed()
+            self._preset_name = duplicated.name
+            self._preset_file_name = duplicated.file_name
+            self._preset_path = path
+            self._load_file()
+            self._refresh_header()
+            self._show_success(f"Создан дубликат: {payload.get('new_name') or duplicated.name}")
+        elif action == "export":
+            self._show_success(f"Пресет экспортирован: {result}")
+        elif action == "reset":
+            updated, path = result
+            self._preset_name = updated.name
+            self._preset_file_name = updated.file_name
+            self._preset_path = path
+            self._load_file()
+            self._refresh_header()
+            self._show_success(f"Восстановлен встроенный пресет «{self._preset_name}»")
+        elif action == "delete":
+            name = str(payload.get("display_name") or self._preset_name or "").strip()
+            self._notify_preset_structure_changed()
+            self._open_back_callback()
+            self._show_success(f"Пресет «{name}» удалён")
+
+    def _on_raw_preset_action_failed(self, request_id: int, _action: str, error: str, _payload) -> None:
+        if request_id != self._raw_action_request_id:
+            return
+        self._show_error(str(error))
+
+    def _on_raw_preset_action_worker_finished(self, worker) -> None:
+        if self._raw_action_worker is worker:
+            self._raw_action_worker = None
+        worker.deleteLater()
+
     def _activation_footer_text(self) -> str:
         try:
             store = self._ui_state_store
@@ -868,7 +939,7 @@ class PresetRawEditorPage(BasePage):
                 return
             if self._preset_path is None:
                 return
-            self._controller.open_source_file(self._preset_path)
+            self._request_raw_preset_action("open", path=self._preset_path)
         except Exception as e:
             self._show_error(str(e))
 
@@ -915,31 +986,21 @@ class PresetRawEditorPage(BasePage):
         new_name = dialog.nameEdit.text().strip()
         if not new_name or new_name == self._preset_name:
             return
-        try:
-            updated = self._controller.rename(
-                file_name=self._preset_file_name,
-                new_name=new_name,
-            )
-            self._notify_preset_structure_changed()
-            self.set_preset_file_name(updated.file_name)
-            self._show_success(f"Пресет переименован: {new_name}")
-        except Exception as e:
-            self._show_error(str(e))
+        self._request_raw_preset_action(
+            "rename",
+            file_name=self._preset_file_name,
+            new_name=new_name,
+        )
 
     def _duplicate_preset(self) -> None:
         if not self._run_after_raw_preset_save(self._duplicate_preset):
             return
-        try:
-            new_name = f"{self._preset_name} (копия)"
-            duplicated = self._controller.duplicate(
-                file_name=self._preset_file_name,
-                new_name=new_name,
-            )
-            self._notify_preset_structure_changed()
-            self.set_preset_file_name(duplicated.file_name)
-            self._show_success(f"Создан дубликат: {new_name}")
-        except Exception as e:
-            self._show_error(str(e))
+        new_name = f"{self._preset_name} (копия)"
+        self._request_raw_preset_action(
+            "duplicate",
+            file_name=self._preset_file_name,
+            new_name=new_name,
+        )
 
     def _export_preset(self) -> None:
         if not self._run_after_raw_preset_save(self._export_preset):
@@ -952,14 +1013,11 @@ class PresetRawEditorPage(BasePage):
         )
         if not file_path:
             return
-        try:
-            self._controller.export(
-                file_name=self._preset_file_name,
-                target_path=file_path,
-            )
-            self._show_success(f"Пресет экспортирован: {file_path}")
-        except Exception as e:
-            self._show_error(str(e))
+        self._request_raw_preset_action(
+            "export",
+            file_name=self._preset_file_name,
+            target_path=file_path,
+        )
 
     def _reset_preset(self) -> None:
         if not self._run_after_raw_preset_save(self._reset_preset):
@@ -976,18 +1034,10 @@ class PresetRawEditorPage(BasePage):
             box.cancelButton.setText("Отмена")
             if not box.exec():
                 return
-        try:
-            updated = self._controller.reset_to_builtin(
-                file_name=self._preset_file_name,
-            )
-            self._preset_name = updated.name
-            self._preset_file_name = updated.file_name
-            self._preset_path = self._controller.source_path(self._preset_file_name)
-            self._load_file()
-            self._refresh_header()
-            self._show_success(f"Восстановлен встроенный пресет «{self._preset_name}»")
-        except Exception as e:
-            self._show_error(str(e))
+        self._request_raw_preset_action(
+            "reset",
+            file_name=self._preset_file_name,
+        )
 
     def _delete_preset(self) -> None:
         if self._is_current_builtin():
@@ -1006,16 +1056,11 @@ class PresetRawEditorPage(BasePage):
             box.cancelButton.setText("Отмена")
             if not box.exec():
                 return
-        try:
-            name = self._preset_name
-            self._controller.delete(
-                file_name=self._preset_file_name,
-            )
-            self._notify_preset_structure_changed()
-            self._open_back_callback()
-            self._show_success(f"Пресет «{name}» удалён")
-        except Exception as e:
-            self._show_error(str(e))
+        self._request_raw_preset_action(
+            "delete",
+            file_name=self._preset_file_name,
+            display_name=self._preset_name,
+        )
 
     def _current_selected_name(self) -> str:
         try:

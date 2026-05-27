@@ -16,7 +16,7 @@ from presets import display_state
 from presets import commands as preset_commands
 from presets.ui.common.preset_subpage_base import PresetRawEditorPage
 from presets.ui.common.user_presets_page import UserPresetsPageBase
-from presets.raw_preset_loader import RawPresetActivateWorker, RawPresetSaveWorker
+from presets.raw_preset_loader import RawPresetActionWorker, RawPresetActivateWorker, RawPresetSaveWorker
 from presets.user_presets_action_workers import UserPresetActivateWorker
 import presets.ui.control.additional_settings_runtime as control_additional_settings_runtime
 import presets.ui.control.control_page_shared as control_page_shared
@@ -753,6 +753,39 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("_request_preset_activation", source)
         self.assertIn("create_activate_worker", request_source)
         self.assertIn("controller.activate", worker_source)
+
+    def test_raw_preset_editor_file_actions_run_through_worker(self) -> None:
+        action_sources = "\n".join(
+            inspect.getsource(method)
+            for method in (
+                PresetRawEditorPage._open_external,
+                PresetRawEditorPage._rename_preset,
+                PresetRawEditorPage._duplicate_preset,
+                PresetRawEditorPage._export_preset,
+                PresetRawEditorPage._reset_preset,
+                PresetRawEditorPage._delete_preset,
+            )
+        )
+        workflow_source = inspect.getsource(__import__("presets.raw_preset_editor_workflow", fromlist=["RawPresetEditorController"]).RawPresetEditorController)
+        worker_source = inspect.getsource(RawPresetActionWorker.run)
+
+        for call in (
+            "self._controller.open_source_file(",
+            "self._controller.rename(",
+            "self._controller.duplicate(",
+            "self._controller.export(",
+            "self._controller.reset_to_builtin(",
+            "self._controller.delete(",
+        ):
+            self.assertNotIn(call, action_sources)
+        self.assertIn("_request_raw_preset_action", action_sources)
+        self.assertIn("create_action_worker", workflow_source)
+        self.assertIn("RawPresetActionWorker", workflow_source)
+        self.assertIn("controller.rename", worker_source)
+        self.assertIn("controller.duplicate", worker_source)
+        self.assertIn("controller.export", worker_source)
+        self.assertIn("controller.reset_to_builtin", worker_source)
+        self.assertIn("controller.delete", worker_source)
 
     def test_profile_setup_builds_hidden_tabs_lazily(self) -> None:
         build_source = inspect.getsource(ProfileSetupPageBase._build_content)

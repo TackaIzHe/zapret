@@ -67,6 +67,69 @@ class RawPresetSaveWorker(QThread):
         )
 
 
+class RawPresetActionWorker(QThread):
+    completed = pyqtSignal(int, str, object, object)
+    failed = pyqtSignal(int, str, str, object)
+
+    def __init__(
+        self,
+        request_id: int,
+        controller,
+        *,
+        action: str,
+        payload: dict | None = None,
+        parent=None,
+    ):
+        super().__init__(parent)
+        self._request_id = int(request_id)
+        self.controller = controller
+        self._action = str(action or "").strip()
+        self._payload = dict(payload or {})
+
+    def run(self) -> None:
+        action = self._action
+        payload = self._payload
+        controller = self.controller
+        try:
+            if action == "open":
+                result = controller.open_source_file(payload.get("path"))
+            elif action == "rename":
+                updated = controller.rename(
+                    file_name=str(payload.get("file_name") or ""),
+                    new_name=str(payload.get("new_name") or ""),
+                )
+                result = (updated, controller.source_path(updated.file_name))
+            elif action == "duplicate":
+                updated = controller.duplicate(
+                    file_name=str(payload.get("file_name") or ""),
+                    new_name=str(payload.get("new_name") or ""),
+                )
+                result = (updated, controller.source_path(updated.file_name))
+            elif action == "export":
+                target_path = str(payload.get("target_path") or "")
+                controller.export(
+                    file_name=str(payload.get("file_name") or ""),
+                    target_path=target_path,
+                )
+                result = target_path
+            elif action == "reset":
+                updated = controller.reset_to_builtin(
+                    file_name=str(payload.get("file_name") or ""),
+                )
+                result = (updated, controller.source_path(updated.file_name))
+            elif action == "delete":
+                result = controller.delete(
+                    file_name=str(payload.get("file_name") or ""),
+                )
+            else:
+                raise ValueError(f"Неизвестное действие preset: {action}")
+        except Exception as exc:
+            log(f"RawPresetActionWorker: действие {action} не выполнено: {exc}", "ERROR")
+            self.failed.emit(self._request_id, action, str(exc), payload)
+            return
+        self.completed.emit(self._request_id, action, result, payload)
+
+
 class RawPresetActivateWorker(QThread):
     activated = pyqtSignal(int, bool)
     failed = pyqtSignal(int, str)
