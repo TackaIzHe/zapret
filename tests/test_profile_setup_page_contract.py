@@ -762,10 +762,11 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         page._profile_key = "profile-1"
         page._payload = SimpleNamespace(item=SimpleNamespace(strategy_id="tls_fake", in_preset=True, enabled=True))
         page._controller = Mock()
-        page._controller.apply_strategy.return_value = None
+        page._controller.apply_strategy.return_value = "profile-1"
         page.reload_current_profile = Mock()
         page._on_profile_changed_callback = Mock()
         page._apply_strategy_detail = Mock(side_effect=AssertionError("detail page must not open"))
+        page._apply_strategy_locally = Mock(return_value=True)
 
         ProfileSetupPageBase._on_strategy_list_activated(page, "tls_fake")
 
@@ -773,6 +774,25 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             profile_key="profile-1",
             strategy_id="tls_fake",
         )
+        page.reload_current_profile.assert_not_called()
+        page._apply_strategy_locally.assert_called_once_with("tls_fake")
+        page._on_profile_changed_callback.assert_called_once_with("profile-1", "strategy")
+
+    def test_clicking_template_strategy_still_reloads_after_profile_is_added(self) -> None:
+        page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        page._loading = False
+        page._profile_key = "template:profile-1"
+        page._payload = SimpleNamespace(item=SimpleNamespace(strategy_id="none", in_preset=False, enabled=True))
+        page._controller = Mock()
+        page._controller.apply_strategy.return_value = "profile-1"
+        page.reload_current_profile = Mock()
+        page._on_profile_changed_callback = Mock()
+        page._apply_strategy_locally = Mock(return_value=False)
+
+        ProfileSetupPageBase._on_strategy_list_activated(page, "tls_fake")
+
+        page.reload_current_profile.assert_called_once()
+        page._on_profile_changed_callback.assert_called_once_with("profile-1", "strategy")
 
     def test_clicking_strategy_for_skipped_profile_does_not_apply_strategy(self) -> None:
         page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)

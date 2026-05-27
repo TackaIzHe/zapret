@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from PyQt6.QtCore import QModelIndex, QRect, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFontMetrics, QPainter
 from PyQt6.QtWidgets import (
@@ -28,6 +30,7 @@ from profile.ui.profile_setup_controls import (
 )
 from profile.setup_controller import ProfileSetupController
 from profile.strategy_visuals import describe_strategy_visual
+from profile.strategy_state import ProfileStrategyState
 from profile.ui.user_profile_dialog import CreateUserProfileDialog
 from qfluentwidgets import (
     BodyLabel,
@@ -268,6 +271,38 @@ class ProfileStrategyListWidget(QWidget):
         self._states = dict(states or {})
         self._current_strategy_id = str(current_strategy_id or "none").strip() or "none"
         self._rebuild_tree()
+
+    def set_current_strategy_id(self, strategy_id: str) -> None:
+        next_id = str(strategy_id or "none").strip() or "none"
+        if next_id == self._current_strategy_id:
+            return
+        previous_id = self._current_strategy_id
+        self._current_strategy_id = next_id
+        for row in range(self._list.count()):
+            item = self._list.item(row)
+            item_id = self._strategy_id_for_item(item)
+            if item_id not in {previous_id, next_id}:
+                continue
+            state = self._states.get(item_id)
+            is_current = item_id == next_id
+            status_parts = []
+            if is_current:
+                status_parts.append("Выбрана")
+            if bool(getattr(state, "favorite", False)):
+                status_parts.append("В избранном")
+            rating = str(getattr(state, "rating", "") or "")
+            if rating == "work":
+                status_parts.append("Работает")
+            elif rating == "notwork":
+                status_parts.append("Не работает")
+            item.setData(self._ROLE_STATUS_TEXT, " • ".join(status_parts))
+            item.setData(self._ROLE_IS_ACTIVE, is_current)
+            if is_current:
+                self._list.setCurrentItem(item)
+                item.setSelected(True)
+            else:
+                item.setSelected(False)
+            self._list.update(self._list.visualItemRect(item))
 
     def _rebuild_tree(self) -> None:
         search_text = self._search.text().strip().lower()
@@ -1462,10 +1497,44 @@ class ProfileSetupPageBase(BasePage):
             )
             if new_key:
                 self._profile_key = new_key
-            self.reload_current_profile()
+            if not self._apply_strategy_locally(strategy_id):
+                self.reload_current_profile()
             self._on_profile_changed_callback(self._profile_key, "strategy")
         except Exception as exc:
             log(f"{self.__class__.__name__}: не удалось применить стратегию: {exc}", "ERROR")
+
+    def _apply_strategy_locally(self, strategy_id: str) -> bool:
+        payload = self._payload
+        if payload is None:
+            return False
+        item = getattr(payload, "item", None)
+        if item is None or not bool(getattr(item, "in_preset", False)):
+            return False
+        entry = (getattr(payload, "strategy_entries", {}) or {}).get(strategy_id)
+        if entry is None:
+            return False
+
+        state = (getattr(payload, "strategy_states", {}) or {}).get(strategy_id, ProfileStrategyState())
+        updated_item = replace(
+            item,
+            strategy_id=strategy_id,
+            strategy_name=str(getattr(entry, "name", "") or strategy_id),
+            enabled=True,
+            rating=str(getattr(state, "rating", "") or ""),
+            favorite=bool(getattr(state, "favorite", False)),
+        )
+        self._payload = replace(
+            payload,
+            item=updated_item,
+            raw_strategy_text=str(getattr(entry, "args", "") or ""),
+            current_strategy_state=state,
+        )
+        self._strategy_list.set_current_strategy_id(strategy_id)
+        self._apply_feedback_buttons(self._payload)
+        if self._match_tab_built:
+            self._apply_match_tab_payload()
+        self._rebuild_breadcrumb()
+        return True
 
     def _set_current_strategy_feedback(self, *, rating: str) -> None:
         if self._loading or not self._profile_key:
