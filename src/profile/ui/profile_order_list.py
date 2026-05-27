@@ -103,11 +103,11 @@ class ProfileOrderListModel(QAbstractListModel):
         if role == ProfileListModel.CountRole:
             return 0
         if role == ProfileListModel.IconNameRole:
-            icon_name, _icon_color = resolve_profile_icon(display_name, match_lines)
-            return icon_name
+            icon = resolve_profile_icon(display_name, match_lines)
+            return icon.icon_name
         if role == ProfileListModel.IconColorRole:
-            _icon_name, icon_color = resolve_profile_icon(display_name, match_lines)
-            return icon_color
+            icon = resolve_profile_icon(display_name, match_lines)
+            return icon.color
         if role == ProfileListModel.TooltipRole:
             return "\n".join((display_name, description)).strip()
         return None

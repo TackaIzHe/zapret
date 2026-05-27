@@ -41,6 +41,18 @@ class ProfileOrderPageTests(unittest.TestCase):
         self.assertEqual(model.index(0, 0).data(ProfileListModel.ProfileKeyRole), "profile:0")
         self.assertEqual(model.index(0, 0).data(ProfileListModel.DisplayNameRole), "YouTube")
 
+    def test_order_model_returns_icon_roles_from_profile_icon_spec(self) -> None:
+        from profile.ui.profile_order_list import ProfileOrderListModel
+        from profile.ui.profile_list_model import ProfileListModel
+
+        model = ProfileOrderListModel()
+        model.set_profiles((_item("YouTube", key="profile:0", profile_index=0),))
+
+        index = model.index(0, 0)
+
+        self.assertEqual(index.data(ProfileListModel.IconNameRole), "simple:youtube:YT")
+        self.assertEqual(index.data(ProfileListModel.IconColorRole), "#FF0000")
+
     def test_order_page_explains_priority_and_uses_order_service_methods(self) -> None:
         from profile.ui.profile_order_page import ProfileOrderPageBase
 
