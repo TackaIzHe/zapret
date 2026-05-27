@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 import tempfile
+import time
 import unittest
 
 
@@ -479,6 +480,39 @@ class Winws2LaunchPresetValidationTests(unittest.TestCase):
         output = runner._read_process_startup_output(FakeProcess())
 
         self.assertEqual(output, "winws stdout diagnostic")
+
+    def test_runner_drains_long_running_process_output_without_logs_page(self) -> None:
+        from winws_runtime.runners.zapret2_runner import Winws2StrategyRunner
+
+        class FakeStream:
+            def __init__(self, lines):
+                self._lines = list(lines)
+
+            def readline(self):
+                if self._lines:
+                    return self._lines.pop(0)
+                return b""
+
+        class FakeProcess:
+            pid = 2468
+
+            def __init__(self):
+                self.stdout = FakeStream([b"stdout line\n"])
+                self.stderr = FakeStream([b"stderr line\n"])
+
+        runner = object.__new__(Winws2StrategyRunner)
+        runner._start_process_output_drainers(FakeProcess())
+
+        deadline = time.perf_counter() + 1.0
+        output = []
+        while time.perf_counter() < deadline:
+            output = runner.get_recent_process_output()
+            if len(output) >= 2:
+                break
+            time.sleep(0.01)
+
+        self.assertIn(("stdout", "stdout line"), output)
+        self.assertIn(("stderr", "stderr line"), output)
 
     def test_winws1_compile_resolves_bare_list_paths_for_launch(self) -> None:
         from threading import RLock

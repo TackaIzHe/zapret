@@ -424,21 +424,6 @@ def build_winws_output_plan(
             process=None,
         )
 
-    process = runner.get_process()
-    if not process:
-        from app.ui_texts import tr as tr_catalog
-
-        return LogsWinwsOutputPlan(
-            action="idle",
-            status_kind="neutral",
-            status_text=tr_catalog(
-                "page.logs.winws.status.not_running",
-                language=language,
-                default="Процесс не запущен",
-            ),
-            process=None,
-        )
-
     strategy_info = {}
     try:
         get_info = getattr(runner, "get_current_strategy_info", None)
@@ -454,8 +439,8 @@ def build_winws_output_plan(
         strategy_name = strategy_name[:32] + "..."
 
     return LogsWinwsOutputPlan(
-        action="start_worker",
+        action="status_only",
         status_kind="running",
         status_text=f"PID: {_format_process_pid(process_pid)} | {strategy_name}",
-        process=process,
+        process=None,
     )

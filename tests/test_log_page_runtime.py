@@ -20,7 +20,7 @@ class _FakeDirectRunner:
 
 
 class LogPageRuntimeTests(unittest.TestCase):
-    def test_winws_output_plan_uses_runtime_pid_and_direct_runner_process(self) -> None:
+    def test_winws_output_plan_does_not_give_log_page_process_pipe_ownership(self) -> None:
         process = object()
         runner = _FakeDirectRunner(process)
 
@@ -32,8 +32,8 @@ class LogPageRuntimeTests(unittest.TestCase):
             language="ru",
         )
 
-        self.assertEqual(plan.action, "start_worker")
-        self.assertEqual(plan.process, process)
+        self.assertEqual(plan.action, "status_only")
+        self.assertIsNone(plan.process)
         self.assertIn("24680", plan.status_text)
         self.assertIn("Default v5", plan.status_text)
 

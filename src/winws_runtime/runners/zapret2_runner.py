@@ -700,6 +700,7 @@ class Winws2StrategyRunner(StrategyRunnerBase):
             )
 
             if stable_ok:
+                self._start_process_output_drainers(self.running_process)
                 self._set_runner_state_locked(
                     PresetRunnerState.RUNNING,
                     preset_path=artifact.preset_path,

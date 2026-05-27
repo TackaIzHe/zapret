@@ -255,6 +255,7 @@ class Winws1StrategyRunner(StrategyRunnerBase):
                 self.running_process,
                 readiness_check=lambda: self._spawn_readiness_check_locked(self.running_process),
             ):
+                self._start_process_output_drainers(self.running_process)
                 self._set_runner_state_locked(
                     PresetRunnerState.RUNNING,
                     preset_path=artifact.preset_path,
