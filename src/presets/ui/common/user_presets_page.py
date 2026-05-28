@@ -1342,7 +1342,7 @@ class UserPresetsPageBase(BasePage):
                 content=str(getattr(result, "infobar_content", "") or ""),
                 parent=self.window(),
             )
-        self._refresh_presets_view_from_cache()
+        self._runtime_service.apply_active_preset_marker()
 
     def _on_preset_activation_failed(self, request_id: int, error: str) -> None:
         if request_id != int(getattr(self, "_preset_activate_request_id", 0) or 0):
@@ -1355,7 +1355,7 @@ class UserPresetsPageBase(BasePage):
             content=str(error),
             parent=self.window(),
         )
-        self._refresh_presets_view_from_cache()
+        self._runtime_service.apply_active_preset_marker()
 
     def _on_preset_activate_worker_finished(self, worker) -> None:
         if self.__dict__.get("_preset_activate_worker") is worker:

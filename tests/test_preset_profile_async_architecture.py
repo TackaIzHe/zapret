@@ -314,6 +314,47 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("create_preset_activate_worker", request_source)
         self.assertIn("actions_api.activate_preset", worker_source)
 
+    def test_user_presets_activation_error_restores_marker_without_list_reload(self) -> None:
+        page = UserPresetsPageBase.__new__(UserPresetsPageBase)
+        page._preset_activate_request_id = 4
+        page._pending_preset_activation = None
+        page._runtime_service = Mock()
+        page._refresh_presets_view_from_cache = Mock(
+            side_effect=AssertionError("activation error must not reload the whole preset list")
+        )
+        page._tr = Mock(side_effect=lambda _key, default, **_kwargs: default)
+        page.window = Mock(return_value=None)
+        result = SimpleNamespace(
+            ok=False,
+            log_message="Ошибка активации",
+            log_level="ERROR",
+            infobar_level="error",
+            infobar_title="Ошибка",
+            infobar_content="Не удалось",
+            activated_file_name=None,
+        )
+
+        with patch("presets.ui.common.user_presets_page.InfoBar.error"):
+            UserPresetsPageBase._on_preset_activation_finished(page, 4, result)
+
+        page._runtime_service.apply_active_preset_marker.assert_called_once_with()
+
+    def test_user_presets_activation_failure_restores_marker_without_list_reload(self) -> None:
+        page = UserPresetsPageBase.__new__(UserPresetsPageBase)
+        page._preset_activate_request_id = 5
+        page._pending_preset_activation = None
+        page._runtime_service = Mock()
+        page._refresh_presets_view_from_cache = Mock(
+            side_effect=AssertionError("activation failure must not reload the whole preset list")
+        )
+        page._tr = Mock(side_effect=lambda _key, default, **_kwargs: default)
+        page.window = Mock(return_value=None)
+
+        with patch("presets.ui.common.user_presets_page.InfoBar.error"):
+            UserPresetsPageBase._on_preset_activation_failed(page, 5, "bad")
+
+        page._runtime_service.apply_active_preset_marker.assert_called_once_with()
+
     def test_preset_model_removes_visible_preset_without_full_reset(self) -> None:
         model = PresetListModel()
         model.set_rows([
