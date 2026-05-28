@@ -153,6 +153,8 @@ class HostsPage(BasePage):
         self._worker = None
         self._thread = None
         self._services_catalog_runtime = OneShotWorkerRuntime()
+        self._selection_save_runtime = OneShotWorkerRuntime()
+        self._selection_save_pending = None
         self._applying = False
         self._cleanup_in_progress = False
         self._runtime_cache = create_runtime_cache()
@@ -616,7 +618,7 @@ class HostsPage(BasePage):
         )
         if new_selection is not None:
             self._service_dns_selection = new_selection
-            self._controller.save_user_selection(self._service_dns_selection)
+            self._request_user_selection_save(self._service_dns_selection)
             if plan.apply_now:
                 self._apply_current_selection()
 
@@ -672,7 +674,7 @@ class HostsPage(BasePage):
 
         self._service_dns_selection = dict(catalog_plan.new_selection)
         if catalog_plan.selection_changed:
-            self._controller.save_user_selection(self._service_dns_selection)
+            self._request_user_selection_save(self._service_dns_selection)
 
     def _on_direct_toggle_changed(self, service_name: str, checked: bool) -> None:
         if getattr(self, "_building_services_ui", False):
@@ -696,7 +698,7 @@ class HostsPage(BasePage):
             set_building_state=self._set_building_services_ui,
             update_profile_visual=self._update_profile_row_visual,
         )
-        self._controller.save_user_selection(self._service_dns_selection)
+        self._request_user_selection_save(self._service_dns_selection)
         if should_apply:
             self._apply_current_selection()
 
@@ -736,7 +738,7 @@ class HostsPage(BasePage):
             service_name=service_name,
             update_profile_visual=self._update_profile_row_visual,
         )
-        self._controller.save_user_selection(self._service_dns_selection)
+        self._request_user_selection_save(self._service_dns_selection)
         if should_apply:
             self._apply_current_selection()
 
@@ -766,7 +768,7 @@ class HostsPage(BasePage):
     def _apply_current_selection(self):
         if self._applying:
             return
-        self._controller.save_user_selection(self._service_dns_selection)
+        self._request_user_selection_save(self._service_dns_selection)
         self._run_operation('apply_selection', dict(self._service_dns_selection))
 
     def _on_clear_clicked(self):
@@ -835,6 +837,47 @@ class HostsPage(BasePage):
         self._worker = None
         self._thread = None
 
+    def _request_user_selection_save(self, selection: dict[str, str]) -> None:
+        payload = dict(selection or {})
+        if self._selection_save_runtime.is_running():
+            self._selection_save_pending = payload
+            return
+        self._selection_save_runtime.start_qthread_worker(
+            worker_factory=lambda request_id: self._controller.create_selection_save_worker(
+                request_id,
+                payload,
+                self,
+            ),
+            on_loaded=self._on_user_selection_save_finished,
+            on_failed=self._on_user_selection_save_failed,
+            on_finished=self._on_user_selection_save_worker_finished,
+        )
+
+    def _on_user_selection_save_finished(self, request_id: int, saved: bool) -> None:
+        if not self._selection_save_runtime.is_current(
+            request_id,
+            cleanup_in_progress=self._cleanup_in_progress,
+        ):
+            return
+        if not saved:
+            log("Hosts: выбор профилей не был сохранён", "WARNING")
+
+    def _on_user_selection_save_failed(self, request_id: int, error: str) -> None:
+        if not self._selection_save_runtime.is_current(
+            request_id,
+            cleanup_in_progress=self._cleanup_in_progress,
+        ):
+            return
+        log(f"Hosts: ошибка сохранения выбора профилей: {error}", "ERROR")
+
+    def _on_user_selection_save_worker_finished(self, _worker) -> None:
+        if self._cleanup_in_progress:
+            return
+        pending = self._selection_save_pending
+        self._selection_save_pending = None
+        if pending is not None:
+            self._request_user_selection_save(pending)
+
     def _on_operation_complete(self, success: bool, message: str):
         if self._cleanup_in_progress:
             return
@@ -863,7 +906,7 @@ class HostsPage(BasePage):
             get_building_state=self._get_building_services_ui,
             set_building_state=self._set_building_services_ui,
             update_profile_visual=self._update_profile_row_visual,
-            save_user_selection_fn=self._controller.save_user_selection,
+            save_user_selection_fn=self._request_user_selection_save,
         )
 
     def _update_ui(self):
@@ -926,5 +969,10 @@ class HostsPage(BasePage):
                 log_fn=log,
             )
             self._stop_services_catalog_worker(blocking=True)
+            self._selection_save_runtime.stop(
+                blocking=True,
+                log_fn=log,
+                warning_prefix="Hosts selection save worker",
+            )
         except Exception as e:
             log(f"Ошибка при очистке hosts_page: {e}", "DEBUG")

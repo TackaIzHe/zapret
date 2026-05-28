@@ -17,6 +17,11 @@ class HostsPageController:
     def save_user_selection(self, selection: dict[str, str]) -> bool:
         return bool(self._hosts.save_user_selection(selection))
 
+    def create_selection_save_worker(self, request_id: int, selection: dict[str, str], parent=None):
+        from hosts.selection_save_worker import HostsSelectionSaveWorker
+
+        return HostsSelectionSaveWorker(request_id, self, selection, parent)
+
     def create_hosts_runtime(self, *, status_callback=None):
         return self._hosts.create_hosts_runtime(status_callback=status_callback)
 
