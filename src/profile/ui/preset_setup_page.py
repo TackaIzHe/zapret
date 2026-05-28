@@ -22,6 +22,7 @@ from profile.ui.user_profile_dialog import CreateUserProfileDialog
 from qfluentwidgets import BodyLabel, InfoBar, MessageBox
 from settings.mode import ZAPRET1_MODE, ZAPRET2_MODE
 from ui.pages.base_page import BasePage
+from ui.holiday_effects import suspend_window_holiday_effects_for_ui_work
 from app.ui_texts import tr as tr_catalog
 
 
@@ -84,6 +85,7 @@ class PresetSetupPageBase(BasePage):
         self._user_profile_delete_worker = None
         self._profile_payload_loaded_once = False
         self._profile_payload_dirty = True
+        self._profile_context_action_enabled_by_request: dict[int, bool] = {}
         self._cleanup_in_progress = False
         self._ui_state_store = None
         self._ui_state_unsubscribe = None
@@ -237,6 +239,7 @@ class PresetSetupPageBase(BasePage):
     def _apply_payload(self, payload) -> None:
         if self._content_host_layout is None:
             return
+        suspend_window_holiday_effects_for_ui_work(self, duration_ms=260)
         total_started_at = time.perf_counter()
         self._apply_selected_preset_title(payload)
         self._show_profile_normalization_info(payload)
@@ -406,6 +409,8 @@ class PresetSetupPageBase(BasePage):
                 return
         self._profile_context_action_request_id = int(getattr(self, "_profile_context_action_request_id", 0) or 0) + 1
         request_id = self._profile_context_action_request_id
+        if str(action or "") == "set_enabled" and enabled is not None:
+            self.__dict__.setdefault("_profile_context_action_enabled_by_request", {})[request_id] = bool(enabled)
         worker = self._create_profile_context_action_worker(
             request_id,
             self.launch_method,
@@ -425,10 +430,16 @@ class PresetSetupPageBase(BasePage):
             return
         if action == "set_enabled":
             target_key = str(result or profile_key)
-            if str(profile_key or "").startswith("profile:") and target_key == str(profile_key or ""):
-                self._refresh_profile_item_locally(profile_key, target_key)
+            requested_enabled = bool(
+                self.__dict__.get("_profile_context_action_enabled_by_request", {}).pop(request_id, True)
+            )
+            if (
+                target_key == str(profile_key or "")
+                and self._apply_profile_enabled_locally(profile_key, requested_enabled)
+            ):
+                self._profile_payload_dirty = True
             else:
-                self._sync_profile_list_locally()
+                self._refresh_profile_item_locally(profile_key, target_key)
             return
         if action == "duplicate":
             self._sync_profile_list_locally()
@@ -474,6 +485,12 @@ class PresetSetupPageBase(BasePage):
     def _refresh_profile_item_locally(self, old_profile_key: str, profile_key: str) -> None:
         self._profile_payload_dirty = True
         self._schedule_profiles_payload_request(force=True)
+
+    def _apply_profile_enabled_locally(self, profile_key: str, enabled: bool) -> bool:
+        profiles_list = self._profiles_list
+        if profiles_list is None:
+            return False
+        return profiles_list.set_profile_enabled(profile_key, bool(enabled))
 
     def _add_profile_item_locally(self, profile_key: str | None) -> None:
         self._profile_payload_dirty = True
@@ -1019,6 +1036,7 @@ class PresetSetupPageBase(BasePage):
         self._ui_state_unsubscribe = None
         self._ui_state_store = None
         self._profile_folder_action_pending.clear()
+        self.__dict__.setdefault("_profile_context_action_enabled_by_request", {}).clear()
         for attr in (
             "_profile_load_worker",
             "_profile_context_action_worker",

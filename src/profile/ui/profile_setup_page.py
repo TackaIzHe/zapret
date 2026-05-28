@@ -50,6 +50,7 @@ from qfluentwidgets import (
 from settings.mode import ZAPRET1_MODE, ZAPRET2_MODE, is_preset_launch_method, is_zapret2_launch_method
 from ui.pages.base_page import BasePage
 from ui.fluent_widgets import set_tooltip
+from ui.holiday_effects import suspend_window_holiday_effects_for_ui_work
 from app.ui_texts import tr as tr_catalog
 from ui.theme import get_cached_qta_pixmap, get_theme_tokens, to_qcolor
 from ui.widgets.fluent_item_tooltip import FluentItemToolTipController
@@ -1171,6 +1172,7 @@ class ProfileSetupPageBase(BasePage):
         worker.deleteLater()
 
     def _apply_payload(self, payload) -> None:
+        suspend_window_holiday_effects_for_ui_work(self, duration_ms=260)
         self._loading = True
         try:
             item = payload.item
@@ -1902,6 +1904,7 @@ class ProfileSetupPageBase(BasePage):
         if entry is None:
             return False
 
+        suspend_window_holiday_effects_for_ui_work(self, duration_ms=180)
         state = (getattr(payload, "strategy_states", {}) or {}).get(strategy_id, ProfileStrategyState())
         updated_item = replace(
             item,

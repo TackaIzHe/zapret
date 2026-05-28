@@ -963,6 +963,28 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             [call(force=True), call(force=True), call(force=True)],
         )
 
+    def test_profile_enabled_finish_updates_existing_row_without_full_reload(self) -> None:
+        page = PresetSetupPageBase.__new__(PresetSetupPageBase)
+        page._profile_context_action_request_id = 3
+        page._profile_payload_dirty = False
+        page._profiles_list = Mock()
+        page._profiles_list.set_profile_enabled.return_value = True
+        page.refresh_from_preset_switch = Mock()
+        page._schedule_profiles_payload_request = Mock()
+
+        PresetSetupPageBase._on_profile_context_action_finished(
+            page,
+            3,
+            "set_enabled",
+            "profile-1",
+            "profile-1",
+        )
+
+        page._profiles_list.set_profile_enabled.assert_called_once_with("profile-1", True)
+        page.refresh_from_preset_switch.assert_not_called()
+        page._schedule_profiles_payload_request.assert_not_called()
+        self.assertTrue(page._profile_payload_dirty)
+
     def test_profile_context_actions_start_worker_without_direct_profile_calls(self) -> None:
         class _Signal:
             def __init__(self) -> None:

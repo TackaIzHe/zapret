@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import os
 import unittest
+from types import SimpleNamespace
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtWidgets import QApplication, QWidget
 
-from ui.holiday_effects import _Snowflake, SnowflakesOverlay
+from ui.holiday_effects import _Snowflake, GarlandOverlay, SnowflakesOverlay, suspend_window_holiday_effects_for_ui_work
 
 
 class HolidayEffectsPerformanceTests(unittest.TestCase):
@@ -55,6 +56,47 @@ class HolidayEffectsPerformanceTests(unittest.TestCase):
 
         self.assertLessEqual(overlay._max_flake_count(1920, 1080), 150)
         self.assertLessEqual(overlay._initial_flake_count(1920, 1080), 70)
+
+    def test_snowflake_animation_can_pause_during_heavy_ui_work(self) -> None:
+        host = QWidget()
+        host.resize(640, 480)
+        overlay = SnowflakesOverlay(host)
+        overlay.set_enabled(True)
+
+        self.assertTrue(overlay._animate_timer.isActive())
+        self.assertTrue(overlay._spawn_timer.isActive())
+
+        overlay.suspend_for_ui_work(1000)
+
+        self.assertFalse(overlay._animate_timer.isActive())
+        self.assertFalse(overlay._spawn_timer.isActive())
+
+    def test_garland_animation_can_pause_during_heavy_ui_work(self) -> None:
+        host = QWidget()
+        host.resize(640, 480)
+        overlay = GarlandOverlay(host)
+        overlay.set_enabled(True)
+
+        self.assertTrue(overlay._timer.isActive())
+
+        overlay.suspend_for_ui_work(1000)
+
+        self.assertFalse(overlay._timer.isActive())
+
+    def test_window_holiday_suspend_helper_uses_existing_manager(self) -> None:
+        calls = []
+
+        class Effects:
+            def suspend_for_ui_work(self, duration_ms: int) -> None:
+                calls.append(duration_ms)
+
+        window = QWidget()
+        window.visual_state = SimpleNamespace(holiday_effects=Effects())
+        child = QWidget(window)
+
+        suspend_window_holiday_effects_for_ui_work(child, duration_ms=321)
+
+        self.assertEqual(calls, [321])
 
 
 if __name__ == "__main__":

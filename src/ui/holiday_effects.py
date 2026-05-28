@@ -65,6 +65,10 @@ class GarlandOverlay(QWidget):
         self._timer = QTimer(self)
         self._timer.setInterval(90)
         self._timer.timeout.connect(self._animate)
+        self._resume_timer = QTimer(self)
+        self._resume_timer.setSingleShot(True)
+        self._resume_timer.timeout.connect(self._resume_after_ui_work)
+        self._suspended_for_ui_work = False
 
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
@@ -88,10 +92,24 @@ class GarlandOverlay(QWidget):
         if self._fade is not None:
             self._fade.stop()
             self._fade = None
+        self._resume_timer.stop()
+        self._suspended_for_ui_work = False
         self._timer.stop()
         self._lights.clear()
         self._opacity = 0.0
         self.hide()
+
+    def suspend_for_ui_work(self, duration_ms: int = 220) -> None:
+        if not self._enabled:
+            return
+        self._suspended_for_ui_work = True
+        self._timer.stop()
+        self._resume_timer.start(max(1, int(duration_ms or 0)))
+
+    def _resume_after_ui_work(self) -> None:
+        self._suspended_for_ui_work = False
+        if self._enabled and self.isVisible() and not self._timer.isActive():
+            self._timer.start()
 
     def set_enabled(self, enabled: bool) -> None:
         enabled = bool(enabled)
@@ -106,10 +124,12 @@ class GarlandOverlay(QWidget):
             self._generate_lights()
             self.show()
             self.raise_()
-            if not self._timer.isActive():
+            if not self._suspended_for_ui_work and not self._timer.isActive():
                 self._timer.start()
             self._start_fade(1.0, 420)
         else:
+            self._resume_timer.stop()
+            self._suspended_for_ui_work = False
             self._start_fade(0.0, 240)
 
     def sync_geometry(self) -> None:
@@ -164,6 +184,8 @@ class GarlandOverlay(QWidget):
     def _finish_fade_out(self) -> None:
         if self._enabled or self._fade_target > 0.0:
             return
+        self._resume_timer.stop()
+        self._suspended_for_ui_work = False
         self._timer.stop()
         self._lights.clear()
         self.hide()
@@ -183,6 +205,8 @@ class GarlandOverlay(QWidget):
             self._lights.append(_GarlandLight(x, y))
 
     def _animate(self) -> None:
+        if self._suspended_for_ui_work:
+            return
         for light in self._lights:
             light.step()
         self.update()
@@ -286,6 +310,10 @@ class SnowflakesOverlay(QWidget):
         self._spawn_timer = QTimer(self)
         self._spawn_timer.setInterval(300)
         self._spawn_timer.timeout.connect(self._spawn)
+        self._resume_timer = QTimer(self)
+        self._resume_timer.setSingleShot(True)
+        self._resume_timer.timeout.connect(self._resume_after_ui_work)
+        self._suspended_for_ui_work = False
 
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
@@ -309,12 +337,31 @@ class SnowflakesOverlay(QWidget):
         if self._fade is not None:
             self._fade.stop()
             self._fade = None
+        self._resume_timer.stop()
+        self._suspended_for_ui_work = False
         self._animate_timer.stop()
         self._spawn_timer.stop()
         self._flakes.clear()
         self._flake_pixmap_cache.clear()
         self._opacity = 0.0
         self.hide()
+
+    def suspend_for_ui_work(self, duration_ms: int = 220) -> None:
+        if not self._enabled:
+            return
+        self._suspended_for_ui_work = True
+        self._animate_timer.stop()
+        self._spawn_timer.stop()
+        self._resume_timer.start(max(1, int(duration_ms or 0)))
+
+    def _resume_after_ui_work(self) -> None:
+        self._suspended_for_ui_work = False
+        if not self._enabled or not self.isVisible():
+            return
+        if not self._animate_timer.isActive():
+            self._animate_timer.start()
+        if not self._spawn_timer.isActive():
+            self._spawn_timer.start()
 
     def set_enabled(self, enabled: bool) -> None:
         enabled = bool(enabled)
@@ -330,12 +377,14 @@ class SnowflakesOverlay(QWidget):
             self._seed_visible_flakes()
             self.show()
             self.raise_()
-            if not self._animate_timer.isActive():
+            if not self._suspended_for_ui_work and not self._animate_timer.isActive():
                 self._animate_timer.start()
-            if not self._spawn_timer.isActive():
+            if not self._suspended_for_ui_work and not self._spawn_timer.isActive():
                 self._spawn_timer.start()
             self._start_fade(1.0, 500)
         else:
+            self._resume_timer.stop()
+            self._suspended_for_ui_work = False
             self._start_fade(0.0, 320)
 
     def sync_geometry(self) -> None:
@@ -377,6 +426,8 @@ class SnowflakesOverlay(QWidget):
     def _finish_fade_out(self) -> None:
         if self._enabled or self._fade_target > 0.0:
             return
+        self._resume_timer.stop()
+        self._suspended_for_ui_work = False
         self._animate_timer.stop()
         self._spawn_timer.stop()
         self._flakes.clear()
@@ -395,7 +446,7 @@ class SnowflakesOverlay(QWidget):
             )
 
     def _spawn(self) -> None:
-        if not self._enabled:
+        if not self._enabled or self._suspended_for_ui_work:
             return
 
         width = int(self.width())
@@ -419,6 +470,8 @@ class SnowflakesOverlay(QWidget):
             )
 
     def _animate(self) -> None:
+        if self._suspended_for_ui_work:
+            return
         self.sync_geometry()
         max_height = max(1, self._cached_height, int(self.height()))
         frame_scale = max(0.1, self._animate_timer.interval() / _Snowflake.BASE_FRAME_MS)
@@ -550,6 +603,10 @@ class HolidayEffectsManager:
         self._garland.sync_geometry()
         self._raise_overlays()
 
+    def suspend_for_ui_work(self, duration_ms: int = 220) -> None:
+        self._snowflakes.suspend_for_ui_work(duration_ms)
+        self._garland.suspend_for_ui_work(duration_ms)
+
     def cleanup(self) -> None:
         self._garland.shutdown()
         self._snowflakes.shutdown()
@@ -561,3 +618,15 @@ class HolidayEffectsManager:
             self._snowflakes.raise_()
         if self._garland.isVisible():
             self._garland.raise_()
+
+
+def suspend_window_holiday_effects_for_ui_work(widget, *, duration_ms: int = 220) -> None:
+    try:
+        window = widget.window() if hasattr(widget, "window") else widget
+        visual_state = getattr(window, "visual_state", None)
+        effects = None if visual_state is None else getattr(visual_state, "holiday_effects", None)
+        suspend = getattr(effects, "suspend_for_ui_work", None)
+        if callable(suspend):
+            suspend(max(1, int(duration_ms or 0)))
+    except Exception:
+        pass

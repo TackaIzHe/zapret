@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from PyQt6.QtCore import QPoint, Qt, pyqtSignal
@@ -118,6 +119,12 @@ class ProfilesList(QWidget):
 
     def remove_profile_item(self, profile_key: str) -> bool:
         return self._model.remove_profile(profile_key)
+
+    def set_profile_enabled(self, profile_key: str, enabled: bool) -> bool:
+        item = self.profile_item_for_key(profile_key)
+        if item is None:
+            return False
+        return self.replace_profile_item(profile_key, replace(item, enabled=bool(enabled)))
 
     def move_profile_item(
         self,
