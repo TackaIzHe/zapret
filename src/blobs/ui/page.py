@@ -17,7 +17,6 @@ from blobs.ui.runtime_helpers import (
     load_blobs_into_ui,
     open_bin_folder_action,
     open_json_action,
-    reload_blobs_data,
 )
 from ui.fluent_widgets import (
     QuickActionsBar,
@@ -50,6 +49,13 @@ class BlobsPage(BasePage):
         self._actions_group = None
         self._actions_meta_card = None
         self._actions_bar = None
+        self._blobs_load_worker = None
+        self._blobs_load_request_id = 0
+        self._blobs_load_pending = False
+        self._blobs_load_pending_reload = False
+        self._blob_action_worker = None
+        self._blob_action_request_id = 0
+        self._blob_action_pending: list[dict[str, str]] = []
 
         self._build_ui()
         self._apply_page_theme(force=True)
@@ -154,18 +160,86 @@ class BlobsPage(BasePage):
         
     def _load_blobs(self):
         """Загружает и отображает список блобов"""
+        self._request_blobs_load(reload=False)
+
+    def create_blobs_load_worker(self, request_id: int, *, reload: bool = False):
+        return self._blobs.create_blobs_load_worker(
+            request_id,
+            reload=bool(reload),
+            parent=self,
+        )
+
+    def _request_blobs_load(self, *, reload: bool = False) -> None:
+        if self._cleanup_in_progress:
+            return
+        if reload and hasattr(self, "reload_btn"):
+            self.reload_btn.set_loading(True)
+        worker = self.__dict__.get("_blobs_load_worker")
+        if worker is not None:
+            try:
+                if worker.isRunning():
+                    self._blobs_load_pending = True
+                    self._blobs_load_pending_reload = bool(self._blobs_load_pending_reload) or bool(reload)
+                    return
+            except Exception:
+                self._blobs_load_pending = True
+                self._blobs_load_pending_reload = bool(self._blobs_load_pending_reload) or bool(reload)
+                return
+        self._start_blobs_load_worker(reload=bool(reload))
+
+    def _start_blobs_load_worker(self, *, reload: bool = False) -> None:
+        self._blobs_load_pending = False
+        self._blobs_load_pending_reload = False
+        self._blobs_load_request_id += 1
+        request_id = self._blobs_load_request_id
+        worker = self.create_blobs_load_worker(request_id, reload=bool(reload))
+        self._blobs_load_worker = worker
+        worker.loaded.connect(self._on_blobs_loaded)
+        worker.failed.connect(self._on_blobs_load_failed)
+        worker.finished.connect(lambda w=worker: self._on_blobs_load_worker_finished(w))
+        worker.start()
+
+    def _on_blobs_loaded(self, request_id: int, blobs_info: dict, reloaded: bool) -> None:
+        if request_id != self._blobs_load_request_id or self._cleanup_in_progress:
+            return
         load_blobs_into_ui(
             cleanup_in_progress=self._cleanup_in_progress,
             blobs_layout=self.blobs_layout,
+            blobs_info=blobs_info,
             ui_language=self._ui_language,
             tr_fn=self._tr,
             on_delete_blob=self._delete_blob,
             count_label=self.count_label,
             apply_page_theme=self._apply_page_theme,
-            get_blobs_info_fn=self._blobs.get_blobs_info,
             log_error=lambda text: log(text, "ERROR"),
             log_debug=lambda text: log(text, "DEBUG"),
         )
+        if reloaded:
+            log("Блобы перезагружены", "INFO")
+
+    def _on_blobs_load_failed(self, request_id: int, error: str, _reload: bool) -> None:
+        if request_id != self._blobs_load_request_id or self._cleanup_in_progress:
+            return
+        log(f"Ошибка загрузки блобов: {error}", "ERROR")
+        try:
+            from blobs.ui.runtime_helpers import clear_blobs_layout
+
+            clear_blobs_layout(self.blobs_layout)
+            error_label = QLabel(self._tr("page.blobs.error.load", "❌ Ошибка загрузки: {error}", error=error))
+            error_label.setProperty("blobSection", "error")
+            self.blobs_layout.addWidget(error_label)
+            self._apply_page_theme(force=True)
+        except Exception:
+            pass
+
+    def _on_blobs_load_worker_finished(self, worker) -> None:
+        if self.__dict__.get("_blobs_load_worker") is worker:
+            self._blobs_load_worker = None
+        worker.deleteLater()
+        if hasattr(self, "reload_btn"):
+            self.reload_btn.set_loading(False)
+        if self._blobs_load_pending and not self._cleanup_in_progress:
+            self._start_blobs_load_worker(reload=bool(self._blobs_load_pending_reload))
             
     def _filter_blobs(self, text: str):
         """Фильтрует блобы по тексту"""
@@ -184,7 +258,7 @@ class BlobsPage(BasePage):
             tr_fn=self._tr,
             info_bar_cls=InfoBar,
             get_bin_folder_fn=self._blobs.get_bin_folder,
-            save_user_blob_fn=self._blobs.save_user_blob,
+            request_blob_action_fn=self._request_blob_action,
             log_info=lambda text: log(text, "INFO"),
             log_error=lambda text: log(text, "ERROR"),
         )
@@ -196,22 +270,128 @@ class BlobsPage(BasePage):
             reload_callback=self._load_blobs,
             tr_fn=self._tr,
             info_bar_cls=InfoBar,
-            delete_user_blob_fn=self._blobs.delete_user_blob,
+            request_blob_action_fn=self._request_blob_action,
             window=self.window(),
             log_info=lambda text: log(text, "INFO"),
             log_error=lambda text: log(text, "ERROR"),
         )
+
+    def create_blob_action_worker(
+        self,
+        request_id: int,
+        *,
+        action: str,
+        name: str = "",
+        blob_type: str = "",
+        value: str = "",
+        description: str = "",
+    ):
+        return self._blobs.create_blob_action_worker(
+            request_id,
+            action=action,
+            name=name,
+            blob_type=blob_type,
+            value=value,
+            description=description,
+            parent=self,
+        )
+
+    def _request_blob_action(
+        self,
+        action: str,
+        *,
+        name: str = "",
+        blob_type: str = "",
+        value: str = "",
+        description: str = "",
+    ) -> None:
+        payload = {
+            "action": str(action or "").strip(),
+            "name": str(name or "").strip(),
+            "blob_type": str(blob_type or "").strip(),
+            "value": str(value or ""),
+            "description": str(description or ""),
+        }
+        worker = self.__dict__.get("_blob_action_worker")
+        if worker is not None:
+            try:
+                if worker.isRunning():
+                    self._blob_action_pending.append(payload)
+                    return
+            except Exception:
+                self._blob_action_pending.append(payload)
+                return
+        self._start_blob_action_worker(payload)
+
+    def _start_blob_action_worker(self, payload: dict[str, str]) -> None:
+        self._blob_action_request_id += 1
+        request_id = self._blob_action_request_id
+        worker = self.create_blob_action_worker(
+            request_id,
+            action=payload.get("action", ""),
+            name=payload.get("name", ""),
+            blob_type=payload.get("blob_type", ""),
+            value=payload.get("value", ""),
+            description=payload.get("description", ""),
+        )
+        self._blob_action_worker = worker
+        worker.completed.connect(self._on_blob_action_finished)
+        worker.failed.connect(self._on_blob_action_failed)
+        worker.finished.connect(lambda w=worker: self._on_blob_action_worker_finished(w))
+        worker.start()
+
+    def _on_blob_action_finished(self, request_id: int, action: str, result: bool, context) -> None:
+        if request_id != self._blob_action_request_id or self._cleanup_in_progress:
+            return
+        context = dict(context or {})
+        name = str(context.get("name") or "")
+        if bool(result):
+            if action == "save":
+                log(f"Добавлен блоб: {name}", "INFO")
+            elif action == "delete":
+                log(f"Удалён блоб: {name}", "INFO")
+            self._request_blobs_load(reload=False)
+            return
+
+        if action == "delete":
+            content = self._tr("page.blobs.error.delete_named", "Не удалось удалить блоб '{name}'", name=name)
+        else:
+            content = self._tr("page.blobs.error.save", "Не удалось сохранить блоб")
+        InfoBar.warning(
+            title=self._tr("common.error.title", "Ошибка"),
+            content=content,
+            parent=self.window(),
+        )
+
+    def _on_blob_action_failed(self, request_id: int, action: str, error: str, context) -> None:
+        if request_id != self._blob_action_request_id or self._cleanup_in_progress:
+            return
+        log(f"Ошибка действия blob ({action}): {error}", "ERROR")
+        name = str((dict(context or {})).get("name") or "")
+        content = (
+            self._tr("page.blobs.error.delete", "Не удалось удалить блоб: {error}", error=error)
+            if action == "delete"
+            else self._tr("page.blobs.error.add", "Не удалось добавить блоб: {error}", error=error)
+        )
+        if name and action == "delete":
+            content = self._tr("page.blobs.error.delete_named", "Не удалось удалить блоб '{name}'", name=name)
+        InfoBar.warning(
+            title=self._tr("common.error.title", "Ошибка"),
+            content=content,
+            parent=self.window(),
+        )
+
+    def _on_blob_action_worker_finished(self, worker) -> None:
+        if self.__dict__.get("_blob_action_worker") is worker:
+            self._blob_action_worker = None
+        worker.deleteLater()
+        if self._blob_action_pending and not self._cleanup_in_progress:
+            pending = self._blob_action_pending.pop(0)
+            self._start_blob_action_worker(pending)
             
     def _reload_blobs(self):
         """Перезагружает блобы из settings.json."""
-        reload_blobs_data(
-            cleanup_in_progress=self._cleanup_in_progress,
-            reload_btn=self.reload_btn,
-            reload_callback=self._load_blobs,
-            reload_blobs_fn=self._blobs.reload_blobs,
-            log_info=lambda text: log(text, "INFO"),
-            log_error=lambda text: log(text, "ERROR"),
-        )
+        self._request_blobs_load(reload=True)
             
     def _open_bin_folder(self):
         """Открывает папку bin"""
@@ -250,3 +430,20 @@ class BlobsPage(BasePage):
 
     def cleanup(self) -> None:
         self._cleanup_in_progress = True
+        self._blob_action_pending.clear()
+        self._blobs_load_pending = False
+        self._blobs_load_pending_reload = False
+        load_worker = self.__dict__.get("_blobs_load_worker")
+        if load_worker is not None:
+            try:
+                load_worker.quit()
+            except Exception:
+                pass
+            self._blobs_load_worker = None
+        action_worker = self.__dict__.get("_blob_action_worker")
+        if action_worker is not None:
+            try:
+                action_worker.quit()
+            except Exception:
+                pass
+            self._blob_action_worker = None

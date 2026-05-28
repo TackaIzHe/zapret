@@ -607,6 +607,21 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("save_accent_color", worker_source)
         self.assertIn("save_animations_enabled", worker_source)
 
+    def test_appearance_rkn_background_options_load_through_worker(self) -> None:
+        page_source = inspect.getsource(AppearancePage)
+        reload_source = inspect.getsource(AppearancePage._reload_rkn_background_options)
+
+        self.assertTrue(hasattr(appearance_workers, "AppearanceRknBackgroundOptionsLoadWorker"))
+        worker_source = inspect.getsource(appearance_workers.AppearanceRknBackgroundOptionsLoadWorker.run)
+
+        self.assertIn("_rkn_background_options_worker", page_source)
+        self.assertIn("create_rkn_background_options_load_worker", page_source)
+        self.assertIn("_request_rkn_background_options_load", reload_source)
+        self.assertNotIn("appearance_settings.load_rkn_background()", reload_source)
+        self.assertNotIn("get_rkn_background_options()", reload_source)
+        self.assertIn("load_rkn_background", worker_source)
+        self.assertIn("get_rkn_background_options", worker_source)
+
     def test_premium_navigation_does_not_read_device_info_during_language_refresh(self) -> None:
         language_source = inspect.getsource(premium_page_lifecycle.apply_premium_language)
 
@@ -1037,6 +1052,41 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("_run_runtime_init_once", runtime_flush_source)
         self.assertIn("QTimer.singleShot", scheduled_source)
         self.assertIn("build_logs_secondary_panels_ui", ensure_source)
+
+    def test_blobs_page_actions_run_through_worker(self) -> None:
+        spec = importlib.util.find_spec("blobs.workers")
+        self.assertIsNotNone(spec)
+        blobs_workers = importlib.import_module("blobs.workers")
+        blobs_feature = importlib.import_module("app.feature_facades.blobs")
+
+        load_source = inspect.getsource(BlobsPage._load_blobs)
+        reload_source = inspect.getsource(BlobsPage._reload_blobs)
+        add_source = inspect.getsource(BlobsPage._add_blob)
+        delete_source = inspect.getsource(BlobsPage._delete_blob)
+        page_source = inspect.getsource(BlobsPage)
+        load_worker_source = inspect.getsource(blobs_workers.BlobsLoadWorker.run)
+        action_worker_source = inspect.getsource(blobs_workers.BlobActionWorker.run)
+        feature_source = inspect.getsource(blobs_feature.BlobsFeature)
+
+        self.assertIn("_request_blobs_load", load_source)
+        self.assertIn("_request_blobs_load", reload_source)
+        self.assertIn("_request_blob_action", add_source)
+        self.assertIn("_request_blob_action", delete_source)
+        for source in (load_source, reload_source, add_source, delete_source):
+            self.assertNotIn(".get_blobs_info(", source)
+            self.assertNotIn(".reload_blobs(", source)
+            self.assertNotIn(".save_user_blob(", source)
+            self.assertNotIn(".delete_user_blob(", source)
+
+        self.assertIn("create_blobs_load_worker", page_source)
+        self.assertIn("create_blob_action_worker", page_source)
+        self.assertIn("_blobs_load_pending", page_source)
+        self.assertIn("create_blobs_load_worker", feature_source)
+        self.assertIn("create_blob_action_worker", feature_source)
+        self.assertIn("get_blobs_info", load_worker_source)
+        self.assertIn("reload_blobs", load_worker_source)
+        self.assertIn("save_user_blob", action_worker_source)
+        self.assertIn("delete_user_blob", action_worker_source)
 
     def test_common_one_shot_worker_runtime_is_used_by_shared_pages(self) -> None:
         self.assertIsNotNone(importlib.util.find_spec("ui.one_shot_worker_runtime"))

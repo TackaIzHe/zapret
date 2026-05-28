@@ -190,6 +190,19 @@ class QuickActionsBarLayoutTests(unittest.TestCase):
             open_bin_folder=lambda: None,
             open_blobs_json=lambda: None,
         )
+        from blobs.workers import BlobActionWorker, BlobsLoadWorker
+
+        feature.create_blobs_load_worker = lambda request_id, reload=False, parent=None: BlobsLoadWorker(
+            request_id,
+            feature,
+            reload=reload,
+            parent=parent,
+        )
+        feature.create_blob_action_worker = lambda request_id, **kwargs: BlobActionWorker(
+            request_id,
+            feature,
+            **kwargs,
+        )
         page = BlobsPage(blobs_feature=feature, open_control=lambda: None)
         page.resize(710, 500)
         page.show()

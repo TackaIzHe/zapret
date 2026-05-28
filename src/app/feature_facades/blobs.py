@@ -13,6 +13,8 @@ class BlobsFeature:
     reload_blobs: Callable
     open_bin_folder: Callable
     open_blobs_json: Callable
+    create_blobs_load_worker: Callable
+    create_blob_action_worker: Callable
 
 
 def build_blobs_feature() -> BlobsFeature:
@@ -21,7 +23,40 @@ def build_blobs_feature() -> BlobsFeature:
 
         return blobs_public
 
-    return BlobsFeature(
+    def _create_blobs_load_worker(request_id: int, *, reload: bool = False, parent=None):
+        from blobs.workers import BlobsLoadWorker
+
+        return BlobsLoadWorker(
+            request_id,
+            blobs_feature=feature,
+            reload=bool(reload),
+            parent=parent,
+        )
+
+    def _create_blob_action_worker(
+        request_id: int,
+        *,
+        action: str,
+        name: str = "",
+        blob_type: str = "",
+        value: str = "",
+        description: str = "",
+        parent=None,
+    ):
+        from blobs.workers import BlobActionWorker
+
+        return BlobActionWorker(
+            request_id,
+            blobs_feature=feature,
+            action=action,
+            name=name,
+            blob_type=blob_type,
+            value=value,
+            description=description,
+            parent=parent,
+        )
+
+    feature = BlobsFeature(
         get_blobs_info=lambda: _public().get_blobs_info(),
         get_bin_folder=lambda: _public().get_bin_folder(),
         save_user_blob=lambda *args, **kwargs: _public().save_user_blob(*args, **kwargs),
@@ -29,4 +64,7 @@ def build_blobs_feature() -> BlobsFeature:
         reload_blobs=lambda: _public().reload_blobs(),
         open_bin_folder=lambda: _public().open_bin_folder(),
         open_blobs_json=lambda: _public().open_blobs_json(),
+        create_blobs_load_worker=_create_blobs_load_worker,
+        create_blob_action_worker=_create_blob_action_worker,
     )
+    return feature

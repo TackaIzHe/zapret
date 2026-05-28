@@ -19,12 +19,12 @@ def load_blobs_into_ui(
     *,
     cleanup_in_progress: bool,
     blobs_layout,
+    blobs_info: dict,
     ui_language: str,
     tr_fn,
     on_delete_blob,
     count_label,
     apply_page_theme,
-    get_blobs_info_fn,
     log_error,
     log_debug,
 ) -> None:
@@ -32,7 +32,7 @@ def load_blobs_into_ui(
         return
     try:
         clear_blobs_layout(blobs_layout)
-        blobs_info = get_blobs_info_fn()
+        blobs_info = dict(blobs_info or {})
 
         user_blobs = {k: v for k, v in blobs_info.items() if v.get("is_user")}
         system_blobs = {k: v for k, v in blobs_info.items() if not v.get("is_user")}
@@ -106,30 +106,20 @@ def add_blob_via_dialog(
     tr_fn,
     info_bar_cls,
     get_bin_folder_fn,
-    save_user_blob_fn,
+    request_blob_action_fn,
     log_info,
     log_error,
 ) -> None:
     dialog = AddBlobDialog(window, language=ui_language, bin_folder=get_bin_folder_fn())
     if dialog.exec():
         data = dialog.get_data()
-        try:
-            if save_user_blob_fn(data["name"], data["type"], data["value"], data["description"]):
-                log_info(f"Добавлен блоб: {data['name']}")
-                reload_callback()
-            else:
-                info_bar_cls.warning(
-                    title=tr_fn("common.error.title", "Ошибка"),
-                    content=tr_fn("page.blobs.error.save", "Не удалось сохранить блоб"),
-                    parent=window,
-                )
-        except Exception as exc:
-            log_error(f"Ошибка добавления блоба: {exc}")
-            info_bar_cls.warning(
-                title=tr_fn("common.error.title", "Ошибка"),
-                content=tr_fn("page.blobs.error.add", "Не удалось добавить блоб: {error}", error=exc),
-                parent=window,
-            )
+        request_blob_action_fn(
+            "save",
+            name=data["name"],
+            blob_type=data["type"],
+            value=data["value"],
+            description=data["description"],
+        )
 
 
 def delete_blob_named(
@@ -138,28 +128,12 @@ def delete_blob_named(
     reload_callback,
     tr_fn,
     info_bar_cls,
-    delete_user_blob_fn,
+    request_blob_action_fn,
     window,
     log_info,
     log_error,
 ) -> None:
-    try:
-        if delete_user_blob_fn(name):
-            log_info(f"Удалён блоб: {name}")
-            reload_callback()
-        else:
-            info_bar_cls.warning(
-                title=tr_fn("common.error.title", "Ошибка"),
-                content=tr_fn("page.blobs.error.delete_named", "Не удалось удалить блоб '{name}'", name=name),
-                parent=window,
-            )
-    except Exception as exc:
-        log_error(f"Ошибка удаления блоба: {exc}")
-        info_bar_cls.warning(
-            title=tr_fn("common.error.title", "Ошибка"),
-            content=tr_fn("page.blobs.error.delete", "Не удалось удалить блоб: {error}", error=exc),
-            parent=window,
-        )
+    request_blob_action_fn("delete", name=name)
 
 
 def reload_blobs_data(
