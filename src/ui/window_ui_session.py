@@ -46,6 +46,8 @@ class WindowUiSession:
     sidebar_search_profile_loader: Callable[[str], tuple[object, ...]] | None = None
     sidebar_search_preset_loader: Callable[[str], tuple[object, ...]] | None = None
     sidebar_search_runtime_cache: dict[str, tuple[float, tuple[object, ...]]] = field(default_factory=dict)
+    sidebar_expanded_save_worker: Any | None = None
+    sidebar_expanded_save_pending: bool | None = None
 
 
 def get_window_ui_session(window) -> WindowUiSession | None:

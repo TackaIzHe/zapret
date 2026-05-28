@@ -672,11 +672,39 @@ class PresetSidebarNavigationTests(unittest.TestCase):
             ),
             patch("settings.store.get_ui_state_settings", return_value={"sidebar_expanded": True}),
             patch("settings.store.set_ui_state_settings") as save_ui_state,
+            patch.object(sidebar_builder, "create_sidebar_expanded_save_worker") as create_worker,
         ):
+            worker = SimpleNamespace(
+                isRunning=Mock(return_value=False),
+                saved=SimpleNamespace(connect=Mock()),
+                failed=SimpleNamespace(connect=Mock()),
+                finished=SimpleNamespace(connect=Mock()),
+                start=Mock(),
+            )
+            create_worker.return_value = worker
             sidebar_builder.init_navigation(window)
             nav.displayModeChanged.emit(SimpleNamespace(name="COMPACT"))
 
-        save_ui_state.assert_called_once_with({"sidebar_expanded": False})
+        create_worker.assert_called_once()
+        self.assertFalse(create_worker.call_args.kwargs["expanded"])
+        worker.start.assert_called_once_with()
+        save_ui_state.assert_not_called()
+
+    def test_sidebar_display_mode_save_is_queued_while_worker_runs(self) -> None:
+        import ui.navigation.sidebar_builder as sidebar_builder
+
+        worker = SimpleNamespace(isRunning=Mock(return_value=True))
+        session = SimpleNamespace(
+            sidebar_expanded_save_worker=worker,
+            sidebar_expanded_save_pending=None,
+        )
+        window = SimpleNamespace(ui_session=session)
+
+        with patch.object(sidebar_builder, "create_sidebar_expanded_save_worker") as create_worker:
+            sidebar_builder._start_sidebar_expanded_save_worker(window, False)
+
+        self.assertFalse(session.sidebar_expanded_save_pending)
+        create_worker.assert_not_called()
 
     def test_mode_switch_reuses_hidden_other_mode_items(self) -> None:
         from app.page_names import PageName

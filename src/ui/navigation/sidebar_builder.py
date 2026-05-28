@@ -19,6 +19,7 @@ from app.page_names import PageName
 from ui.startup_ui_metrics import pump_startup_ui
 from app.ui_texts import tr as tr_catalog
 from ui.window_ui_session import get_window_ui_session
+from ui.navigation.sidebar_state_worker import create_sidebar_expanded_save_worker
 
 
 SIDEBAR_SEARCH_AFTER_INTERACTIVE_MS = 2_500
@@ -70,13 +71,47 @@ def _read_saved_sidebar_expanded() -> bool:
     return bool(ui_state.get(SIDEBAR_EXPANDED_UI_STATE_KEY, True))
 
 
-def _save_sidebar_expanded(expanded: bool) -> None:
-    try:
-        from settings.store import set_ui_state_settings
+def _start_sidebar_expanded_save_worker(window, expanded: bool) -> None:
+    session = get_window_ui_session(window)
+    if session is None:
+        return
 
-        set_ui_state_settings({SIDEBAR_EXPANDED_UI_STATE_KEY: bool(expanded)})
+    worker = getattr(session, "sidebar_expanded_save_worker", None)
+    if worker is not None:
+        try:
+            if worker.isRunning():
+                session.sidebar_expanded_save_pending = bool(expanded)
+                return
+        except Exception:
+            session.sidebar_expanded_save_worker = None
+
+    worker = create_sidebar_expanded_save_worker(
+        expanded=bool(expanded),
+        state_key=SIDEBAR_EXPANDED_UI_STATE_KEY,
+        parent=window,
+    )
+    session.sidebar_expanded_save_worker = worker
+    worker.saved.connect(lambda _expanded: None)
+    worker.failed.connect(lambda error: log(f"Не удалось сохранить состояние сайдбара: {error}", "DEBUG"))
+    worker.finished.connect(lambda w=worker, current_window=window: _on_sidebar_expanded_save_worker_finished(current_window, w))
+    worker.start()
+
+
+def _on_sidebar_expanded_save_worker_finished(window, worker) -> None:
+    session = get_window_ui_session(window)
+    if session is not None and getattr(session, "sidebar_expanded_save_worker", None) is worker:
+        session.sidebar_expanded_save_worker = None
+    try:
+        worker.deleteLater()
     except Exception:
         pass
+    if session is None:
+        return
+    pending = getattr(session, "sidebar_expanded_save_pending", None)
+    if pending is None:
+        return
+    session.sidebar_expanded_save_pending = None
+    _start_sidebar_expanded_save_worker(window, bool(pending))
 
 
 def _restore_sidebar_expanded_state(window) -> None:
@@ -106,7 +141,7 @@ def _bind_sidebar_expanded_state(window) -> None:
     def _on_display_mode_changed(display_mode) -> None:
         expanded = _is_expanded_display_mode(display_mode)
         if expanded is not None:
-            _save_sidebar_expanded(expanded)
+            _start_sidebar_expanded_save_worker(window, expanded)
 
     connect(_on_display_mode_changed)
 
