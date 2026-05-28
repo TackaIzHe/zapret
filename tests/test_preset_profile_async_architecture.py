@@ -1591,12 +1591,33 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
     def test_premium_page_passes_cached_pairing_snapshot_to_autopoll(self) -> None:
         page_source = inspect.getsource(PremiumPage)
         sync_source = inspect.getsource(PremiumPage._sync_pairing_status_autopoll)
-        device_info_source = inspect.getsource(PremiumPage._update_device_info)
+        device_info_loaded_source = inspect.getsource(PremiumPage._on_device_info_loaded)
 
         self.assertNotIn("def _has_pending_pair_code", page_source)
         self.assertNotIn("has_pending_pair_code(", page_source)
         self.assertIn("pairing_snapshot=self._pairing_autopoll_snapshot", sync_source)
-        self.assertIn("_set_pairing_autopoll_snapshot_from_device_info", device_info_source)
+        self.assertIn("_set_pairing_autopoll_snapshot_from_device_info", device_info_loaded_source)
+
+    def test_premium_device_info_refresh_runs_through_worker(self) -> None:
+        spec = importlib.util.find_spec("donater.device_info_worker")
+        self.assertIsNotNone(spec)
+        device_info_worker = importlib.import_module("donater.device_info_worker")
+        premium_feature_cls = __import__("app.feature_facades.premium", fromlist=["PremiumFeature"]).PremiumFeature
+
+        page_source = inspect.getsource(PremiumPage)
+        handler_source = inspect.getsource(PremiumPage._update_device_info)
+        feature_source = inspect.getsource(premium_feature_cls)
+
+        self.assertTrue(hasattr(device_info_worker, "PremiumDeviceInfoLoadWorker"))
+        worker_source = inspect.getsource(device_info_worker.PremiumDeviceInfoLoadWorker.run)
+
+        self.assertIn("_request_device_info_load", handler_source)
+        self.assertNotIn("update_device_info_labels", handler_source)
+        self.assertNotIn("read_device_info_snapshot", handler_source)
+        self.assertIn("create_device_info_load_worker", page_source)
+        self.assertIn("_device_info_runtime", page_source)
+        self.assertIn("create_device_info_load_worker", feature_source)
+        self.assertIn("read_device_info_snapshot", worker_source)
 
     def test_premium_runtime_init_starts_checker_in_worker(self) -> None:
         calls: list[str] = []

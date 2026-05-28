@@ -20,7 +20,6 @@ from donater.ui.pairing_workflow import (
     apply_pair_code_error_ui,
     apply_pair_code_result_ui,
     apply_pair_code_start_ui,
-    update_device_info_labels,
 )
 from donater.pairing_workflow import (
     can_poll_pairing_status,
@@ -115,6 +114,8 @@ class PremiumPage(BasePage):
         }
         self._open_bot_runtime = OneShotWorkerRuntime()
         self._open_bot_pending = False
+        self._device_info_runtime = OneShotWorkerRuntime()
+        self._device_info_pending = False
 
         self._build_ui()
         self.bind_subscription_state_store(deps.subscription_state_store)
@@ -333,6 +334,11 @@ class PremiumPage(BasePage):
             blocking=True,
             warning_prefix="Premium open bot worker",
         )
+        self._device_info_pending = False
+        self._device_info_runtime.stop(
+            blocking=True,
+            warning_prefix="Premium device info worker",
+        )
 
     # ── initialization ───────────────────────────────────────────────────────
 
@@ -532,23 +538,68 @@ class PremiumPage(BasePage):
         )
 
     def _update_device_info(self):
-        def _on_error(exc: Exception) -> None:
-            from log.log import log
+        self._request_device_info_load()
 
+    def create_device_info_load_worker(self, request_id: int, *, current_time: int):
+        return self._premium.create_device_info_load_worker(
+            request_id,
+            current_time=int(current_time),
+            parent=self,
+        )
 
-            log(f"Ошибка обновления информации об устройстве: {exc}", "DEBUG")
+    def _request_device_info_load(self) -> None:
+        if not self._premium.is_checker_ready():
+            return
+        if self._device_info_runtime.is_running():
+            self._device_info_pending = True
+            return
+        self._device_info_pending = False
+        self._start_device_info_load_worker()
 
-        snapshot = update_device_info_labels(
-            premium_feature=self._premium,
+    def _start_device_info_load_worker(self) -> None:
+        current_time = int(time.time())
+        self._device_info_runtime.start_qthread_worker(
+            worker_factory=lambda request_id: self.create_device_info_load_worker(
+                request_id,
+                current_time=current_time,
+            ),
+            on_loaded=self._on_device_info_loaded,
+            on_failed=self._on_device_info_failed,
+            on_finished=self._on_device_info_worker_finished,
+        )
+
+    def _on_device_info_loaded(self, request_id: int, snapshot) -> None:
+        if not self._device_info_runtime.is_current(
+            request_id,
+            cleanup_in_progress=self._cleanup_in_progress,
+        ):
+            return
+        if not snapshot:
+            return
+        self._set_pairing_autopoll_snapshot_from_device_info(snapshot)
+        apply_device_info_snapshot_labels(
+            snapshot=snapshot,
             tr=self._tr,
             device_id_label=self.device_id_label,
             saved_key_label=self.saved_key_label,
             last_check_label=self.last_check_label,
-            on_error=_on_error,
-            current_time=int(time.time()),
         )
-        if snapshot:
-            self._set_pairing_autopoll_snapshot_from_device_info(snapshot)
+
+    def _on_device_info_failed(self, request_id: int, error: str) -> None:
+        if not self._device_info_runtime.is_current(
+            request_id,
+            cleanup_in_progress=self._cleanup_in_progress,
+        ):
+            return
+        from log.log import log
+
+        log(f"Ошибка обновления информации об устройстве: {error}", "DEBUG")
+
+    def _on_device_info_worker_finished(self, _worker) -> None:
+        pending = self._device_info_pending
+        self._device_info_pending = False
+        if pending and not self._cleanup_in_progress:
+            self._start_device_info_load_worker()
 
     def _open_extend_bot(self) -> None:
         self._request_open_extend_bot()

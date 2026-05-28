@@ -88,6 +88,16 @@ class PremiumFeature:
 
         return PremiumOpenBotWorker(request_id, premium_feature=self, parent=parent)
 
+    def create_device_info_load_worker(self, request_id: int, *, current_time: int, parent=None):
+        from donater.device_info_worker import PremiumDeviceInfoLoadWorker
+
+        return PremiumDeviceInfoLoadWorker(
+            request_id,
+            premium_feature=self,
+            current_time=int(current_time),
+            parent=parent,
+        )
+
     def create_premium_worker_thread(self, task):
         return self._commands().create_premium_worker_thread(task)
 
