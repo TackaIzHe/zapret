@@ -118,6 +118,8 @@ class BlockcheckPage(BasePage):
         self._initial_state_worker = None
         self._initial_state_request_id = 0
         self._initial_state_load_started_at = 0.0
+        self._support_prepare_worker = None
+        self._support_prepare_request_id = 0
         self._build_ui()
         self._request_page_initial_state_load()
         try:
@@ -127,6 +129,22 @@ class BlockcheckPage(BasePage):
 
     def create_initial_state_worker(self, request_id: int):
         return self._blockcheck.create_page_initial_state_worker(request_id, parent=self)
+
+    def create_support_prepare_worker(
+        self,
+        request_id: int,
+        *,
+        run_log_file: str | None,
+        mode_label: str,
+        extra_domains: list[str],
+    ):
+        return self._blockcheck.create_blockcheck_support_prepare_worker(
+            request_id,
+            run_log_file=run_log_file,
+            mode_label=mode_label,
+            extra_domains=extra_domains,
+            parent=self,
+        )
 
     def _request_page_initial_state_load(self) -> None:
         self._initial_state_request_id += 1
@@ -766,41 +784,90 @@ class BlockcheckPage(BasePage):
     def _prepare_support_from_blockcheck(self) -> None:
         mode_label = self._mode_combo.currentText() if self._mode_combo is not None else "BlockCheck"
         extra_domains = self._get_extra_domains()
+        self._request_support_prepare(
+            run_log_file=self._run_log_file,
+            mode_label=mode_label,
+            extra_domains=extra_domains,
+        )
+
+    def _request_support_prepare(
+        self,
+        *,
+        run_log_file: str | None,
+        mode_label: str,
+        extra_domains: list[str],
+    ) -> None:
+        worker = self.__dict__.get("_support_prepare_worker")
+        if worker is not None:
+            try:
+                if worker.isRunning():
+                    self._set_support_status("Подготовка уже идёт...")
+                    return
+            except Exception:
+                return
+
+        self._support_prepare_request_id += 1
+        request_id = self._support_prepare_request_id
+        self._set_support_status("Подготовка обращения...")
+        if self._prepare_support_btn is not None:
+            self._prepare_support_btn.setEnabled(False)
+
+        worker = self.create_support_prepare_worker(
+            request_id,
+            run_log_file=run_log_file,
+            mode_label=mode_label,
+            extra_domains=extra_domains,
+        )
+        self._support_prepare_worker = worker
+        worker.completed.connect(self._on_support_prepare_finished)
+        worker.failed.connect(self._on_support_prepare_failed)
+        worker.finished.connect(lambda w=worker: self._on_support_prepare_worker_finished(w))
+        worker.start()
+
+    def _on_support_prepare_finished(self, request_id: int, feedback) -> None:
+        if request_id != self._support_prepare_request_id or self._cleanup_in_progress:
+            return
+        result = feedback.result
+        if result.zip_path:
+            logger.info("Prepared BlockCheck support archive: %s", result.zip_path)
+
+        self._set_support_status(feedback.status_text)
 
         try:
-            feedback = blockcheck_page_runtime.prepare_support(
-                run_log_file=self._run_log_file,
-                mode_label=mode_label,
-                extra_domains=extra_domains,
+            InfoBarHelper.success(
+                self.window(),
+                tr_catalog(
+                    "page.blockcheck.support_prepared_title",
+                    default="Обращение подготовлено",
+                ),
+                feedback.info_text,
             )
-            result = feedback.result
-            if result.zip_path:
-                logger.info("Prepared BlockCheck support archive: %s", result.zip_path)
+        except Exception:
+            pass
 
-            self._set_support_status(feedback.status_text)
+    def _on_support_prepare_failed(self, request_id: int, error: str) -> None:
+        if request_id != self._support_prepare_request_id or self._cleanup_in_progress:
+            return
+        logger.warning("Failed to prepare BlockCheck support bundle: %s", error)
+        self._set_support_status("Ошибка подготовки")
+        try:
+            InfoBarHelper.warning(
+                self.window(),
+                tr_catalog("page.blockcheck.error", default="Ошибка выполнения"),
+                f"Не удалось подготовить обращение:\n{error}",
+            )
+        except Exception:
+            pass
 
-            try:
-                InfoBarHelper.success(
-                    self.window(),
-                    tr_catalog(
-                        "page.blockcheck.support_prepared_title",
-                        default="Обращение подготовлено",
-                    ),
-                    feedback.info_text,
-                )
-            except Exception:
-                pass
-        except Exception as exc:
-            logger.warning("Failed to prepare BlockCheck support bundle: %s", exc)
-            self._set_support_status("Ошибка подготовки")
-            try:
-                InfoBarHelper.warning(
-                    self.window(),
-                    tr_catalog("page.blockcheck.error", default="Ошибка выполнения"),
-                    f"Не удалось подготовить обращение:\n{exc}",
-                )
-            except Exception:
-                pass
+    def _on_support_prepare_worker_finished(self, worker) -> None:
+        if self.__dict__.get("_support_prepare_worker") is worker:
+            self._support_prepare_worker = None
+        try:
+            worker.deleteLater()
+        except Exception:
+            pass
+        if self._prepare_support_btn is not None and not self._cleanup_in_progress:
+            self._prepare_support_btn.setEnabled(True)
 
     def _toggle_log_expand(self):
         """Развернуть/свернуть лог на всю страницу."""
@@ -931,6 +998,13 @@ class BlockcheckPage(BasePage):
             except Exception:
                 pass
             self._initial_state_worker = None
+        support_worker = self.__dict__.get("_support_prepare_worker")
+        if support_worker is not None:
+            try:
+                support_worker.quit()
+            except Exception:
+                pass
+            self._support_prepare_worker = None
         self._worker = cleanup_blockcheck_worker(self._worker)
 
         for page in (self._strategy_tab_page, self._diagnostics_tab_page, self._dns_spoofing_tab_page):

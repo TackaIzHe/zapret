@@ -1010,6 +1010,21 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("start_run_log", worker_source)
         self.assertIn("append_run_log", worker_source)
 
+    def test_blockcheck_support_bundle_prepares_through_worker(self) -> None:
+        blockcheck_workers = importlib.import_module("blockcheck.workers")
+        page_source = inspect.getsource(BlockcheckPage)
+        handler_source = inspect.getsource(BlockcheckPage._prepare_support_from_blockcheck)
+        worker_source = inspect.getsource(blockcheck_workers.BlockcheckSupportPrepareWorker.run)
+        feature_source = inspect.getsource(BlockcheckFeature)
+
+        self.assertIn("_request_support_prepare", handler_source)
+        self.assertNotIn("blockcheck_page_runtime.prepare_support", handler_source)
+        self.assertIn("create_support_prepare_worker", page_source)
+        self.assertIn("_support_prepare_worker", page_source)
+        self.assertIn("create_blockcheck_support_prepare_worker", feature_source)
+        self.assertIn("blockcheck.page_runtime", worker_source)
+        self.assertIn("prepare_support", worker_source)
+
     def test_strategy_scan_apply_runs_through_worker(self) -> None:
         spec = importlib.util.find_spec("blockcheck.strategy_apply_worker")
         self.assertIsNotNone(spec)

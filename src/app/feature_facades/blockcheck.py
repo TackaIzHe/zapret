@@ -43,6 +43,11 @@ class BlockcheckFeature:
 
         return BlockcheckInitialStateWorker(request_id, parent=parent)
 
+    def create_blockcheck_support_prepare_worker(self, request_id: int, **kwargs):
+        from blockcheck.workers import BlockcheckSupportPrepareWorker
+
+        return BlockcheckSupportPrepareWorker(request_id, **kwargs)
+
     def append_run_log(self, *args, **kwargs) -> None:
         return self._commands().append_run_log(*args, **kwargs)
 
