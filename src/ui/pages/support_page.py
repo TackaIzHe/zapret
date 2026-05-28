@@ -6,6 +6,7 @@ from __future__ import annotations
 from qfluentwidgets import InfoBar, PrimaryPushSettingCard, PushSettingCard, SettingCardGroup
 
 from app.ui_texts import tr as tr_catalog
+from ui.one_shot_worker_runtime import OneShotWorkerRuntime
 from ui.theme import get_theme_tokens, get_themed_qta_icon
 
 from .base_page import BasePage
@@ -25,6 +26,8 @@ class SupportPage(BasePage):
         self._open_discussions_action = open_discussions
         self._open_telegram_action = open_telegram
         self._open_discord_action = open_discord
+        self._support_open_runtime = OneShotWorkerRuntime()
+        self._support_open_pending = None
 
         self._support_card = None
         self._support_group = None
@@ -161,37 +164,127 @@ class SupportPage(BasePage):
                 pass
 
     def _open_support_discussions(self) -> None:
-        result = self._open_discussions_action()
-        if (not result.ok) and InfoBar is not None:
-            InfoBar.warning(
-                title=self._tr("page.support.error.title", "Ошибка"),
-                content=self._tr(
-                    "page.support.error.open_discussions",
-                    "Не удалось открыть GitHub Discussions:\n{error}",
-                ).format(error=result.message),
-                parent=self.window(),
-            )
+        self._request_support_open_action(
+            "discussions",
+            self._open_discussions_action,
+            error_key="page.support.error.open_discussions",
+            error_default="Не удалось открыть GitHub Discussions:\n{error}",
+        )
 
     def _open_telegram_support(self) -> None:
-        result = self._open_telegram_action()
-        if (not result.ok) and InfoBar is not None:
+        self._request_support_open_action(
+            "telegram",
+            self._open_telegram_action,
+            error_key="page.support.error.open_telegram",
+            error_default="Не удалось открыть Telegram:\n{error}",
+        )
+
+    def _open_discord(self) -> None:
+        self._request_support_open_action(
+            "discord",
+            self._open_discord_action,
+            error_key="page.support.error.open_discord",
+            error_default="Не удалось открыть Discord:\n{error}",
+        )
+
+    def create_support_open_action_worker(self, request_id: int, *, action_name: str, action_fn):
+        from ui.pages.support_open_worker import SupportOpenActionWorker
+
+        return SupportOpenActionWorker(
+            request_id,
+            action_name=action_name,
+            action_fn=action_fn,
+            parent=self,
+        )
+
+    def _request_support_open_action(
+        self,
+        action_name: str,
+        action_fn,
+        *,
+        error_key: str,
+        error_default: str,
+    ) -> None:
+        request = (str(action_name or "").strip(), action_fn, str(error_key), str(error_default))
+        if self._support_open_runtime.is_running():
+            self._support_open_pending = request
+            return
+        self._support_open_pending = None
+        self._start_support_open_action_worker(*request)
+
+    def _start_support_open_action_worker(
+        self,
+        action_name: str,
+        action_fn,
+        error_key: str,
+        error_default: str,
+    ) -> None:
+        request_id, _worker = self._support_open_runtime.start_qthread_worker(
+            worker_factory=lambda request_id: self.create_support_open_action_worker(
+                request_id,
+                action_name=action_name,
+                action_fn=action_fn,
+            ),
+            on_loaded=lambda request_id, action_name, result: self._on_support_open_action_finished(
+                request_id,
+                action_name,
+                result,
+                error_key=error_key,
+                error_default=error_default,
+            ),
+            on_failed=lambda request_id, action_name, error: self._on_support_open_action_failed(
+                request_id,
+                action_name,
+                error,
+                error_key=error_key,
+                error_default=error_default,
+            ),
+            on_finished=self._on_support_open_action_worker_finished,
+        )
+        _ = request_id
+
+    def _on_support_open_action_finished(
+        self,
+        request_id: int,
+        _action_name: str,
+        result,
+        *,
+        error_key: str,
+        error_default: str,
+    ) -> None:
+        if not self._support_open_runtime.is_current(request_id):
+            return
+        if result.ok:
+            return
+        self._show_support_open_error(error_key, error_default, str(getattr(result, "message", "") or ""))
+
+    def _on_support_open_action_failed(
+        self,
+        request_id: int,
+        _action_name: str,
+        error: str,
+        *,
+        error_key: str,
+        error_default: str,
+    ) -> None:
+        if not self._support_open_runtime.is_current(request_id):
+            return
+        self._show_support_open_error(error_key, error_default, str(error))
+
+    def _on_support_open_action_worker_finished(self, _worker) -> None:
+        pending = self._support_open_pending
+        self._support_open_pending = None
+        if pending is not None:
+            self._start_support_open_action_worker(*pending)
+
+    def _show_support_open_error(self, error_key: str, error_default: str, error: str) -> None:
+        if InfoBar is not None:
             InfoBar.warning(
                 title=self._tr("page.support.error.title", "Ошибка"),
-                content=self._tr(
-                    "page.support.error.open_telegram",
-                    "Не удалось открыть Telegram:\n{error}",
-                ).format(error=result.message),
+                content=self._tr(error_key, error_default).format(error=error),
                 parent=self.window(),
             )
 
-    def _open_discord(self) -> None:
-        result = self._open_discord_action()
-        if (not result.ok) and InfoBar is not None:
-            InfoBar.warning(
-                title=self._tr("page.support.error.title", "Ошибка"),
-                content=self._tr(
-                    "page.support.error.open_discord",
-                    "Не удалось открыть Discord:\n{error}",
-                ).format(error=result.message),
-                parent=self.window(),
-            )
+    def cleanup(self) -> None:
+        self._support_open_pending = None
+        self._support_open_runtime.stop(blocking=True, warning_prefix="Support open action worker")

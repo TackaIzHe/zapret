@@ -60,6 +60,7 @@ import donater.ui.page_lifecycle as premium_page_lifecycle
 from settings.dpi.page import DpiSettingsPage
 from ui.pages.appearance_page import AppearancePage
 from ui.pages.base_page import BasePage
+from ui.pages.support_page import SupportPage
 import settings.appearance as appearance_settings
 import settings.appearance_workers as appearance_workers
 from orchestra.ui.page import OrchestraPage
@@ -1027,6 +1028,30 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("_open_bot_runtime", page_source)
         self.assertIn("create_open_extend_bot_worker", feature_source)
         self.assertIn("open_extend_bot", worker_source)
+
+    def test_support_page_external_links_run_through_worker(self) -> None:
+        spec = importlib.util.find_spec("ui.pages.support_open_worker")
+        self.assertIsNotNone(spec)
+        support_open_worker = importlib.import_module("ui.pages.support_open_worker")
+
+        page_source = inspect.getsource(SupportPage)
+        worker_source = inspect.getsource(support_open_worker.SupportOpenActionWorker.run)
+
+        self.assertTrue(hasattr(support_open_worker, "SupportOpenActionWorker"))
+        self.assertIn("_support_open_runtime", page_source)
+        self.assertIn("create_support_open_action_worker", page_source)
+        for method_name in (
+            "_open_support_discussions",
+            "_open_telegram_support",
+            "_open_discord",
+        ):
+            source = inspect.getsource(getattr(SupportPage, method_name))
+            self.assertIn("_request_support_open_action", source)
+            self.assertNotIn("_open_discussions_action()", source)
+            self.assertNotIn("_open_telegram_action()", source)
+            self.assertNotIn("_open_discord_action()", source)
+
+        self.assertIn("action_fn", worker_source)
 
     def test_page_language_is_not_reapplied_on_every_repeat_navigation(self) -> None:
         class _Page:
