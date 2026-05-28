@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import os
 from typing import Callable, Optional
 
@@ -53,6 +54,7 @@ class PresetRuntimeCoordinator(QObject):
         self._preset_switch_apply_timer: QTimer | None = None
         self._active_preset_file_path: str = ""
         self._pending_preset_apply: PendingPresetApply | None = None
+        self._last_preset_content_apply_fingerprint: str = ""
 
     def setup_active_preset_file_watcher(self) -> None:
         watched_path = self._get_active_preset_path()
@@ -148,7 +150,20 @@ class PresetRuntimeCoordinator(QObject):
                 "INFO",
             )
 
-        self._request_preset_content_apply(method, "preset_content_changed", updated_file_name)
+        fingerprint = self._build_preset_content_apply_fingerprint(
+            method,
+            updated_file_name,
+            new_path,
+        )
+        if fingerprint and fingerprint == self._last_preset_content_apply_fingerprint:
+            log(
+                f"Preset runtime apply пропущен: содержимое active preset уже применяют ({method}, preset={updated_file_name})",
+                "DEBUG",
+            )
+            return
+
+        if self._request_preset_content_apply(method, "preset_content_changed", updated_file_name):
+            self._last_preset_content_apply_fingerprint = fingerprint
 
     def _request_selected_source_preset_apply(
         self,
@@ -202,6 +217,7 @@ class PresetRuntimeCoordinator(QObject):
         self._pending_preset_apply = None
         if pending is None:
             return
+        self._last_preset_content_apply_fingerprint = ""
         self._request_selected_source_preset_apply(
             launch_method=pending.launch_method,
             reason=pending.reason,
@@ -260,6 +276,29 @@ class PresetRuntimeCoordinator(QObject):
         return (
             os.path.abspath(left_value).replace("\\", "/").lower()
             == os.path.abspath(right_value).replace("\\", "/").lower()
+        )
+
+    @staticmethod
+    def _build_preset_content_apply_fingerprint(
+        launch_method: str,
+        preset_file_name: str,
+        path: str,
+    ) -> str:
+        path_value = str(path or "").strip()
+        if not path_value:
+            return ""
+        try:
+            with open(path_value, "rb") as file:
+                digest = hashlib.sha1(file.read()).hexdigest()
+        except Exception:
+            return ""
+        return "|".join(
+            (
+                normalize_launch_method(launch_method, default=""),
+                os.path.abspath(path_value).replace("\\", "/").lower(),
+                str(preset_file_name or "").strip().lower(),
+                digest,
+            )
         )
 
     def schedule_refresh_after_preset_switch(self, delay_ms: int = 0) -> None:

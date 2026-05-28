@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -55,6 +57,57 @@ class PresetRuntimeCoordinatorTests(unittest.TestCase):
         self.assertEqual(content_calls, [(ZAPRET2_MODE, "preset_content_changed", "Default v5.txt")])
         self.assertEqual(switch_calls, [])
         self.assertEqual(ui_state.content_revision, 1)
+
+    def test_duplicate_active_preset_content_change_does_not_reapply_same_runtime_payload(self) -> None:
+        from core.runtime.preset_runtime_coordinator import PresetRuntimeCoordinator
+        from settings.mode import ZAPRET2_MODE
+
+        content_calls: list[tuple[str, str, str]] = []
+        ui_state = SimpleNamespace(
+            content_revision=0,
+            bump_preset_content_revision=lambda: setattr(
+                ui_state,
+                "content_revision",
+                ui_state.content_revision + 1,
+            ),
+        )
+        presets_feature = SimpleNamespace(
+            is_selected_source_preset_file=lambda method, file_name: (
+                method == ZAPRET2_MODE and file_name == "Default v5.txt"
+            )
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            active_path = Path(tmp_dir) / "Default v5.txt"
+            active_path.write_text("--new\n--filter-tcp=443\n", encoding="utf-8")
+            coordinator = PresetRuntimeCoordinator(
+                presets_feature=presets_feature,
+                ui_state_store=ui_state,
+                get_launch_method=lambda: ZAPRET2_MODE,
+                get_active_preset_path=lambda: str(active_path),
+                refresh_after_switch=lambda: None,
+                request_selected_source_preset_apply=lambda *_args: True,
+                request_preset_content_apply=lambda method, reason, file_name: content_calls.append(
+                    (method, reason, file_name)
+                )
+                or True,
+            )
+            coordinator._active_preset_file_path = str(active_path)
+            coordinator.setup_active_preset_file_watcher = lambda: None
+
+            coordinator.handle_preset_content_changed(ZAPRET2_MODE, "Default v5.txt")
+            coordinator.handle_preset_content_changed(ZAPRET2_MODE, "Default v5.txt")
+            active_path.write_text("--new\n--filter-tcp=80\n", encoding="utf-8")
+            coordinator.handle_preset_content_changed(ZAPRET2_MODE, "Default v5.txt")
+
+        self.assertEqual(
+            content_calls,
+            [
+                (ZAPRET2_MODE, "preset_content_changed", "Default v5.txt"),
+                (ZAPRET2_MODE, "preset_content_changed", "Default v5.txt"),
+            ],
+        )
+        self.assertEqual(ui_state.content_revision, 3)
 
     def test_active_preset_revision_is_published_after_click_event(self) -> None:
         from core.runtime.preset_runtime_coordinator import PresetRuntimeCoordinator
