@@ -188,6 +188,12 @@ class ProfileOrderPageBase(BasePage):
     ) -> None:
         if request_id != int(getattr(self, "_order_move_request_id", 0) or 0):
             return
+        if result and self._apply_profile_order_move_locally(
+            action,
+            source_profile_key,
+            destination_profile_key=destination_profile_key,
+        ):
+            return
         if result:
             self._reload_order_profiles(force=True)
 
@@ -203,6 +209,22 @@ class ProfileOrderPageBase(BasePage):
         delete_later = getattr(worker, "deleteLater", None)
         if callable(delete_later):
             delete_later()
+
+    def _apply_profile_order_move_locally(
+        self,
+        action: str,
+        source_profile_key: str,
+        *,
+        destination_profile_key: str = "",
+    ) -> bool:
+        order_list = self._order_list
+        if order_list is None:
+            return False
+        return order_list.move_profile_item(
+            source_profile_key,
+            action,
+            destination_profile_key,
+        )
 
     def _rebuild_breadcrumb(self) -> None:
         if self._breadcrumb is None:

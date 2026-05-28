@@ -29,6 +29,33 @@ class ProfileOrderListModel(QAbstractListModel):
         self._items = tuple(rows)
         self.endResetModel()
 
+    def move_profile(self, source_profile_key: str, action: str, destination_profile_key: str = "") -> bool:
+        source_key = str(source_profile_key or "").strip()
+        move_action = str(action or "").strip()
+        destination_key = str(destination_profile_key or "").strip()
+        if not source_key:
+            return False
+
+        rows = list(self._items)
+        source_index = next((index for index, item in enumerate(rows) if str(getattr(item, "key", "") or "") == source_key), -1)
+        if source_index < 0:
+            return False
+        source = rows.pop(source_index)
+
+        if move_action == "end":
+            insert_index = len(rows)
+        else:
+            destination_index = next((index for index, item in enumerate(rows) if str(getattr(item, "key", "") or "") == destination_key), -1)
+            if destination_index < 0:
+                return False
+            insert_index = destination_index + (1 if move_action == "after" else 0)
+        rows.insert(insert_index, source)
+
+        self.beginResetModel()
+        self._items = tuple(rows)
+        self.endResetModel()
+        return True
+
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
         if parent.isValid():
             return 0
@@ -151,6 +178,9 @@ class ProfileOrderList(QWidget):
 
     def set_profiles(self, items: tuple[Any, ...]) -> None:
         self._model.set_profiles(tuple(items or ()))
+
+    def move_profile_item(self, source_profile_key: str, action: str, destination_profile_key: str = "") -> bool:
+        return self._model.move_profile(source_profile_key, action, destination_profile_key)
 
 
 __all__ = ["ProfileOrderList", "ProfileOrderListModel"]

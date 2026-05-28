@@ -54,6 +54,23 @@ class ProfileOrderPageTests(unittest.TestCase):
         self.assertEqual(index.data(ProfileListModel.IconNameRole), "simple:youtube:YT")
         self.assertEqual(index.data(ProfileListModel.IconColorRole), "#FF0000")
 
+    def test_order_model_can_move_profile_locally(self) -> None:
+        from profile.ui.profile_order_list import ProfileOrderListModel
+        from profile.ui.profile_list_model import ProfileListModel
+
+        model = ProfileOrderListModel()
+        model.set_profiles((
+            _item("A", key="profile:a", profile_index=0),
+            _item("B", key="profile:b", profile_index=1),
+            _item("C", key="profile:c", profile_index=2),
+        ))
+
+        self.assertTrue(model.move_profile("profile:c", "before", "profile:a"))
+        self.assertEqual(
+            [model.index(row, 0).data(ProfileListModel.ProfileKeyRole) for row in range(model.rowCount())],
+            ["profile:c", "profile:a", "profile:b"],
+        )
+
     def test_order_page_explains_priority_and_uses_order_workers(self) -> None:
         from profile.ui.profile_order_page import ProfileOrderPageBase
 
@@ -72,6 +89,20 @@ class ProfileOrderPageTests(unittest.TestCase):
         self.assertNotIn("move_preset_profile_before", before_source)
         self.assertNotIn("move_preset_profile_after", after_source)
         self.assertNotIn("move_preset_profile_to_end", end_source)
+
+    def test_order_page_updates_visible_list_locally_after_move_worker(self) -> None:
+        from profile.ui.profile_order_list import ProfileOrderList
+        from profile.ui.profile_order_page import ProfileOrderPageBase
+
+        moved_source = inspect.getsource(ProfileOrderPageBase._on_profile_order_moved)
+        local_source = inspect.getsource(ProfileOrderPageBase._apply_profile_order_move_locally)
+        list_source = inspect.getsource(ProfileOrderList)
+
+        self.assertIn("_apply_profile_order_move_locally", moved_source)
+        self.assertIn("_reload_order_profiles", moved_source)
+        self.assertLess(moved_source.index("_apply_profile_order_move_locally"), moved_source.index("_reload_order_profiles"))
+        self.assertIn("move_profile_item", list_source)
+        self.assertIn("move_profile_item", local_source)
 
     def test_order_page_starts_workers_without_direct_profile_calls(self) -> None:
         from profile.ui.profile_order_page import ProfileOrderPageBase
