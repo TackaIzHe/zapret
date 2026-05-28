@@ -1924,6 +1924,7 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         page_workers = importlib.import_module("dns.page_workers")
         feature_source = inspect.getsource(__import__("app.feature_facades.dns", fromlist=["DnsFeature"]).DnsFeature)
         page_source = inspect.getsource(dns_page.NetworkPage)
+        force_workflow = importlib.import_module("dns.page_force_dns_workflow")
 
         self.assertTrue(hasattr(page_workers, "DnsApplyWorker"))
         worker_source = inspect.getsource(page_workers.DnsApplyWorker)
@@ -1948,6 +1949,11 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("apply_provider_dns", worker_source)
         self.assertIn("apply_custom_dns", worker_source)
         self.assertIn("refresh_dns_info", worker_source)
+        self.assertFalse(hasattr(dns_page.NetworkPage, "_refresh_adapters_dns"))
+        self.assertIsNone(importlib.util.find_spec("dns.page_apply_workflow"))
+        self.assertFalse(hasattr(force_workflow, "handle_force_dns_toggled_action"))
+        self.assertFalse(hasattr(force_workflow, "flush_dns_cache_action"))
+        self.assertFalse(hasattr(force_workflow, "reset_dns_to_dhcp_action"))
 
     def test_network_loaded_adapters_do_not_wait_for_current_dns(self) -> None:
         stored = {}

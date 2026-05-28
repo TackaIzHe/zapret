@@ -744,37 +744,6 @@ class NetworkPage(BasePage):
             import traceback
             log(traceback.format_exc(), "DEBUG")
     
-    def _refresh_adapters_dns(self):
-        """Обновляет отображение DNS у всех адаптеров"""
-        if self._cleanup_in_progress:
-            return
-        try:
-            if not self.adapter_cards:
-                log("Нет карточек адаптеров для обновления", "DEBUG")
-                return
-
-            adapter_names = [card.adapter_name for card in self.adapter_cards]
-            dns_info = self._dns_feature().refresh_dns_info(adapter_names)
-            self._dns_info = dns_info
-            refresh_plan = refresh_adapter_cards(
-                adapter_cards=self.adapter_cards,
-                dns_info=dns_info,
-                build_refresh_plan_fn=lambda names, info: dns_page_plans.build_adapter_dns_refresh_plan(
-                    names,
-                    info,
-                    normalize_alias_fn=self._dns.normalize_adapter_alias,
-                ),
-            )
-
-            self._request_dns_selection_sync()
-            if refresh_plan is not None:
-                log(refresh_plan.log_message, refresh_plan.log_level)
-            
-        except Exception as e:
-            log(f"Ошибка обновления DNS адаптеров: {e}", "WARNING")
-            import traceback
-            log(traceback.format_exc(), "DEBUG")
-    
     def _build_force_dns_card(self):
         """Строит виджет принудительного DNS в стиле DPI страницы"""
         dns_feature = self._dns_feature()
