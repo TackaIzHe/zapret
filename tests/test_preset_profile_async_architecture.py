@@ -11,6 +11,7 @@ import profile.additional_settings_loader as profile_additional_settings_loader
 import profile.profile_setup_loader as profile_setup_loader
 from profile.profile_list_loader import ProfileListLoadWorker
 from profile.service import ProfilePresetService
+from profile.ui.profiles_list import ProfilesList
 from profile.ui.profile_setup_page import ProfileSetupPageBase
 from profile.ui.preset_setup_page import PresetSetupPageBase
 from presets import display_state
@@ -487,6 +488,17 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("show_menu", action_finished_source)
         self.assertIn("_create_profile_folder_action_worker", request_source)
         self.assertIn("ProfileFolderActionWorker", inspect.getsource(PresetSetupPageBase._create_profile_folder_action_worker))
+
+    def test_profile_move_updates_visible_list_locally_after_worker(self) -> None:
+        finished_source = inspect.getsource(PresetSetupPageBase._on_profile_move_finished)
+        local_source = inspect.getsource(PresetSetupPageBase._apply_profile_move_locally)
+        list_source = inspect.getsource(ProfilesList)
+
+        self.assertIn("_apply_profile_move_locally", finished_source)
+        self.assertIn("refresh_from_preset_switch", finished_source)
+        self.assertLess(finished_source.index("_apply_profile_move_locally"), finished_source.index("refresh_from_preset_switch"))
+        self.assertIn("move_profile_item", list_source)
+        self.assertIn("move_profile_item", local_source)
 
     def test_profile_commands_reuse_service_cache(self) -> None:
         source = inspect.getsource(profile_commands._profile_preset_service)

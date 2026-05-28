@@ -119,6 +119,20 @@ class ProfilesList(QWidget):
     def remove_profile_item(self, profile_key: str) -> bool:
         return self._model.remove_profile(profile_key)
 
+    def move_profile_item(
+        self,
+        source_profile_key: str,
+        destination_kind: str,
+        destination_profile_key: str = "",
+        destination_group_key: str = "",
+    ) -> bool:
+        return self._model.move_profile(
+            source_profile_key,
+            destination_kind,
+            destination_profile_key,
+            destination_group_key,
+        )
+
     def set_search_query(self, query: str) -> None:
         self._search_query = str(query or "")
         self._model.set_search_query(self._search_query)

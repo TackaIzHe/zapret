@@ -787,6 +787,14 @@ class PresetSetupPageBase(BasePage):
     ) -> None:
         if request_id != int(getattr(self, "_profile_move_request_id", 0) or 0):
             return
+        if result and self._apply_profile_move_locally(
+            action,
+            source_profile_key,
+            destination_profile_key=destination_profile_key,
+            destination_group_key=destination_group_key,
+        ):
+            self._profile_payload_dirty = True
+            return
         self.refresh_from_preset_switch()
 
     def _on_profile_move_failed(self, request_id: int, error: str) -> None:
@@ -799,6 +807,33 @@ class PresetSetupPageBase(BasePage):
         if self.__dict__.get("_profile_move_worker") is worker:
             self._profile_move_worker = None
         worker.deleteLater()
+
+    def _apply_profile_move_locally(
+        self,
+        action: str,
+        source_profile_key: str,
+        *,
+        destination_profile_key: str = "",
+        destination_group_key: str = "",
+    ) -> bool:
+        profiles_list = self._profiles_list
+        if profiles_list is None:
+            return False
+        destination_kind_by_action = {
+            "before": "profile",
+            "after": "profile_after",
+            "end": "end",
+            "folder": "folder",
+        }
+        destination_kind = destination_kind_by_action.get(str(action or "").strip())
+        if not destination_kind:
+            return False
+        return profiles_list.move_profile_item(
+            source_profile_key,
+            destination_kind,
+            destination_profile_key,
+            destination_group_key,
+        )
 
     def _create_profile_move_worker(
         self,
