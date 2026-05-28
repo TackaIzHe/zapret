@@ -85,7 +85,7 @@
 --hostlist=lists/youtube.txt
 --out-range=-d8
 --payload=tls_client_hello
---lua-desync=multisplit_tls:payload=tls_client_hello:seqovl=680:sni=www.google.com:tls_mod=rnd,rndsni,dupsid:pos=2
+--lua-desync=hostfakesplit:host=ozon.ru:tcp_ts=-1000:tcp_md5:repeats=4
 
 --new
 
@@ -104,6 +104,23 @@
 --out-range=-n8
 --payload=tls_client_hello
 --lua-desync=multidisorder:pos=100,midsld,sniext+1,endhost-2,-10
+
+--new
+
+--name=discord.media
+--filter-tcp=80,443,1080,2053,2083,2087,2096,8443
+--hostlist=lists/discord-media.txt
+--out-range=-d10
+--payload=all
+--lua-desync=multidisorder:pos=1,host+2,sld+2,sld+5,sniext+1,sniext+2,endhost-2:seqovl=1
+
+--new
+
+--name=Голосовые звонки/чаты
+--filter-l7=stun,discord
+--out-range=-n8
+--payload=stun,discord_ip_discovery
+--lua-desync=fake:blob=stun_pat:repeats=6
 
 --new
 
@@ -145,8 +162,17 @@
 
 --new
 
+--name=18+ сайты
+--filter-tcp=80,443
+--hostlist=lists/porn.txt
+--out-range=-d8
+--lua-desync=hostfakesplit:host=ozon.ru:tcp_ts=-1000:tcp_md5:repeats=4
+
+--new
+
 --name=Tanki X
 --filter-tcp=80,443,5050,8080
+--hostlist=lists/tankix.txt
 --out-range=-n8
 --payload=all
 --lua-desync=send:repeats=2
@@ -163,12 +189,11 @@
 
 --new
 
---name=Мои сайты
---filter-tcp=80,443-65535
---hostlist=lists/other.txt
---out-range=-d10
---payload=tls_client_hello
---lua-desync=fakedsplit:pos=1:tcp_ack=-66000:repeats=10:ip_ttl=4:ip6_ttl=4
+--name=Twitter Images (twimg.com)
+--filter-tcp=80,443
+--hostlist=lists/twimg.txt
+--out-range=-d8
+--lua-desync=fake:blob=tls7:tcp_ack=-66000:tcp_ts_up:tls_mod=rnd
 
 --new
 
@@ -244,37 +269,12 @@
 
 --new
 
---name=discord.media
---filter-tcp=80,443,1080,2053,2083,2087,2096,8443
---hostlist=lists/discord-media.txt
---out-range=-d10
---payload=tls_client_hello
---lua-desync=hostfakesplit_multi:hosts=google.com,vimeo.com:tcp_ts=-1000:tcp_md5:repeats=2
-
---new
-
---name=Голосовые звонки/чаты
---filter-l7=stun,discord
---out-range=-n8
---payload=stun,discord_ip_discovery
---lua-desync=fake:blob=fake_default_udp
-
---new
-
 --name=Twitter/X
 --filter-tcp=80,443
 --ipset=lists/ipset-twitter.txt
 --out-range=-d8
 --payload=tls_client_hello
 --lua-desync=hostfakesplit_multi:hosts=google.com,vimeo.com:tcp_ts=-1000:tcp_md5:repeats=2
-
---new
-
---name=Twitter Images (twimg.com)
---filter-tcp=80,443
---hostlist=lists/twimg.txt
---out-range=-d8
---lua-desync=fake:blob=tls7:tcp_ack=-66000:tcp_ts_up:tls_mod=rnd
 
 --new
 
@@ -291,10 +291,9 @@
 --filter-tcp=80,443-65535
 --ipset=lists/ipset-cloudflare.txt
 --out-range=-d10
---payload=tls_client_hello
+--payload=all
 --lua-desync=send:repeats=2
 --lua-desync=syndata:blob=stun_pat
---lua-desync=tls_multisplit_sni:seqovl=652:seqovl_pattern=stun_pat
 
 --new
 
@@ -303,8 +302,8 @@
 --ipset=lists/cloudflare-ipset.txt
 --out-range=-d10
 --payload=tls_client_hello
---lua-desync=fake:blob=tls_google:repeats=6:tcp_ts=-600000
---lua-desync=fakedsplit:pattern=0x00:repeats=6:tcp_ts=-600000
+--lua-desync=send:repeats=2
+--lua-desync=syndata:blob=stun_pat
 
 --new
 
@@ -368,13 +367,12 @@
 
 --new
 
---name=WhatsApp
+--name=Мои сайты
 --filter-tcp=80,443-65535
---ipset=lists/ipset-whatsapp.txt
+--hostlist=lists/other.txt
 --out-range=-d10
 --payload=tls_client_hello
---lua-desync=fake:blob=tls_google:repeats=6:tcp_ts=-600000
---lua-desync=fakedsplit:pattern=0x00:repeats=6:tcp_ts=-600000
+--lua-desync=fakedsplit:pos=1:tcp_ack=-66000:repeats=10:ip_ttl=4:ip6_ttl=4
 
 --new
 
