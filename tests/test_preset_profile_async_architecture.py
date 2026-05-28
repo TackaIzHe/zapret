@@ -39,6 +39,7 @@ from log.ui.page import LogsPage
 from blobs.ui.page import BlobsPage
 import blockcheck.page_runtime as blockcheck_page_runtime
 from blockcheck.ui.page import BlockcheckPage
+from blockcheck.ui.strategy_scan_page import StrategyScanPage
 import blockcheck.ui.helpers as blockcheck_ui_helpers
 from app.feature_facades.blockcheck import BlockcheckFeature
 from updater.ui.page import ServersPage
@@ -882,6 +883,25 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
 
         self.assertEqual(read_settings.call_count, 1)
         self.assertEqual(plan.user_domains, ("example.com", "discord.com"))
+
+    def test_strategy_scan_apply_runs_through_worker(self) -> None:
+        spec = importlib.util.find_spec("blockcheck.strategy_apply_worker")
+        self.assertIsNotNone(spec)
+        strategy_apply_worker = importlib.import_module("blockcheck.strategy_apply_worker")
+
+        apply_source = inspect.getsource(StrategyScanPage._on_apply_strategy)
+        page_source = inspect.getsource(StrategyScanPage)
+        finished_source = inspect.getsource(StrategyScanPage._on_strategy_apply_finished)
+        feature_source = inspect.getsource(BlockcheckFeature)
+        worker_source = inspect.getsource(strategy_apply_worker.StrategyApplyWorker.run)
+
+        self.assertIn("_request_strategy_apply", apply_source)
+        self.assertNotIn("self._blockcheck.apply_strategy(", apply_source)
+        self.assertIn("create_strategy_apply_worker", page_source)
+        self.assertIn("_strategy_apply_worker", page_source)
+        self.assertIn("create_strategy_apply_worker", feature_source)
+        self.assertIn("build_apply_success_plan", finished_source)
+        self.assertIn("apply_strategy", worker_source)
 
     def test_logs_file_operations_log_internal_timing_stages(self) -> None:
         list_source = inspect.getsource(log_commands.list_logs)

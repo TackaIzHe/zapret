@@ -98,6 +98,8 @@ class StrategyScanPage(BasePage):
         self._prepare_support_btn = None
         self._support_status_label = None
         self._cleanup_in_progress = False
+        self._strategy_apply_worker = None
+        self._strategy_apply_request_id = 0
 
         self._build_ui()
         if self._embedded:
@@ -515,32 +517,70 @@ class StrategyScanPage(BasePage):
 
     def _on_apply_strategy(self, strategy_args: str, strategy_name: str):
         """Copy the working strategy into the selected source preset."""
-        try:
-            result = self._blockcheck.apply_strategy(
-                strategy_args=strategy_args,
-                strategy_name=strategy_name,
-                scan_target=self._scan_target,
-                scan_protocol=self._scan_protocol,
-                scan_udp_games_scope=self._scan_udp_games_scope,
-            )
-            message_plan = self._blockcheck.build_apply_success_plan(result)
+        self._request_strategy_apply(strategy_args, strategy_name)
 
-            InfoBarHelper.success(
+    def create_strategy_apply_worker(self, request_id: int, *, strategy_args: str, strategy_name: str):
+        return self._blockcheck.create_strategy_apply_worker(
+            request_id,
+            strategy_args=strategy_args,
+            strategy_name=strategy_name,
+            scan_target=self._scan_target,
+            scan_protocol=self._scan_protocol,
+            scan_udp_games_scope=self._scan_udp_games_scope,
+            parent=self,
+        )
+
+    def _request_strategy_apply(self, strategy_args: str, strategy_name: str) -> None:
+        worker = self.__dict__.get("_strategy_apply_worker")
+        if worker is not None:
+            try:
+                if worker.isRunning():
+                    return
+            except Exception:
+                return
+
+        self._strategy_apply_request_id += 1
+        request_id = self._strategy_apply_request_id
+        worker = self.create_strategy_apply_worker(
+            request_id,
+            strategy_args=strategy_args,
+            strategy_name=strategy_name,
+        )
+        self._strategy_apply_worker = worker
+        worker.completed.connect(self._on_strategy_apply_finished)
+        worker.failed.connect(self._on_strategy_apply_failed)
+        worker.finished.connect(lambda w=worker: self._on_strategy_apply_worker_finished(w))
+        worker.start()
+
+    def _on_strategy_apply_finished(self, request_id: int, result) -> None:
+        if request_id != self._strategy_apply_request_id or self._cleanup_in_progress:
+            return
+        message_plan = self._blockcheck.build_apply_success_plan(result)
+
+        InfoBarHelper.success(
+            self.window(),
+            tr_catalog(message_plan.title_key, default=message_plan.title_default),
+            message_plan.body_text,
+        )
+
+    def _on_strategy_apply_failed(self, request_id: int, error: str) -> None:
+        if request_id != self._strategy_apply_request_id or self._cleanup_in_progress:
+            return
+        logger.warning("Failed to apply strategy: %s", error)
+        try:
+            message_plan = self._blockcheck.build_apply_error_plan(str(error))
+            InfoBarHelper.warning(
                 self.window(),
                 tr_catalog(message_plan.title_key, default=message_plan.title_default),
                 message_plan.body_text,
             )
-        except Exception as e:
-            logger.warning("Failed to apply strategy: %s", e)
-            try:
-                message_plan = self._blockcheck.build_apply_error_plan(str(e))
-                InfoBarHelper.warning(
-                    self.window(),
-                    tr_catalog(message_plan.title_key, default=message_plan.title_default),
-                    message_plan.body_text,
-                )
-            except Exception:
-                pass
+        except Exception:
+            pass
+
+    def _on_strategy_apply_worker_finished(self, worker) -> None:
+        if self.__dict__.get("_strategy_apply_worker") is worker:
+            self._strategy_apply_worker = None
+        worker.deleteLater()
 
     # ------------------------------------------------------------------
     # UI helpers
@@ -602,4 +642,11 @@ class StrategyScanPage(BasePage):
 
     def cleanup(self) -> None:
         self._cleanup_in_progress = True
+        worker = self.__dict__.get("_strategy_apply_worker")
+        if worker is not None:
+            try:
+                worker.quit()
+            except Exception:
+                pass
+            self._strategy_apply_worker = None
         self._worker = cleanup_strategy_scan_worker(self._worker)
