@@ -222,6 +222,9 @@ class AutostartPage(BasePage):
         self._autostart_action_worker = None
         self._autostart_action_request_id = 0
         self._autostart_action_pending: list[tuple[str, bool | None, str | None]] = []
+        self._mode_load_worker = None
+        self._mode_load_request_id = 0
+        self._mode_load_pending = False
 
         self._build_ui()
         self._apply_page_theme(force=True)
@@ -522,6 +525,55 @@ class AutostartPage(BasePage):
         self._apply_page_theme()
 
     def _update_mode(self):
+        self._request_mode_load()
+
+    def create_autostart_mode_load_worker(self, request_id: int):
+        return self._autostart.create_autostart_mode_load_worker(request_id, parent=self)
+
+    def _request_mode_load(self) -> None:
+        if self._cleanup_in_progress:
+            return
+        worker = self.__dict__.get("_mode_load_worker")
+        if worker is not None:
+            try:
+                if worker.isRunning():
+                    self._mode_load_pending = True
+                    return
+            except Exception:
+                self._mode_load_pending = True
+                return
+        self._start_mode_load_worker()
+
+    def _start_mode_load_worker(self) -> None:
+        self._mode_load_pending = False
+        self._mode_load_request_id += 1
+        request_id = self._mode_load_request_id
+        worker = self.create_autostart_mode_load_worker(request_id)
+        self._mode_load_worker = worker
+        worker.loaded.connect(self._on_mode_loaded)
+        worker.failed.connect(self._on_mode_load_failed)
+        worker.finished.connect(lambda w=worker: self._on_mode_load_worker_finished(w))
+        worker.start()
+
+    def _on_mode_loaded(self, request_id: int, method: str) -> None:
+        if request_id != self._mode_load_request_id or self._cleanup_in_progress:
+            return
+        self._apply_loaded_mode(method)
+
+    def _on_mode_load_failed(self, request_id: int, error: str) -> None:
+        if request_id != self._mode_load_request_id or self._cleanup_in_progress:
+            return
+        log(f"Ошибка обновления режима: {error}", "WARNING")
+        self.mode_label.setText(self._tr("page.autostart.mode.unknown", "Неизвестно"))
+
+    def _on_mode_load_worker_finished(self, worker) -> None:
+        if self.__dict__.get("_mode_load_worker") is worker:
+            self._mode_load_worker = None
+        worker.deleteLater()
+        if self._mode_load_pending and not self._cleanup_in_progress:
+            self._start_mode_load_worker()
+
+    def _apply_loaded_mode(self, method: str) -> None:
         try:
             from settings.mode import (
                 is_orchestra_launch_method,
@@ -529,7 +581,7 @@ class AutostartPage(BasePage):
                 is_zapret2_launch_method,
             )
 
-            method = str(self._autostart.get_current_launch_method() or "").strip()
+            method = str(method or "").strip()
             if is_zapret2_launch_method(method):
                 mode_text = "Профили (Zapret 2)"
             elif is_zapret1_launch_method(method):
@@ -687,3 +739,10 @@ class AutostartPage(BasePage):
             except Exception:
                 pass
             self._autostart_action_worker = None
+        mode_worker = self.__dict__.get("_mode_load_worker")
+        if mode_worker is not None:
+            try:
+                mode_worker.quit()
+            except Exception:
+                pass
+            self._mode_load_worker = None

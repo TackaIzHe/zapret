@@ -13,6 +13,7 @@ class AutostartFeature:
     set_autostart_enabled: Callable
     set_autostart_runtime_state: Callable
     create_autostart_action_worker: Callable
+    create_autostart_mode_load_worker: Callable
 
 
 def build_autostart_feature(*, runtime_state=None) -> AutostartFeature:
@@ -44,6 +45,15 @@ def build_autostart_feature(*, runtime_state=None) -> AutostartFeature:
             parent=parent,
         )
 
+    def _create_autostart_mode_load_worker(request_id: int, *, parent=None):
+        from autostart.workers import AutostartModeLoadWorker
+
+        return AutostartModeLoadWorker(
+            request_id,
+            autostart_feature=feature,
+            parent=parent,
+        )
+
     feature = AutostartFeature(
         get_current_launch_method=lambda *args, **kwargs: _public().get_current_launch_method(*args, **kwargs),
         save_gui_autostart_enabled=lambda *args, **kwargs: _public().save_gui_autostart_enabled(*args, **kwargs),
@@ -52,5 +62,6 @@ def build_autostart_feature(*, runtime_state=None) -> AutostartFeature:
         set_autostart_enabled=_set_autostart_enabled,
         set_autostart_runtime_state=_set_autostart_runtime_state,
         create_autostart_action_worker=_create_autostart_action_worker,
+        create_autostart_mode_load_worker=_create_autostart_mode_load_worker,
     )
     return feature

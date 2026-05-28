@@ -54,3 +54,22 @@ class AutostartActionWorker(QThread):
             self.failed.emit(self._request_id, self._action, str(exc), context)
             return
         self.completed.emit(self._request_id, self._action, result, context)
+
+
+class AutostartModeLoadWorker(QThread):
+    loaded = pyqtSignal(int, str)
+    failed = pyqtSignal(int, str)
+
+    def __init__(self, request_id: int, autostart_feature, parent=None):
+        super().__init__(parent)
+        self._request_id = int(request_id)
+        self._autostart = autostart_feature
+
+    def run(self) -> None:
+        try:
+            method = str(self._autostart.get_current_launch_method() or "").strip()
+        except Exception as exc:
+            log(f"AutostartModeLoadWorker: не удалось загрузить режим запуска: {exc}", "WARNING")
+            self.failed.emit(self._request_id, str(exc))
+            return
+        self.loaded.emit(self._request_id, method)
