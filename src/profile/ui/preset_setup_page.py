@@ -442,7 +442,7 @@ class PresetSetupPageBase(BasePage):
                 self._refresh_profile_item_locally(profile_key, target_key)
             return
         if action == "duplicate":
-            self._sync_profile_list_locally()
+            self._add_profile_item_locally(profile_key, str(result or ""))
             return
         if action == "delete" and bool(result):
             self._remove_profile_item_locally(profile_key)
@@ -487,17 +487,29 @@ class PresetSetupPageBase(BasePage):
         self._schedule_profiles_payload_request(force=True)
 
     def _apply_profile_enabled_locally(self, profile_key: str, enabled: bool) -> bool:
-        profiles_list = self._profiles_list
+        profiles_list = self.__dict__.get("_profiles_list")
         if profiles_list is None:
             return False
         return profiles_list.set_profile_enabled(profile_key, bool(enabled))
 
-    def _add_profile_item_locally(self, profile_key: str | None) -> None:
+    def _add_profile_item_locally(self, profile_key: str | None, new_profile_key: str | None = None) -> None:
+        source_key = str(profile_key or "").strip()
+        duplicate_key = str(new_profile_key or "").strip()
+        profiles_list = self.__dict__.get("_profiles_list")
+        if (
+            profiles_list is not None
+            and source_key
+            and duplicate_key
+            and profiles_list.duplicate_profile_item(source_key, duplicate_key)
+        ):
+            self._profile_payload_dirty = True
+            return
         self._profile_payload_dirty = True
         self._schedule_profiles_payload_request(force=True)
 
     def _remove_profile_item_locally(self, profile_key: str) -> None:
-        if self._profiles_list is not None and self._profiles_list.remove_profile_item(profile_key):
+        profiles_list = self.__dict__.get("_profiles_list")
+        if profiles_list is not None and profiles_list.remove_profile_item(profile_key):
             self._profile_payload_dirty = True
             return
         self.refresh_from_preset_switch()

@@ -932,7 +932,8 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         self.assertIn("_request_profile_context_action", delete_handler)
         self.assertIn("create_profile_context_action_worker", request_handler)
         self.assertIn("_refresh_profile_item_locally", finish_handler)
-        self.assertIn("_sync_profile_list_locally", finish_handler)
+        self.assertIn("_add_profile_item_locally", finish_handler)
+        self.assertIn("_remove_profile_item_locally", finish_handler)
         self.assertNotIn("_profile.set_profile_enabled", enable_handler)
         self.assertNotIn("_profile.duplicate_profile", duplicate_handler)
         self.assertNotIn("_profile.delete_profile", delete_handler)
@@ -940,8 +941,6 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         self.assertNotIn(".list_profiles(", sync_handler)
         self.assertNotIn("update_profiles", sync_handler)
         self.assertNotIn("build_profiles", sync_handler)
-        self.assertNotIn("_add_profile_item_locally", duplicate_handler)
-        self.assertNotIn("_remove_profile_item_locally", delete_handler)
 
     def test_profile_list_local_refresh_helpers_do_not_read_profiles_in_gui_thread(self) -> None:
         page = PresetSetupPageBase.__new__(PresetSetupPageBase)
@@ -1003,6 +1002,28 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         )
 
         page._profiles_list.remove_profile_item.assert_called_once_with("profile-1")
+        page.refresh_from_preset_switch.assert_not_called()
+        page._schedule_profiles_payload_request.assert_not_called()
+        self.assertTrue(page._profile_payload_dirty)
+
+    def test_profile_duplicate_finish_adds_row_without_full_reload(self) -> None:
+        page = PresetSetupPageBase.__new__(PresetSetupPageBase)
+        page._profile_context_action_request_id = 5
+        page._profile_payload_dirty = False
+        page._profiles_list = Mock()
+        page._profiles_list.duplicate_profile_item.return_value = True
+        page.refresh_from_preset_switch = Mock()
+        page._schedule_profiles_payload_request = Mock()
+
+        PresetSetupPageBase._on_profile_context_action_finished(
+            page,
+            5,
+            "duplicate",
+            "profile-1",
+            "profile-2",
+        )
+
+        page._profiles_list.duplicate_profile_item.assert_called_once_with("profile-1", "profile-2")
         page.refresh_from_preset_switch.assert_not_called()
         page._schedule_profiles_payload_request.assert_not_called()
         self.assertTrue(page._profile_payload_dirty)

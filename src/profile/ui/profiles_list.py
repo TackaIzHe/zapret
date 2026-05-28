@@ -126,6 +126,19 @@ class ProfilesList(QWidget):
             return False
         return self.replace_profile_item(profile_key, replace(item, enabled=bool(enabled)))
 
+    def duplicate_profile_item(self, source_profile_key: str, duplicate_profile_key: str) -> bool:
+        source = self.profile_item_for_key(source_profile_key)
+        duplicate_key = str(duplicate_profile_key or "").strip()
+        if source is None or not duplicate_key:
+            return False
+        duplicate = replace(
+            source,
+            key=duplicate_key,
+            profile_index=int(getattr(source, "profile_index", -1) or -1) + 1,
+            order=int(getattr(source, "order", 0) or 0) + 1,
+        )
+        return self.add_profile_item(duplicate)
+
     def move_profile_item(
         self,
         source_profile_key: str,
