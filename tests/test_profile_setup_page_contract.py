@@ -1880,6 +1880,53 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         )
         self.assertEqual(saved, [(8, "profile-2", False)])
 
+    def test_enabled_save_finish_updates_detail_without_reload(self) -> None:
+        item = ProfileListItem(
+            key="profile-1",
+            persistent_key="profile-1",
+            profile_index=1,
+            display_name="YouTube",
+            enabled=False,
+            in_preset=True,
+            strategy_id="strategy",
+            strategy_name="Strategy",
+            match_lines=("--filter-tcp=443",),
+            list_type="hostlist",
+            rating="",
+            favorite=False,
+            group="common",
+            group_name="",
+            order=1,
+        )
+        payload = ProfileSetupPayload(
+            item=item,
+            strategy_entries={},
+            strategy_states={},
+            raw_profile_text="",
+            raw_strategy_text="",
+            match_summary="",
+        )
+        page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        page._enabled_save_request_id = 8
+        page._profile_key = "profile-1"
+        page._payload = payload
+        page._enabled_checkbox = Mock()
+        page._loading = False
+        page.reload_current_profile = Mock()
+        page._on_profile_changed_callback = Mock()
+
+        ProfileSetupPageBase._on_enabled_save_finished(page, 8, "profile-1", True)
+
+        page.reload_current_profile.assert_not_called()
+        self.assertTrue(page._payload.item.enabled)
+        page._enabled_checkbox.setChecked.assert_called_once_with(True)
+        page._enabled_checkbox.setEnabled.assert_called_once_with(True)
+        page._on_profile_changed_callback.assert_called_once_with(
+            "profile-1",
+            "enabled",
+            page._payload.item,
+        )
+
     def test_profile_setup_page_has_list_file_editor_as_second_tab(self) -> None:
         build = inspect.getsource(ProfileSetupPageBase._build_content)
         ensure_editor = inspect.getsource(ProfileSetupPageBase._ensure_editor_tab_built)

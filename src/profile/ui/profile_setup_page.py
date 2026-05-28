@@ -1857,11 +1857,38 @@ class ProfileSetupPageBase(BasePage):
     def _on_enabled_save_finished(self, request_id: int, profile_key: str, enabled: bool) -> None:
         if request_id != self._enabled_save_request_id:
             return
+        old_key = str(self._profile_key or "").strip()
         new_key = str(profile_key or "").strip()
-        if new_key:
+        if new_key and new_key != old_key:
             self._profile_key = new_key
-        self.reload_current_profile()
-        self._on_profile_changed_callback(self._profile_key, "enabled" if enabled else "disabled")
+            self.reload_current_profile()
+            self._on_profile_changed_callback(self._profile_key, "enabled" if enabled else "disabled")
+            return
+        updated_item = self._apply_enabled_locally(enabled)
+        if updated_item is None:
+            self.reload_current_profile()
+            self._on_profile_changed_callback(self._profile_key, "enabled" if enabled else "disabled")
+            return
+        self._on_profile_changed_callback(self._profile_key, "enabled" if enabled else "disabled", updated_item)
+
+    def _apply_enabled_locally(self, enabled: bool):
+        payload = self._payload
+        if payload is None:
+            return None
+        item = getattr(payload, "item", None)
+        if item is None:
+            return None
+        updated_item = replace(item, enabled=bool(enabled))
+        self._payload = replace(payload, item=updated_item)
+        checkbox = self._enabled_checkbox
+        if checkbox is not None:
+            self._loading = True
+            try:
+                checkbox.setChecked(bool(enabled))
+                checkbox.setEnabled(True)
+            finally:
+                self._loading = False
+        return updated_item
 
     def _on_enabled_save_failed(self, request_id: int, error: str) -> None:
         if request_id != self._enabled_save_request_id:
