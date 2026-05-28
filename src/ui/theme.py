@@ -1204,6 +1204,23 @@ class ThemeBuildWorker(QObject):
             self.error.emit(str(e))
 
 
+class ThemePersistWorker(QThread):
+    saved = pyqtSignal(str, bool)
+    failed = pyqtSignal(str, str)
+
+    def __init__(self, theme_name: str, parent=None):
+        super().__init__(parent)
+        self._theme_name = str(theme_name or "").strip()
+
+    def run(self):
+        try:
+            result = set_selected_theme(self._theme_name)
+        except Exception as exc:
+            self.failed.emit(self._theme_name, str(exc))
+            return
+        self.saved.emit(self._theme_name, bool(result))
+
+
 class ThemeManager:
     """Класс для управления текущей темой приложения."""
 
@@ -1219,6 +1236,8 @@ class ThemeManager:
         self._latest_theme_request_id = 0
         self._latest_requested_theme: str | None = None
         self._active_theme_build_jobs: dict[int, tuple[QThread, ThemeBuildWorker]] = {}
+        self._theme_persist_worker: Optional[ThemePersistWorker] = None
+        self._theme_persist_pending: str | None = None
         
 
         # список тем — теперь пустой (тема определяется isDarkTheme() системно)
@@ -1250,6 +1269,16 @@ class ThemeManager:
                 except RuntimeError:
                     pass
             self._cleanup_theme_build_thread()
+            self._theme_persist_pending = None
+            persist_worker = self._theme_persist_worker
+            if persist_worker is not None:
+                try:
+                    if persist_worker.isRunning():
+                        persist_worker.quit()
+                        persist_worker.wait(1000)
+                except RuntimeError:
+                    pass
+                self._theme_persist_worker = None
                     
             log("ThemeManager очищен", "DEBUG")
             
@@ -1474,11 +1503,42 @@ class ThemeManager:
             self.current_theme = clean
 
             if persist:
-                set_selected_theme(clean)
-                log(f"💾 Тема сохранена: '{clean}'", "DEBUG")
+                self._request_theme_persist(clean)
 
         except Exception as e:
             log(f"Ошибка в _apply_css_only: {e}", "❌ ERROR")
+
+    def _request_theme_persist(self, theme_name: str) -> None:
+        clean = _normalize_theme_name(theme_name)
+        worker = self._theme_persist_worker
+        if worker is not None:
+            try:
+                if worker.isRunning():
+                    self._theme_persist_pending = clean
+                    return
+            except RuntimeError:
+                self._theme_persist_worker = None
+        self._start_theme_persist_worker(clean)
+
+    def _start_theme_persist_worker(self, theme_name: str) -> None:
+        worker = ThemePersistWorker(theme_name, parent=self.widget)
+        self._theme_persist_worker = worker
+        worker.saved.connect(lambda saved_theme, _ok: log(f"💾 Тема сохранена: '{saved_theme}'", "DEBUG"))
+        worker.failed.connect(lambda saved_theme, error: log(f"Не удалось сохранить тему '{saved_theme}': {error}", "WARNING"))
+        worker.finished.connect(lambda w=worker: self._on_theme_persist_finished(w))
+        worker.start()
+
+    def _on_theme_persist_finished(self, worker) -> None:
+        if self._theme_persist_worker is worker:
+            self._theme_persist_worker = None
+        try:
+            worker.deleteLater()
+        except RuntimeError:
+            pass
+        pending = self._theme_persist_pending
+        self._theme_persist_pending = None
+        if pending and not self._cleanup_in_progress:
+            self._start_theme_persist_worker(pending)
 
     def _set_status(self, text):
         """Устанавливает текст статуса (через главное окно)"""
