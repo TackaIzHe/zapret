@@ -279,11 +279,32 @@ class ProfileStrategyListWidget(QWidget):
             if next_current_id != self._current_strategy_id:
                 self.set_current_strategy_id(next_current_id)
             return
+        if self._can_update_strategy_rows_in_place(next_entries, next_states):
+            changed_strategy_ids = [
+                strategy_id
+                for strategy_id in next_entries
+                if self._states.get(strategy_id) != next_states.get(strategy_id)
+            ]
+            self._entries = next_entries
+            self._states = next_states
+            self._current_strategy_id = next_current_id
+            self._rows_signature = next_signature
+            for strategy_id in changed_strategy_ids:
+                item = self._item_by_strategy_id.get(strategy_id)
+                self._refresh_strategy_item(item, strategy_id, is_current=strategy_id == self._current_strategy_id)
+            return
         self._entries = next_entries
         self._states = next_states
         self._current_strategy_id = next_current_id
         self._rows_signature = next_signature
         self._rebuild_tree()
+
+    def _can_update_strategy_rows_in_place(self, next_entries: dict, next_states: dict) -> bool:
+        if set(self._entries.keys()) != set(next_entries.keys()):
+            return False
+        if not self._item_by_strategy_id:
+            return False
+        return _strategy_visible_order(self._entries, self._states) == _strategy_visible_order(next_entries, next_states)
 
     def set_current_strategy_id(self, strategy_id: str) -> None:
         next_id = str(strategy_id or "none").strip() or "none"
@@ -418,6 +439,19 @@ def _strategy_rows_signature(entries, states) -> tuple[tuple, tuple]:
             bool(getattr(state, "favorite", False)),
         ))
     return tuple(sorted(entry_rows)), tuple(sorted(state_rows))
+
+
+def _strategy_visible_order(entries, states) -> tuple[str, ...]:
+    return tuple(
+        strategy_id
+        for strategy_id, _entry in sorted(
+            dict(entries or {}).items(),
+            key=lambda pair: (
+                not bool(getattr(dict(states or {}).get(pair[0]), "favorite", False)),
+                str(getattr(pair[1], "name", "") or "").lower(),
+            ),
+        )
+    )
 
 
 def _match_tab_text(payload) -> str:

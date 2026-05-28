@@ -1601,6 +1601,34 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         widget._rebuild_tree.assert_called_once()
         widget.set_current_strategy_id.assert_not_called()
 
+    def test_strategy_list_updates_state_rows_without_rebuild_when_order_is_stable(self) -> None:
+        widget = ProfileStrategyListWidget.__new__(ProfileStrategyListWidget)
+        strategy_item = object()
+        entries = {
+            "fake": SimpleNamespace(
+                name="Fake",
+                args="--lua-desync=fake",
+                visual=SimpleNamespace(icon_name="bolt", color="#fff", label="Fake", description="Fake TLS"),
+            )
+        }
+        widget._entries = dict(entries)
+        widget._states = {"fake": ProfileStrategyState(rating="", favorite=False)}
+        widget._current_strategy_id = "fake"
+        widget._rows_signature = (("entry",), ("old-state",))
+        widget._item_by_strategy_id = {"fake": strategy_item}
+        widget._rebuild_tree = Mock(side_effect=AssertionError("strategy feedback must not rebuild the whole list"))
+        widget._refresh_strategy_item = Mock()
+
+        ProfileStrategyListWidget.set_rows(
+            widget,
+            entries=dict(entries),
+            states={"fake": ProfileStrategyState(rating="work", favorite=False)},
+            current_strategy_id="fake",
+        )
+
+        widget._rebuild_tree.assert_not_called()
+        widget._refresh_strategy_item.assert_called_once_with(strategy_item, "fake", is_current=True)
+
     def test_strategy_change_refreshes_only_changed_profile_row(self) -> None:
         page = PresetSetupPageBase.__new__(PresetSetupPageBase)
         page._refresh_profile_item_locally = Mock()
