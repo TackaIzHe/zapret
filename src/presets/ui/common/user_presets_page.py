@@ -29,6 +29,7 @@ from presets.user_presets_action_workers import (
     UserPresetEditActionWorker,
     UserPresetFolderActionWorker,
     UserPresetItemActionWorker,
+    UserPresetOpenFolderWorker,
     UserPresetStorageActionWorker,
 )
 from presets.ui.common.user_presets_page_runtime import (
@@ -39,7 +40,6 @@ from presets.ui.common.user_presets_page_runtime import (
     schedule_preset_search,
     update_presets_view_height,
 )
-from presets.ui.common.user_presets_page_actions import open_presets_folder_action
 from presets.ui.common.preset_folder_menu import show_preset_folder_menu
 from presets.ui.common.user_presets_action_dispatch import (
     UserPresetListActionHandlers,
@@ -175,6 +175,9 @@ class UserPresetsPageBase(BasePage):
         self._preset_folder_action_worker = None
         self._preset_folder_action_request_id = 0
         self._preset_folder_action_pending: list[dict[str, object]] = []
+        self._preset_open_folder_worker = None
+        self._preset_open_folder_request_id = 0
+        self._preset_open_folder_pending = False
         self._build_ui()
         self._after_ui_built()
         self.bind_ui_state_store(ui_state_store)
@@ -547,16 +550,58 @@ class UserPresetsPageBase(BasePage):
             box.exec()
 
     def _open_presets_folder(self) -> None:
-        open_presets_folder_action(
-            open_presets_folder_fn=lambda: self._presets_feature.open_user_presets_folder(self._config.launch_method),
-            info_bar_cls=InfoBar,
-            tr_fn=self._tr,
-            parent_window=self.window(),
-            error_key=f"{self._config.tr_prefix}.error.open_folder",
-            error_default="Не удалось открыть папку пресетов: {error}",
-            log_prefix=self._config.log_prefix,
-            log_fn=log,
+        self._request_preset_open_folder_action()
+
+    def create_preset_open_folder_worker(self, request_id: int):
+        return UserPresetOpenFolderWorker(
+            request_id,
+            self._presets_feature,
+            launch_method=self._config.launch_method,
+            parent=self,
         )
+
+    def _request_preset_open_folder_action(self) -> None:
+        worker = self.__dict__.get("_preset_open_folder_worker")
+        if worker is not None:
+            try:
+                if worker.isRunning():
+                    self._preset_open_folder_pending = True
+                    return
+            except RuntimeError:
+                self._preset_open_folder_worker = None
+        self._start_preset_open_folder_worker()
+
+    def _start_preset_open_folder_worker(self) -> None:
+        self._preset_open_folder_pending = False
+        self._preset_open_folder_request_id = int(getattr(self, "_preset_open_folder_request_id", 0) or 0) + 1
+        request_id = self._preset_open_folder_request_id
+        worker = self.create_preset_open_folder_worker(request_id)
+        self._preset_open_folder_worker = worker
+        worker.failed.connect(self._on_preset_open_folder_failed)
+        worker.finished.connect(lambda w=worker: self._on_preset_open_folder_worker_finished(w))
+        worker.start()
+
+    def _on_preset_open_folder_failed(self, request_id: int, error: str) -> None:
+        if request_id != int(getattr(self, "_preset_open_folder_request_id", 0) or 0):
+            return
+        log(f"{self._config.log_prefix}: open presets folder failed: {error}", "WARNING")
+        if InfoBar:
+            InfoBar.error(
+                title=self._tr("common.error.title", "Ошибка"),
+                content=self._tr(
+                    f"{self._config.tr_prefix}.error.open_folder",
+                    "Не удалось открыть папку пресетов: {error}",
+                    error=error,
+                ),
+                parent=self.window(),
+            )
+
+    def _on_preset_open_folder_worker_finished(self, worker) -> None:
+        if self.__dict__.get("_preset_open_folder_worker") is worker:
+            self._preset_open_folder_worker = None
+        worker.deleteLater()
+        if self._preset_open_folder_pending:
+            self._start_preset_open_folder_worker()
 
     def _apply_page_theme(self, tokens=None, force: bool = False) -> None:
         self._last_page_theme_key = apply_user_presets_page_theme(
@@ -1546,6 +1591,7 @@ class UserPresetsPageBase(BasePage):
     def _stop_action_workers_for_cleanup(self) -> None:
         self._pending_preset_activation = None
         self._preset_folder_action_pending.clear()
+        self._preset_open_folder_pending = False
         self._preset_bulk_action_kind = ""
         self._bulk_reset_running = False
 
@@ -1556,6 +1602,7 @@ class UserPresetsPageBase(BasePage):
             "_preset_edit_action_request_id",
             "_preset_storage_action_request_id",
             "_preset_folder_action_request_id",
+            "_preset_open_folder_request_id",
         ):
             setattr(self, attr, int(getattr(self, attr, 0) or 0) + 1)
 
@@ -1566,6 +1613,7 @@ class UserPresetsPageBase(BasePage):
             "_preset_edit_action_worker",
             "_preset_storage_action_worker",
             "_preset_folder_action_worker",
+            "_preset_open_folder_worker",
         ):
             worker = self.__dict__.get(attr)
             if worker is None:

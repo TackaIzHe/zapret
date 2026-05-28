@@ -176,6 +176,26 @@ class UserPresetEditActionWorker(QThread):
         self.completed.emit(self._request_id, self._action, result, context)
 
 
+class UserPresetOpenFolderWorker(QThread):
+    completed = pyqtSignal(int)
+    failed = pyqtSignal(int, str)
+
+    def __init__(self, request_id: int, presets_feature, *, launch_method: str, parent=None):
+        super().__init__(parent)
+        self._request_id = int(request_id)
+        self._presets_feature = presets_feature
+        self._launch_method = str(launch_method or "").strip()
+
+    def run(self) -> None:
+        try:
+            self._presets_feature.open_user_presets_folder(self._launch_method)
+        except Exception as exc:
+            log(f"UserPresetOpenFolderWorker: не удалось открыть папку preset: {exc}", "ERROR")
+            self.failed.emit(self._request_id, str(exc))
+            return
+        self.completed.emit(self._request_id)
+
+
 class UserPresetStorageActionWorker(QThread):
     completed = pyqtSignal(int, str, object, object)
     failed = pyqtSignal(int, str, str, object)
@@ -360,5 +380,6 @@ __all__ = [
     "UserPresetEditActionWorker",
     "UserPresetFolderActionWorker",
     "UserPresetItemActionWorker",
+    "UserPresetOpenFolderWorker",
     "UserPresetStorageActionWorker",
 ]
