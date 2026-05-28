@@ -221,6 +221,12 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("viewport().update()", source)
         self.assertNotIn("viewport().repaint()", source)
 
+    def test_user_presets_switched_signal_uses_delivered_file_name(self) -> None:
+        source = inspect.getsource(UserPresetsRuntimeService.on_store_switched)
+
+        self.assertIn("apply_active_preset_marker_for_file", source)
+        self.assertNotIn("apply_active_preset_marker(page)", source)
+
     def test_user_presets_page_uses_warmed_smooth_scroll_preference(self) -> None:
         source = inspect.getsource(UserPresetsPageBase._build_ui)
 

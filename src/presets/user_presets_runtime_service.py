@@ -433,12 +433,17 @@ class UserPresetsRuntimeService:
                 pass
         return updated
 
-    def on_store_switched(self, _name: str, page=None) -> None:
+    def on_store_switched(self, name: str, page=None) -> None:
         page = self._resolve_page(page)
         adapter = self._resolve_adapter()
         if adapter.bulk_reset_running():
             return
-        marker_changed = self.apply_active_preset_marker(page)
+        switched_file_name = str(name or "").strip()
+        marker_changed = (
+            self.apply_active_preset_marker_for_file(switched_file_name, page=page)
+            if switched_file_name
+            else False
+        )
         if marker_changed and not self._ui_dirty:
             return
         if not self._ui_dirty and self._cached_presets_metadata and not marker_changed:
