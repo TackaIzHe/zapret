@@ -188,8 +188,8 @@ def _compute_tint_color(opacity_pct: int) -> tuple:
         r, g, b = 32, 32, 32
 
     try:
-        from settings.appearance import load_tinted_settings
-        tinted_plan = load_tinted_settings()
+        from settings.appearance import peek_warmed_tinted_settings
+        tinted_plan = peek_warmed_tinted_settings()
         if tinted_plan.tinted_background:
             intensity = tinted_plan.tinted_intensity
             accent_rgb = _get_qfluent_themecolor()
@@ -548,8 +548,8 @@ def _sync_theme_accent_to_qfluent(theme_name: str) -> None:
         from PyQt6.QtGui import QColor as _QColor
 
         try:
-            from settings.appearance import load_accent_color
-            hex_color = load_accent_color().hex_color
+            from settings.appearance import peek_warmed_accent_color
+            hex_color = peek_warmed_accent_color()
             if hex_color:
                 c = _QColor(hex_color)
                 if c.isValid():

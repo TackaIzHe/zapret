@@ -203,6 +203,12 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("viewport().update()", source)
         self.assertNotIn("viewport().repaint()", source)
 
+    def test_user_presets_page_uses_warmed_smooth_scroll_preference(self) -> None:
+        source = inspect.getsource(UserPresetsPageBase._build_ui)
+
+        self.assertIn("get_page_smooth_scroll_enabled", source)
+        self.assertNotIn("load_smooth_scroll_enabled", source)
+
     def test_preset_list_active_marker_updates_indexed_rows_only(self) -> None:
         class CountingRow(dict):
             def __init__(self, *args, **kwargs) -> None:
@@ -670,6 +676,15 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertNotIn("load_rkn_background", apply_source)
         self.assertNotIn("get_rkn_background_options", resolve_source)
         self.assertIn("_RKN_BG_PREFERRED", resolve_source)
+
+    def test_theme_uses_warmed_accent_and_tinted_settings(self) -> None:
+        tint_source = inspect.getsource(ui_theme._compute_tint_color)
+        accent_source = inspect.getsource(ui_theme._sync_theme_accent_to_qfluent)
+
+        self.assertIn("peek_warmed_tinted_settings", tint_source)
+        self.assertIn("peek_warmed_accent_color", accent_source)
+        self.assertNotIn("load_tinted_settings", tint_source)
+        self.assertNotIn("load_accent_color", accent_source)
 
     def test_window_appearance_uses_warmed_state_without_settings_reads(self) -> None:
         background_source = inspect.getsource(ui_theme.apply_window_background)

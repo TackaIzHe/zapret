@@ -452,8 +452,8 @@ class UserPresetsPageBase(BasePage):
         self.add_spacing(12)
         self.add_widget(self._toolbar_layout.container)
         try:
-            from settings.appearance import load_smooth_scroll_enabled
-            smooth_enabled = load_smooth_scroll_enabled().enabled
+            from ui.smooth_scroll import get_page_smooth_scroll_enabled
+            smooth_enabled = get_page_smooth_scroll_enabled()
             self.set_smooth_scroll_enabled(smooth_enabled)
         except Exception:
             pass

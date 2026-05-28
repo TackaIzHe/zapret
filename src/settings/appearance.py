@@ -107,6 +107,10 @@ _warmed_mica_enabled_lock = threading.Lock()
 _warmed_mica_enabled_cache: bool | None = None
 _warmed_window_opacity_lock = threading.Lock()
 _warmed_window_opacity_cache: int | None = None
+_warmed_accent_color_lock = threading.Lock()
+_warmed_accent_color_cache: str | None = None
+_warmed_tinted_settings_lock = threading.Lock()
+_warmed_tinted_settings_cache: AppearanceTintedSettingsPlan | None = None
 _warmed_animations_enabled_lock = threading.Lock()
 _warmed_animations_enabled_cache: bool | None = None
 _warmed_smooth_scroll_enabled_lock = threading.Lock()
@@ -214,6 +218,63 @@ def clear_warmed_window_opacity_cache() -> None:
         _warmed_window_opacity_cache = None
 
 
+def store_warmed_accent_color(hex_color: str | None) -> None:
+    global _warmed_accent_color_cache
+    normalized = str(hex_color or "").strip() or None
+    with _warmed_accent_color_lock:
+        _warmed_accent_color_cache = normalized
+
+
+def peek_warmed_accent_color() -> str | None:
+    with _warmed_accent_color_lock:
+        return _warmed_accent_color_cache
+
+
+def clear_warmed_accent_color_cache() -> None:
+    global _warmed_accent_color_cache
+    with _warmed_accent_color_lock:
+        _warmed_accent_color_cache = None
+
+
+def store_warmed_tinted_settings(
+    follow_windows_accent: bool | None,
+    tinted_background: bool | None,
+    tinted_intensity: int | None,
+) -> None:
+    global _warmed_tinted_settings_cache
+    defaults = schema.default_appearance()
+    try:
+        intensity = int(defaults["tinted_background_intensity"] if tinted_intensity is None else tinted_intensity)
+    except Exception:
+        intensity = int(defaults["tinted_background_intensity"])
+    plan = AppearanceTintedSettingsPlan(
+        follow_windows_accent=(
+            bool(defaults["follow_windows_accent"])
+            if follow_windows_accent is None
+            else bool(follow_windows_accent)
+        ),
+        tinted_background=(
+            bool(defaults["tinted_background"])
+            if tinted_background is None
+            else bool(tinted_background)
+        ),
+        tinted_intensity=max(0, min(30, intensity)),
+    )
+    with _warmed_tinted_settings_lock:
+        _warmed_tinted_settings_cache = plan
+
+
+def peek_warmed_tinted_settings() -> AppearanceTintedSettingsPlan | None:
+    with _warmed_tinted_settings_lock:
+        return _warmed_tinted_settings_cache
+
+
+def clear_warmed_tinted_settings_cache() -> None:
+    global _warmed_tinted_settings_cache
+    with _warmed_tinted_settings_lock:
+        _warmed_tinted_settings_cache = None
+
+
 def store_warmed_animations_enabled(enabled: bool | None) -> None:
     global _warmed_animations_enabled_cache
     normalized = bool(schema.default_appearance()["animations_enabled"]) if enabled is None else bool(enabled)
@@ -298,6 +359,8 @@ def store_warmed_page_initial_state(state: AppearancePageInitialStatePlan) -> No
     store_warmed_background_preset(state.background_preset)
     store_warmed_mica_enabled(state.mica_enabled)
     store_warmed_window_opacity(state.window_opacity)
+    store_warmed_accent_color(state.accent_color)
+    store_warmed_tinted_settings(state.follow_windows_accent, state.tinted_background, state.tinted_intensity)
     store_warmed_rkn_background(state.rkn_background)
     store_warmed_animations_enabled(state.animations_enabled)
     store_warmed_smooth_scroll_enabled(state.smooth_scroll_enabled)
@@ -578,6 +641,7 @@ def save_accent_color(hex_color: str) -> AppearanceAccentColorPlan:
             set_accent_color(normalized)
     except Exception:
         pass
+    store_warmed_accent_color(normalized or None)
     return AppearanceAccentColorPlan(hex_color=normalized or None)
 
 def load_tinted_settings() -> AppearanceTintedSettingsPlan:
@@ -608,6 +672,12 @@ def save_follow_windows_accent(enabled: bool) -> AppearanceTogglePlan:
         set_follow_windows_accent(bool(enabled))
     except Exception:
         pass
+    current = peek_warmed_tinted_settings()
+    store_warmed_tinted_settings(
+        bool(enabled),
+        None if current is None else current.tinted_background,
+        None if current is None else current.tinted_intensity,
+    )
     return AppearanceTogglePlan(enabled=bool(enabled))
 
 def save_tinted_background(enabled: bool) -> AppearanceTogglePlan:
@@ -617,6 +687,12 @@ def save_tinted_background(enabled: bool) -> AppearanceTogglePlan:
         set_tinted_background(bool(enabled))
     except Exception:
         pass
+    current = peek_warmed_tinted_settings()
+    store_warmed_tinted_settings(
+        None if current is None else current.follow_windows_accent,
+        bool(enabled),
+        None if current is None else current.tinted_intensity,
+    )
     return AppearanceTogglePlan(enabled=bool(enabled))
 
 def save_tinted_background_intensity(value: int) -> AppearanceOpacityPlan:
@@ -627,6 +703,12 @@ def save_tinted_background_intensity(value: int) -> AppearanceOpacityPlan:
         set_tinted_background_intensity(normalized)
     except Exception:
         pass
+    current = peek_warmed_tinted_settings()
+    store_warmed_tinted_settings(
+        None if current is None else current.follow_windows_accent,
+        None if current is None else current.tinted_background,
+        normalized,
+    )
     return AppearanceOpacityPlan(value=normalized)
 
 def load_windows_system_accent() -> AppearanceAccentColorPlan:
