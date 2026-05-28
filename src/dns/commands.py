@@ -65,6 +65,47 @@ def create_dns_check_save_worker(request_id: int, *, file_path: str, plain_text:
     )
 
 
+def create_dns_quick_check_worker(request_id: int, *, parent=None):
+    from dns.dns_check_worker import DNSQuickCheckWorker
+
+    return DNSQuickCheckWorker(request_id, parent=parent)
+
+
+def run_quick_dns_check():
+    import socket
+
+    from dns.dns_check_plans import DNSQuickCheckPlan
+
+    lines: list[str] = [
+        "⚡ БЫСТРАЯ ПРОВЕРКА СИСТЕМНОГО DNS",
+        "=" * 45,
+        "",
+    ]
+    test_domains = {
+        "YouTube": "www.youtube.com",
+        "Discord": "discord.com",
+        "Google": "google.com",
+        "Cloudflare": "cloudflare.com",
+    }
+
+    all_ok = True
+    for name, domain in test_domains.items():
+        try:
+            ip = socket.gethostbyname(domain)
+            lines.append(f"✅ {name} ({domain}): {ip}")
+        except Exception as e:
+            lines.append(f"❌ {name} ({domain}): Ошибка - {e}")
+            all_ok = False
+
+    lines.append("")
+    if all_ok:
+        lines.append("✅ Все домены резолвятся корректно")
+    else:
+        lines.append("⚠️ Есть проблемы с резолвингом некоторых доменов")
+
+    return DNSQuickCheckPlan(lines=tuple(lines), enable_save=True)
+
+
 def check_ipv6_connectivity() -> bool:
     from dns.runtime import detect_ipv6_availability
 

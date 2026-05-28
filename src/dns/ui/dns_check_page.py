@@ -44,6 +44,8 @@ class DNSCheckPage(BasePage):
         self._cleanup_in_progress = False
         self._save_worker = None
         self._save_request_id = 0
+        self._quick_worker = None
+        self._quick_request_id = 0
         self._status_tone = "muted"
         self._status_bold = False
         self._info_icon_labels = []
@@ -359,11 +361,52 @@ class DNSCheckPage(BasePage):
     
     def quick_dns_check(self):
         """Выполняет быструю проверку только системного DNS."""
+        worker = self.__dict__.get("_quick_worker")
+        if worker is not None:
+            try:
+                if worker.isRunning():
+                    return
+            except Exception:
+                return
         self.result_text.clear()
-        plan = dns_check_page_plans.run_quick_dns_check()
+        self._apply_interaction_state(
+            check_enabled=False,
+            quick_enabled=False,
+            save_enabled=False,
+            progress_visible=True,
+        )
+        self._set_status("⚡ Быстрая проверка DNS...", tone="accent", bold=False)
+        self._start_quick_dns_check_worker()
+
+    def create_dns_quick_check_worker(self, request_id: int):
+        return self._dns.create_dns_quick_check_worker(request_id, parent=self)
+
+    def _start_quick_dns_check_worker(self) -> None:
+        self._quick_request_id += 1
+        request_id = self._quick_request_id
+        worker = self.create_dns_quick_check_worker(request_id)
+        self._quick_worker = worker
+        worker.completed.connect(self._on_quick_dns_check_finished)
+        worker.finished.connect(lambda w=worker: self._on_quick_dns_check_worker_finished(w))
+        worker.start()
+
+    def _on_quick_dns_check_finished(self, request_id: int, plan) -> None:
+        if self._cleanup_in_progress or request_id != self._quick_request_id:
+            return
         for line in plan.lines:
             self.append_result(line)
-        self.save_button.setEnabled(plan.enable_save)
+        self._apply_interaction_state(
+            check_enabled=True,
+            quick_enabled=True,
+            save_enabled=bool(plan.enable_save),
+            progress_visible=False,
+        )
+        self._set_status("✅ Быстрая проверка завершена", tone="success", bold=True)
+
+    def _on_quick_dns_check_worker_finished(self, worker) -> None:
+        if self.__dict__.get("_quick_worker") is worker:
+            self._quick_worker = None
+        worker.deleteLater()
     
     def save_results(self):
         """Сохраняет результаты в файл."""
@@ -460,6 +503,13 @@ class DNSCheckPage(BasePage):
                 except Exception:
                     pass
                 self._save_worker = None
+            quick_worker = self.__dict__.get("_quick_worker")
+            if quick_worker is not None:
+                try:
+                    quick_worker.quit()
+                except Exception:
+                    pass
+                self._quick_worker = None
         except Exception as e:
             log(f"Ошибка при очистке dns_check_page: {e}", "DEBUG")
 

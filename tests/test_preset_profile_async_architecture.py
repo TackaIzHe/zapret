@@ -66,6 +66,7 @@ import dns.page_diagnostics_warning_workflow as dns_diag_workflow
 import dns.page_load_workflow as dns_load_workflow
 import dns.ui.page as dns_page
 import dns.ui.dns_check_page as dns_check_page
+import dns.dns_check_plans as dns_check_page_plans
 import dns.dns_check_worker as dns_check_worker
 from dns.page_workers import DnsPageLoadWorker
 import telegram_proxy.ui.diagnostics_workflow as telegram_diag_workflow
@@ -845,6 +846,24 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("_start_save_results_worker", save_source)
         self.assertNotIn("save_results_text(", save_source)
         self.assertIn("save_results_text", worker_source)
+
+    def test_dns_quick_check_runs_through_worker(self) -> None:
+        page_source = inspect.getsource(dns_check_page.DNSCheckPage)
+        quick_source = inspect.getsource(dns_check_page.DNSCheckPage.quick_dns_check)
+        feature_source = inspect.getsource(__import__("app.feature_facades.dns", fromlist=["DnsFeature"]).DnsFeature)
+        plans_source = inspect.getsource(dns_check_page_plans)
+        commands_source = inspect.getsource(__import__("dns.commands", fromlist=["run_quick_dns_check"]).run_quick_dns_check)
+
+        self.assertTrue(hasattr(dns_check_worker, "DNSQuickCheckWorker"))
+        worker_source = inspect.getsource(dns_check_worker.DNSQuickCheckWorker.run)
+
+        self.assertIn("create_dns_quick_check_worker", page_source)
+        self.assertIn("_start_quick_dns_check_worker", quick_source)
+        self.assertNotIn("run_quick_dns_check(", quick_source)
+        self.assertIn("create_dns_quick_check_worker", feature_source)
+        self.assertIn("run_quick_dns_check", worker_source)
+        self.assertNotIn("socket.", plans_source)
+        self.assertIn("socket.gethostbyname", commands_source)
 
     def test_telegram_proxy_settings_save_runs_through_worker(self) -> None:
         page_source = inspect.getsource(TelegramProxyPage)

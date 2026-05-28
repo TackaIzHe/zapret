@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import socket
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -100,36 +99,6 @@ def build_cleanup_plan(*, has_thread: bool, thread_running: bool) -> DNSCheckCle
         should_quit_thread=bool(has_thread and thread_running),
         wait_timeout_ms=500,
     )
-
-def run_quick_dns_check() -> DNSQuickCheckPlan:
-    lines: list[str] = [
-        "⚡ БЫСТРАЯ ПРОВЕРКА СИСТЕМНОГО DNS",
-        "=" * 45,
-        "",
-    ]
-    test_domains = {
-        "YouTube": "www.youtube.com",
-        "Discord": "discord.com",
-        "Google": "google.com",
-        "Cloudflare": "cloudflare.com",
-    }
-
-    all_ok = True
-    for name, domain in test_domains.items():
-        try:
-            ip = socket.gethostbyname(domain)
-            lines.append(f"✅ {name} ({domain}): {ip}")
-        except Exception as e:
-            lines.append(f"❌ {name} ({domain}): Ошибка - {e}")
-            all_ok = False
-
-    lines.append("")
-    if all_ok:
-        lines.append("✅ Все домены резолвятся корректно")
-    else:
-        lines.append("⚠️ Есть проблемы с резолвингом некоторых доменов")
-
-    return DNSQuickCheckPlan(lines=tuple(lines), enable_save=True)
 
 def build_save_default_filename() -> str:
     return f"dns_check_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
