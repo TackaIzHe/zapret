@@ -134,12 +134,13 @@ class Zapret1ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
         self.run_when_page_ready(self._run_deferred_show_work)
 
     def _open_docs(self) -> None:
-        try:
-            from config.urls import DOCS_URL
+        from config.urls import DOCS_URL
 
-            self._external_actions.open_url(DOCS_URL)
-        except Exception:
-            pass
+        self._request_external_open_url(
+            DOCS_URL,
+            error_title="Документация",
+            error_default="Не удалось открыть документацию: {error}",
+        )
 
     def _apply_pending_preset_name_refresh(self) -> None:
         if self._cleanup_in_progress:
@@ -770,4 +771,5 @@ class Zapret1ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
 
     def cleanup(self) -> None:
         self._cleanup_in_progress = True
+        self._stop_external_open_url_worker()
         cleanup_control_page_subscriptions(self)

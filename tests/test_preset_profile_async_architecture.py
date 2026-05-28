@@ -1707,6 +1707,32 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertNotIn("count_enabled_profiles", zapret1_source)
         self.assertIn("get_enabled_profile_count_snapshot", worker_source)
 
+    def test_control_page_docs_open_through_worker(self) -> None:
+        spec = importlib.util.find_spec("app.external_workers")
+        self.assertIsNotNone(spec)
+        external_workers = importlib.import_module("app.external_workers")
+        external_feature_cls = __import__("app.feature_facades.external", fromlist=["ExternalActionsFeature"]).ExternalActionsFeature
+        shared_source = inspect.getsource(control_page_shared.ControlPageActionMixin)
+        zapret1_open_source = inspect.getsource(Zapret1ModeControlPage._open_docs)
+        zapret2_open_source = inspect.getsource(Zapret2ModeControlPage._open_docs)
+        zapret1_cleanup_source = inspect.getsource(Zapret1ModeControlPage.cleanup)
+        zapret2_cleanup_source = inspect.getsource(Zapret2ModeControlPage.cleanup)
+
+        self.assertTrue(hasattr(external_workers, "ExternalOpenUrlWorker"))
+        worker_source = inspect.getsource(external_workers.ExternalOpenUrlWorker.run)
+        feature_source = inspect.getsource(external_feature_cls)
+
+        for source in (zapret1_open_source, zapret2_open_source):
+            self.assertIn("_request_external_open_url", source)
+            self.assertNotIn(".open_url(", source)
+
+        self.assertIn("create_open_url_worker", feature_source)
+        self.assertIn("create_external_open_url_worker", shared_source)
+        self.assertIn("_external_open_url_runtime", shared_source)
+        self.assertIn("open_url", worker_source)
+        self.assertIn("_stop_external_open_url_worker", zapret1_cleanup_source)
+        self.assertIn("_stop_external_open_url_worker", zapret2_cleanup_source)
+
     def test_zapret1_additional_settings_loads_through_worker(self) -> None:
         page_source = inspect.getsource(Zapret1ModeControlPage)
         refresh_source = inspect.getsource(Zapret1ModeControlPage._refresh_additional_settings)

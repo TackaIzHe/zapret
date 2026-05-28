@@ -1054,15 +1054,15 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
         )
 
     def _open_docs(self) -> None:
-        try:
-            from config.urls import DOCS_URL
+        from config.urls import DOCS_URL
 
-            result = self._external_actions.open_url(DOCS_URL)
-            if not result.ok:
-                raise RuntimeError(result.error)
-        except Exception as e:
-            InfoBar.warning(title="Документация", content=f"Не удалось открыть документацию: {e}", parent=self.window())
+        self._request_external_open_url(
+            DOCS_URL,
+            error_title="Документация",
+            error_default="Не удалось открыть документацию: {error}",
+        )
 
     def cleanup(self) -> None:
         self._cleanup_in_progress = True
+        self._stop_external_open_url_worker()
         cleanup_control_page_subscriptions(self)
