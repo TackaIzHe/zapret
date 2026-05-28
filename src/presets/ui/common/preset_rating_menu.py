@@ -6,23 +6,19 @@ from PyQt6.QtWidgets import QWidget
 from qfluentwidgets import Action, RoundMenu
 
 from ui.popup_menu import exec_popup_menu
-from presets.folders import get_preset_item_meta
 
 
 def show_preset_rating_menu(
     parent: QWidget,
     *,
-    preset_file_name: str,
-    folder_scope: str,
+    current_rating: int = 0,
     clear_label: str,
     global_pos: QPoint | None = None,
 ) -> int | None:
     """Show shared preset rating menu and return the selected rating."""
 
     menu = RoundMenu(parent=parent)
-    current_rating = int(
-        get_preset_item_meta(folder_scope, preset_file_name).get("rating", 0) or 0
-    )
+    current_rating = max(0, min(10, int(current_rating or 0)))
 
     clear_action = Action(str(clear_label or "Сбросить рейтинг"), menu)
     menu.addAction(clear_action)

@@ -1108,6 +1108,10 @@ class UserPresetsPageBase(BasePage):
             self._refresh_presets_view_from_cache()
         elif action == "rating":
             if bool(result):
+                self._update_cached_preset_rating(
+                    str(context.get("name") or ""),
+                    int(context.get("rating") or 0),
+                )
                 self._refresh_presets_view_from_cache()
         elif action == "move_step":
             if bool(result):
@@ -1242,12 +1246,37 @@ class UserPresetsPageBase(BasePage):
         candidate = str(name or "").strip().lower()
         return bool(current and candidate and current == candidate)
 
+    def _update_cached_preset_rating(self, name: str, rating: int) -> None:
+        cached_metadata = self._runtime_service.cached_presets_metadata()
+        preset_name = str(name or "").strip()
+        if not preset_name:
+            return
+        metadata_key = preset_name
+        metadata = cached_metadata.get(metadata_key)
+        if metadata is None and not preset_name.lower().endswith(".txt"):
+            metadata_key = f"{preset_name}.txt"
+            metadata = cached_metadata.get(metadata_key)
+        if metadata is None:
+            return
+        updated = dict(metadata)
+        updated["rating"] = max(0, min(10, int(rating or 0)))
+        cached_metadata[metadata_key] = updated
+
     def _show_rating_menu(self, name: str, global_pos: QPoint | None = None):
         display_name = self._resolve_display_name(name)
+        current_rating = 0
+        cached_metadata = self._runtime_service.cached_presets_metadata()
+        preset_name = str(name or "").strip()
+        rating_meta = cached_metadata.get(preset_name) or {}
+        if not rating_meta and preset_name and not preset_name.lower().endswith(".txt"):
+            rating_meta = cached_metadata.get(f"{preset_name}.txt") or {}
+        try:
+            current_rating = int(rating_meta.get("rating", 0) or 0)
+        except (TypeError, ValueError):
+            current_rating = 0
         rating = show_preset_rating_menu(
             self,
-            preset_file_name=name,
-            folder_scope=self._folder_scope_key(),
+            current_rating=current_rating,
             clear_label=self._tr(f"{self._config.tr_prefix}.menu.rating_clear", "Сбросить рейтинг"),
             global_pos=global_pos,
         )

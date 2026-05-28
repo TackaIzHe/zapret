@@ -241,6 +241,7 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         rating_menu_source = inspect.getsource(preset_rating_menu.show_preset_rating_menu)
         move_source = inspect.getsource(UserPresetsPageBase._move_preset_by_step)
         drop_source = inspect.getsource(UserPresetsPageBase._on_item_dropped)
+        finished_source = inspect.getsource(UserPresetsPageBase._on_preset_storage_action_finished)
 
         self.assertTrue(hasattr(user_presets_action_workers, "UserPresetStorageActionWorker"))
         worker_source = inspect.getsource(user_presets_action_workers.UserPresetStorageActionWorker.run)
@@ -257,6 +258,11 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
             self.assertNotIn(".move_preset_on_drop(", source)
 
         self.assertNotIn("set_preset_rating(", rating_menu_source)
+        self.assertNotIn("get_preset_item_meta", rating_menu_source)
+        self.assertNotIn("folder_scope", rating_menu_source)
+        self.assertIn("current_rating=", rating_source)
+        self.assertIn("cached_presets_metadata", rating_source)
+        self.assertIn("_update_cached_preset_rating", finished_source)
         self.assertIn("create_preset_storage_action_worker", request_source)
         self.assertIn("storage_api.toggle_preset_pin", worker_source)
         self.assertIn("storage_api.set_preset_rating", worker_source)
