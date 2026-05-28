@@ -68,6 +68,7 @@ import telegram_proxy.ui.proxy_runtime_workflow as telegram_runtime_workflow
 import telegram_proxy.ui.page as telegram_page
 import telegram_proxy.settings as telegram_proxy_settings
 import telegram_proxy.ui.settings_build as telegram_proxy_settings_build
+from app.feature_facades.telegram_proxy import TelegramProxyFeature
 import telegram_proxy.ui.upstream_workflow as telegram_upstream_workflow
 import telegram_proxy.workers as telegram_proxy_workers
 from telegram_proxy.ui.page import TelegramProxyPage
@@ -446,6 +447,7 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         logs_refresh_source = inspect.getsource(LogsPage._refresh_logs_list)
         logs_stats_source = inspect.getsource(LogsPage._update_stats)
         telegram_init_source = inspect.getsource(TelegramProxyPage.__init__)
+        telegram_loaded_source = inspect.getsource(TelegramProxyPage._on_initial_state_loaded)
         telegram_apply_source = inspect.getsource(TelegramProxyPage._apply_initial_settings_state)
         blockcheck_source = inspect.getsource(BlockcheckPage._build_ui)
         blockcheck_initial_source = inspect.getsource(BlockcheckPage._on_initial_state_loaded)
@@ -457,7 +459,8 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("appearance_ui.lower_sections.build", appearance_lower_source)
         self.assertIn("logs_ui.refresh_logs_list.total", logs_refresh_source)
         self.assertIn("logs_ui.update_stats.total", logs_stats_source)
-        self.assertIn("telegram_proxy_ui.initial_state.load", telegram_init_source)
+        self.assertIn("_request_initial_state_load", telegram_init_source)
+        self.assertIn("telegram_proxy_ui.initial_state.load", telegram_loaded_source)
         self.assertIn("telegram_proxy_ui.settings.apply", telegram_apply_source)
         self.assertIn("blockcheck_ui.initial_state.load", blockcheck_initial_source)
         self.assertIn("blockcheck_ui.build.total", blockcheck_source)
@@ -716,21 +719,31 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertFalse(plan.snowflakes_enabled)
 
     def test_telegram_proxy_initial_state_is_backend_plan_not_ui_loading(self) -> None:
+        telegram_proxy_workers = importlib.import_module("telegram_proxy.workers")
+
         init_source = inspect.getsource(TelegramProxyPage.__init__)
         after_source = inspect.getsource(TelegramProxyPage._after_ui_built)
+        page_source = inspect.getsource(TelegramProxyPage)
         settings_build_source = inspect.getsource(telegram_proxy_settings_build.build_telegram_proxy_settings_panel)
         settings_source = inspect.getsource(telegram_proxy_settings.load_page_initial_state)
+        feature_source = inspect.getsource(TelegramProxyFeature)
+        worker_source = inspect.getsource(telegram_proxy_workers.TelegramProxyInitialStateWorker.run)
 
-        self.assertIn("load_page_initial_state", init_source)
-        self.assertIn("_apply_initial_settings_state", init_source)
+        self.assertIn("_request_initial_state_load", init_source)
+        self.assertNotIn("self._telegram_proxy.load_page_initial_state()", init_source)
+        self.assertIn("_apply_initial_settings_state", page_source)
         self.assertNotIn("self._load_settings()", after_source)
         self.assertNotIn("load_settings_into_ui", after_source)
         self.assertNotIn("UpstreamCatalog.load_from_runtime", settings_build_source)
+        self.assertIn("create_initial_state_worker", page_source)
+        self.assertIn("create_page_initial_state_worker", feature_source)
+        self.assertNotIn("def load_page_initial_state", feature_source)
 
         self.assertIn("read_settings", settings_source)
         self.assertNotIn("get_tg_proxy_host", settings_source)
         self.assertNotIn("get_tg_proxy_port", settings_source)
         self.assertNotIn("get_tg_proxy_upstream_enabled", settings_source)
+        self.assertIn("load_page_initial_state", worker_source)
 
     def test_telegram_proxy_initial_state_plan_reads_settings_once(self) -> None:
         from telegram_proxy.upstream_catalog import UpstreamCatalog

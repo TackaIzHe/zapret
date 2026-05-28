@@ -124,13 +124,17 @@ class TelegramProxyPage(BasePage):
         self._settings_save_worker = None
         self._settings_save_request_id = 0
         self._settings_save_pending: list[dict[str, object]] = []
+        self._initial_state_worker = None
+        self._initial_state_request_id = 0
+        self._initial_state_load_started_at = 0.0
         self._relay_check_gen = 0
         self._cleanup_in_progress = False
         self._runtime_initialized = False
         self._built_panel_indexes: set[int] = set()
-        initial_state_started_at = time.perf_counter()
-        self._initial_state = self._telegram_proxy.load_page_initial_state()
-        self._log_ui_timing("telegram_proxy_ui.initial_state.load", initial_state_started_at)
+        self._initial_state = telegram_proxy_settings.TelegramProxyPageInitialStatePlan(
+            upstream_catalog=telegram_proxy_settings.UpstreamCatalog(),
+            settings=telegram_proxy_settings.default_state(),
+        )
         self._btn_copy_logs = None
         self._btn_open_log_file = None
         self._btn_clear_logs = None
@@ -140,13 +144,45 @@ class TelegramProxyPage(BasePage):
         self._btn_copy_diag = None
         self._diag_edit = None
         self._setup_ui()
-        self._apply_initial_settings_state(self._initial_state.settings)
+        self._request_initial_state_load()
         self._after_ui_built()
         # Запуск Telegram Proxy живёт в общем старте приложения,
         # поэтому страница не поднимает его сама.
 
     def _proxy_manager(self):
         return self._telegram_proxy.get_proxy_manager()
+
+    def create_initial_state_worker(self, request_id: int):
+        return self._telegram_proxy.create_page_initial_state_worker(request_id, parent=self)
+
+    def _request_initial_state_load(self) -> None:
+        self._initial_state_request_id += 1
+        request_id = self._initial_state_request_id
+        self._initial_state_load_started_at = time.perf_counter()
+        worker = self.create_initial_state_worker(request_id)
+        self._initial_state_worker = worker
+        worker.completed.connect(self._on_initial_state_loaded)
+        worker.failed.connect(self._on_initial_state_failed)
+        worker.finished.connect(lambda w=worker: self._on_initial_state_worker_finished(w))
+        worker.start()
+
+    def _on_initial_state_loaded(self, request_id: int, initial_state) -> None:
+        if request_id != self._initial_state_request_id or self._cleanup_in_progress:
+            return
+        self._log_ui_timing("telegram_proxy_ui.initial_state.load", self._initial_state_load_started_at)
+        self._initial_state = initial_state
+        self._apply_initial_upstream_catalog(getattr(initial_state, "upstream_catalog", None))
+        self._apply_initial_settings_state(getattr(initial_state, "settings", telegram_proxy_settings.default_state()))
+
+    def _on_initial_state_failed(self, request_id: int, error: str) -> None:
+        if request_id != self._initial_state_request_id or self._cleanup_in_progress:
+            return
+        log(f"Не удалось загрузить начальное состояние Telegram Proxy: {error}", "WARNING")
+
+    def _on_initial_state_worker_finished(self, worker) -> None:
+        if self.__dict__.get("_initial_state_worker") is worker:
+            self._initial_state_worker = None
+        worker.deleteLater()
 
     def _after_ui_built(self) -> None:
         started_at = time.perf_counter()
@@ -475,6 +511,19 @@ class TelegramProxyPage(BasePage):
             index=index,
         )
         enable_setting_card_group_auto_height(self._upstream_card)
+
+    def _apply_initial_upstream_catalog(self, upstream_catalog) -> None:
+        if upstream_catalog is None:
+            return
+        self._upstream_catalog = upstream_catalog
+        combo = self._upstream_preset_row.combo
+        combo.blockSignals(True)
+        try:
+            combo.clear()
+            for text, data in upstream_catalog.items():
+                combo.addItem(text, userData=data)
+        finally:
+            combo.blockSignals(False)
 
     def _connect_signals(self):
         mgr = self._proxy_manager()
@@ -1065,6 +1114,13 @@ class TelegramProxyPage(BasePage):
             self._upstream_restart_timer.deleteLater()
             self._upstream_restart_timer = None
         self._settings_save_pending.clear()
+        initial_state_worker = self.__dict__.get("_initial_state_worker")
+        if initial_state_worker is not None:
+            try:
+                initial_state_worker.quit()
+            except Exception:
+                pass
+            self._initial_state_worker = None
         settings_worker = self.__dict__.get("_settings_save_worker")
         if settings_worker is not None:
             try:

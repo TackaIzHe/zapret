@@ -91,10 +91,10 @@ class TelegramProxyFeature:
 
         return TelegramProxySettingsSaveWorker(request_id, **kwargs)
 
-    def load_page_initial_state(self):
-        from telegram_proxy.settings import load_page_initial_state
+    def create_page_initial_state_worker(self, request_id: int, *, parent=None):
+        from telegram_proxy.workers import TelegramProxyInitialStateWorker
 
-        return load_page_initial_state()
+        return TelegramProxyInitialStateWorker(request_id, parent=parent)
 
     def toggle_async(self) -> None:
         try:
