@@ -44,13 +44,7 @@ def toggle_discord_restart(*, status_callback=None) -> None:
 
 
 def apply_window_opacity(*, set_window_opacity, value: int) -> None:
-    from settings.store import set_window_opacity as save_window_opacity
-
     normalized_value = int(value)
-    try:
-        save_window_opacity(normalized_value)
-    except Exception:
-        pass
 
     try:
         set_window_opacity(normalized_value)

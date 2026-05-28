@@ -12,6 +12,8 @@ class TrayFeature:
     _notify: Any = None
     _log_startup_metric: Any = None
     _tray_manager: Any = None
+    _opacity_save_worker: Any = None
+    _opacity_save_pending: int | None = None
 
     @staticmethod
     def _commands():
@@ -121,10 +123,54 @@ class TrayFeature:
         self._commands().toggle_discord_restart(status_callback=status_callback)
 
     def apply_window_opacity(self, value: int) -> None:
+        normalized = max(0, min(100, int(value)))
         self._commands().apply_window_opacity(
             set_window_opacity=self._deps.set_window_opacity,
-            value=int(value),
+            value=normalized,
         )
+        self._request_window_opacity_save(normalized)
+
+    def create_opacity_save_worker(self, value: int):
+        from settings.appearance_workers import AppearanceSettingsSaveWorker
+
+        return AppearanceSettingsSaveWorker(
+            action="window_opacity",
+            value=int(value),
+            parent=None,
+        )
+
+    def _request_window_opacity_save(self, value: int) -> None:
+        normalized = max(0, min(100, int(value)))
+        worker = self._opacity_save_worker
+        if worker is not None:
+            try:
+                if worker.isRunning():
+                    self._opacity_save_pending = normalized
+                    return
+            except RuntimeError:
+                self._opacity_save_worker = None
+        self._start_window_opacity_save_worker(normalized)
+
+    def _start_window_opacity_save_worker(self, value: int) -> None:
+        worker = self.create_opacity_save_worker(int(value))
+        self._opacity_save_worker = worker
+        finished = getattr(worker, "finished", None)
+        connect = getattr(finished, "connect", None)
+        if callable(connect):
+            connect(lambda w=worker: self._on_window_opacity_save_worker_finished(w))
+        worker.start()
+
+    def _on_window_opacity_save_worker_finished(self, worker) -> None:
+        if self._opacity_save_worker is worker:
+            self._opacity_save_worker = None
+        try:
+            worker.deleteLater()
+        except (AttributeError, RuntimeError):
+            pass
+        pending = self._opacity_save_pending
+        self._opacity_save_pending = None
+        if pending is not None:
+            self._start_window_opacity_save_worker(int(pending))
 
 
 def build_tray_feature(*, deps, runtime_feature, telegram_proxy_feature) -> TrayFeature:
