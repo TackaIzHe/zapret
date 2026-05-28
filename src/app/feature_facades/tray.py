@@ -14,6 +14,7 @@ class TrayFeature:
     _tray_manager: Any = None
     _opacity_save_worker: Any = None
     _opacity_save_pending: int | None = None
+    _github_api_removal_toggle_worker: Any = None
 
     @staticmethod
     def _commands():
@@ -117,7 +118,36 @@ class TrayFeature:
         self._telegram_proxy_feature.toggle_async()
 
     def toggle_github_api_removal(self, *, status_callback=None) -> bool:
-        return bool(self._commands().toggle_github_api_removal(status_callback=status_callback))
+        worker = self._github_api_removal_toggle_worker
+        if worker is not None:
+            try:
+                if worker.isRunning():
+                    if status_callback:
+                        status_callback("Переключение удаления GitHub API уже выполняется")
+                    return False
+            except RuntimeError:
+                self._github_api_removal_toggle_worker = None
+
+        worker = self.create_github_api_removal_toggle_worker(parent=None)
+        self._github_api_removal_toggle_worker = worker
+        worker.completed.connect(
+            lambda ok, message, cb=status_callback, w=worker: self._on_github_api_removal_toggle_finished(
+                w,
+                bool(ok),
+                str(message or ""),
+                cb,
+            )
+        )
+        worker.failed.connect(
+            lambda error, cb=status_callback, w=worker: self._on_github_api_removal_toggle_failed(
+                w,
+                str(error or ""),
+                cb,
+            )
+        )
+        worker.finished.connect(lambda w=worker: self._cleanup_github_api_removal_toggle_worker(w))
+        worker.start()
+        return True
 
     def toggle_discord_restart(self, *, status_callback=None) -> None:
         self._commands().toggle_discord_restart(status_callback=status_callback)
@@ -138,6 +168,33 @@ class TrayFeature:
             value=int(value),
             parent=None,
         )
+
+    def create_github_api_removal_toggle_worker(self, *, parent=None):
+        from tray_workers import TrayGithubApiRemovalToggleWorker
+
+        return TrayGithubApiRemovalToggleWorker(parent=parent)
+
+    def _on_github_api_removal_toggle_finished(self, worker, ok: bool, message: str, status_callback) -> None:
+        self._clear_github_api_removal_toggle_worker(worker)
+        if status_callback and message:
+            status_callback(message)
+
+    def _on_github_api_removal_toggle_failed(self, worker, error: str, status_callback) -> None:
+        self._clear_github_api_removal_toggle_worker(worker)
+        message = error or "Ошибка при переключении удаления GitHub API"
+        if status_callback:
+            status_callback(message)
+
+    def _clear_github_api_removal_toggle_worker(self, worker) -> None:
+        if self._github_api_removal_toggle_worker is worker:
+            self._github_api_removal_toggle_worker = None
+
+    def _cleanup_github_api_removal_toggle_worker(self, worker) -> None:
+        self._clear_github_api_removal_toggle_worker(worker)
+        try:
+            worker.deleteLater()
+        except (AttributeError, RuntimeError):
+            pass
 
     def _request_window_opacity_save(self, value: int) -> None:
         normalized = max(0, min(100, int(value)))

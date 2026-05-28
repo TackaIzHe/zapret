@@ -63,6 +63,47 @@ class TrayOpacityWorkerTests(unittest.TestCase):
         create_worker.assert_called_once_with(72)
         self.assertTrue(worker.started)
 
+    def test_github_api_removal_toggle_starts_worker_instead_of_direct_command(self) -> None:
+        from app.feature_facades.tray import TrayFeature
+
+        class FakeWorker:
+            def __init__(self) -> None:
+                self.completed = SimpleNamespace(connect=Mock())
+                self.failed = SimpleNamespace(connect=Mock())
+                self.finished = SimpleNamespace(connect=Mock())
+                self.started = False
+
+            def isRunning(self) -> bool:
+                return False
+
+            def start(self) -> None:
+                self.started = True
+
+        worker = FakeWorker()
+        status_callback = Mock()
+        deps = SimpleNamespace(set_window_opacity=Mock())
+        feature = TrayFeature(
+            _deps=deps,
+            _runtime_feature=SimpleNamespace(),
+            _telegram_proxy_feature=SimpleNamespace(),
+        )
+        commands = SimpleNamespace(toggle_github_api_removal=Mock(return_value=True))
+
+        with (
+            patch.object(TrayFeature, "_commands", staticmethod(lambda: commands)),
+            patch.object(
+                TrayFeature,
+                "create_github_api_removal_toggle_worker",
+                return_value=worker,
+            ) as create_worker,
+        ):
+            queued = feature.toggle_github_api_removal(status_callback=status_callback)
+
+        self.assertTrue(queued)
+        commands.toggle_github_api_removal.assert_not_called()
+        create_worker.assert_called_once_with(parent=None)
+        self.assertTrue(worker.started)
+
 
 if __name__ == "__main__":
     unittest.main()
