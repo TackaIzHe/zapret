@@ -21,6 +21,7 @@ class DnsFeature:
     create_dns_check_worker: Callable
     create_dns_check_save_worker: Callable
     create_dns_quick_check_worker: Callable
+    create_force_dns_action_worker: Callable
     enable_force_dns: Callable
     disable_force_dns: Callable
     flush_dns_cache: Callable
@@ -38,7 +39,26 @@ def build_dns_feature() -> DnsFeature:
 
         return dns_public
 
-    return DnsFeature(
+    def _create_force_dns_action_worker(
+        request_id: int,
+        *,
+        action: str,
+        enabled=None,
+        language: str = "ru",
+        parent=None,
+    ):
+        from dns.page_workers import DnsForceDnsActionWorker
+
+        return DnsForceDnsActionWorker(
+            request_id,
+            dns_feature=feature,
+            action=action,
+            enabled=enabled,
+            language=language,
+            parent=parent,
+        )
+
+    feature = DnsFeature(
         apply_dns_on_startup_async=lambda *args, **kwargs: _public().apply_dns_on_startup_async(*args, **kwargs),
         load_page_data=lambda *args, **kwargs: _public().load_page_data(*args, **kwargs),
         warm_page_data_cache=lambda *args, **kwargs: _public().warm_page_data_cache(*args, **kwargs),
@@ -54,8 +74,10 @@ def build_dns_feature() -> DnsFeature:
         create_dns_check_worker=lambda *args, **kwargs: _commands().create_dns_check_worker(*args, **kwargs),
         create_dns_check_save_worker=lambda *args, **kwargs: _commands().create_dns_check_save_worker(*args, **kwargs),
         create_dns_quick_check_worker=lambda *args, **kwargs: _commands().create_dns_quick_check_worker(*args, **kwargs),
+        create_force_dns_action_worker=_create_force_dns_action_worker,
         enable_force_dns=lambda *args, **kwargs: _public().enable_force_dns(*args, **kwargs),
         disable_force_dns=lambda *args, **kwargs: _public().disable_force_dns(*args, **kwargs),
         flush_dns_cache=lambda *args, **kwargs: _public().flush_dns_cache(*args, **kwargs),
         run_connectivity_test=lambda *args, **kwargs: _public().run_connectivity_test(*args, **kwargs),
     )
+    return feature

@@ -1778,6 +1778,30 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertNotIn("self._load_data_fn()", worker_source)
         self.assertNotIn("load_data_fn=self._load_data", page_source)
 
+    def test_dns_force_dns_actions_run_through_worker(self) -> None:
+        page_workers = importlib.import_module("dns.page_workers")
+        feature_source = inspect.getsource(__import__("app.feature_facades.dns", fromlist=["DnsFeature"]).DnsFeature)
+        page_source = inspect.getsource(dns_page.NetworkPage)
+        toggle_source = inspect.getsource(dns_page.NetworkPage._on_force_dns_toggled)
+        reset_source = inspect.getsource(dns_page.NetworkPage._reset_dns_to_dhcp)
+
+        self.assertTrue(hasattr(page_workers, "DnsForceDnsActionWorker"))
+        worker_source = inspect.getsource(page_workers.DnsForceDnsActionWorker)
+
+        for source in (toggle_source, reset_source):
+            self.assertIn("_request_force_dns_action", source)
+            self.assertNotIn("handle_force_dns_toggled_action", source)
+            self.assertNotIn("reset_dns_to_dhcp_action", source)
+            self.assertNotIn(".enable_force_dns(", source)
+            self.assertNotIn(".disable_force_dns(", source)
+
+        self.assertIn("create_force_dns_action_worker", feature_source)
+        self.assertIn("create_force_dns_action_worker", page_source)
+        self.assertIn("_force_dns_action_pending", page_source)
+        self.assertIn("get_force_dns_status", worker_source)
+        self.assertIn("enable_force_dns", worker_source)
+        self.assertIn("disable_force_dns", worker_source)
+
     def test_network_loaded_adapters_do_not_wait_for_current_dns(self) -> None:
         stored = {}
         build_calls = []

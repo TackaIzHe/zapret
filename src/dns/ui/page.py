@@ -46,8 +46,6 @@ from dns.ui.force_dns_build import build_force_dns_card_ui
 from dns.page_force_dns_workflow import (
     apply_force_dns_status_state,
     flush_dns_cache_action,
-    handle_force_dns_toggled_action,
-    reset_dns_to_dhcp_action,
 )
 from dns.page_apply_workflow import (
     apply_auto_dns_quick,
@@ -128,6 +126,9 @@ class NetworkPage(BasePage):
         self._dns_selection_sync_queued = False
         self._page_load_worker = None
         self._connectivity_test_worker = None
+        self._force_dns_action_worker = None
+        self._force_dns_action_request_id = 0
+        self._force_dns_action_pending: list[dict[str, object]] = []
         
         self.dns_cards = {}
         self.adapter_cards = []
@@ -778,21 +779,149 @@ class NetworkPage(BasePage):
 
     def _on_force_dns_toggled(self, enabled: bool):
         """Обработчик переключения принудительного DNS"""
-        dns_feature = self._dns_feature()
-        handle_force_dns_toggled_action(
+        self._request_force_dns_action("toggle", enabled=bool(enabled))
+
+    def create_force_dns_action_worker(self, request_id: int, *, action: str, enabled=None):
+        return self._dns_feature().create_force_dns_action_worker(
+            request_id,
+            action=action,
             enabled=enabled,
-            get_force_dns_status_fn=dns_feature.get_force_dns_status,
-            enable_force_dns_fn=dns_feature.enable_force_dns,
-            disable_force_dns_fn=dns_feature.disable_force_dns,
-            build_toggle_plan_fn=dns_page_plans.build_force_dns_toggle_plan,
-            build_toggle_error_plan_fn=dns_page_plans.build_force_dns_toggle_error_plan,
-            set_force_dns_active_fn=lambda value: setattr(self, "_force_dns_active", value),
-            set_force_dns_toggle_fn=self._set_force_dns_toggle,
-            update_force_dns_status_fn=self._update_force_dns_status,
-            update_dns_selection_state_fn=self._update_dns_selection_state,
-            refresh_adapters_dns_fn=self._refresh_adapters_dns,
-            log_fn=log,
+            language=self._ui_language,
+            parent=self,
         )
+
+    def _request_force_dns_action(self, action: str, *, enabled=None) -> None:
+        payload = {
+            "action": str(action or "").strip(),
+            "enabled": enabled,
+        }
+        worker = self.__dict__.get("_force_dns_action_worker")
+        if worker is not None:
+            try:
+                if worker.isRunning():
+                    self._force_dns_action_pending.append(payload)
+                    return
+            except Exception:
+                self._force_dns_action_pending.append(payload)
+                return
+        self._start_force_dns_action_worker(payload)
+
+    def _start_force_dns_action_worker(self, payload: dict[str, object]) -> None:
+        self._force_dns_action_request_id += 1
+        request_id = self._force_dns_action_request_id
+        worker = self.create_force_dns_action_worker(
+            request_id,
+            action=str(payload.get("action") or ""),
+            enabled=payload.get("enabled"),
+        )
+        self._force_dns_action_worker = worker
+        worker.completed.connect(self._on_force_dns_action_finished)
+        worker.failed.connect(self._on_force_dns_action_failed)
+        worker.finished.connect(lambda w=worker: self._on_force_dns_action_worker_finished(w))
+        worker.start()
+
+    def _on_force_dns_action_finished(self, request_id: int, action: str, result, context) -> None:
+        if request_id != self._force_dns_action_request_id or self._cleanup_in_progress:
+            return
+        data = result if isinstance(result, dict) else {}
+        message = str(data.get("message") or "")
+        if message:
+            log(message, "DNS")
+        if action == "toggle":
+            self._apply_force_dns_toggle_worker_result(data)
+            return
+        if action == "reset_dhcp":
+            self._apply_force_dns_reset_worker_result(data)
+
+    def _apply_force_dns_toggle_worker_result(self, data: dict[str, object]) -> None:
+        plan = data.get("plan")
+        if plan is None:
+            plan = dns_page_plans.build_force_dns_toggle_error_plan(
+                requested_enabled=bool(data.get("enabled", False))
+            )
+        self._force_dns_active = bool(plan.force_dns_active)
+        self._set_force_dns_toggle(bool(plan.final_checked))
+        self._update_force_dns_status(
+            bool(plan.force_dns_active),
+            plan.details_key,
+            details_kwargs=dict(plan.details_kwargs or {}),
+            details_fallback=str(plan.details_fallback or ""),
+        )
+        self._update_dns_selection_state()
+        if bool(data.get("changed", True)):
+            self._refresh_adapters_dns()
+
+    def _apply_force_dns_reset_worker_result(self, data: dict[str, object]) -> None:
+        result_plan = data.get("plan")
+        if result_plan is None:
+            self._on_force_dns_action_failed(
+                self._force_dns_action_request_id,
+                "reset_dhcp",
+                "Пустой результат сброса DNS",
+                {},
+            )
+            return
+        self._force_dns_active = bool(result_plan.force_dns_active)
+        self._set_force_dns_toggle(bool(result_plan.force_dns_active))
+
+        if bool(result_plan.should_select_auto):
+            select_auto_dns_ui(
+                dns_cards=self.dns_cards,
+                auto_indicator=getattr(self, 'auto_indicator', None),
+                auto_card=getattr(self, 'auto_card', None),
+                custom_indicator=getattr(self, 'custom_indicator', None),
+                custom_card=getattr(self, 'custom_card', None),
+                indicator_on_qss=DNSProviderCard.indicator_on(),
+                indicator_off_qss=DNSProviderCard.indicator_off(),
+                set_card_selected_fn=self._set_dns_card_selected,
+            )
+            self._selected_provider = None
+
+        self._update_force_dns_status(
+            bool(result_plan.force_dns_active),
+            result_plan.status_details_key,
+        )
+        self._update_dns_selection_state()
+        self._refresh_adapters_dns()
+
+        if result_plan.infobar_level == "success":
+            InfoBar.success(
+                title=result_plan.infobar_title,
+                content=result_plan.infobar_content,
+                parent=self.window(),
+            )
+        else:
+            InfoBar.warning(
+                title=result_plan.infobar_title,
+                content=result_plan.infobar_content,
+                parent=self.window(),
+            )
+
+    def _on_force_dns_action_failed(self, request_id: int, action: str, error: str, context) -> None:
+        if request_id != self._force_dns_action_request_id or self._cleanup_in_progress:
+            return
+        log(f"Ошибка Force DNS ({action}): {error}", "ERROR")
+        if action == "toggle":
+            requested_enabled = bool((context or {}).get("enabled"))
+            plan = dns_page_plans.build_force_dns_toggle_error_plan(requested_enabled=requested_enabled)
+            self._apply_force_dns_toggle_worker_result({"plan": plan, "changed": False})
+            return
+        InfoBar.warning(
+            title=self._tr("page.network.error.title", "Ошибка"),
+            content=self._tr(
+                "page.network.error.reset_dhcp_failed",
+                "Не удалось сбросить DNS: {error}",
+            ).format(error=error),
+            parent=self.window(),
+        )
+
+    def _on_force_dns_action_worker_finished(self, worker) -> None:
+        if self.__dict__.get("_force_dns_action_worker") is worker:
+            self._force_dns_action_worker = None
+        worker.deleteLater()
+        if self._force_dns_action_pending and not self._cleanup_in_progress:
+            pending = self._force_dns_action_pending.pop(0)
+            self._start_force_dns_action_worker(dict(pending or {}))
     
     def _set_force_dns_toggle(self, checked: bool):
         """Устанавливает состояние переключателя без триггера сигналов"""
@@ -863,32 +992,7 @@ class NetworkPage(BasePage):
 
     def _reset_dns_to_dhcp(self):
         """Явно сбрасывает DNS на DHCP и отключает Force DNS"""
-        dns_feature = self._dns_feature()
-        reset_dns_to_dhcp_action(
-            disable_force_dns_fn=dns_feature.disable_force_dns,
-            get_force_dns_status_fn=dns_feature.get_force_dns_status,
-            build_result_plan_fn=dns_page_plans.build_reset_dhcp_result_plan,
-            language=self._ui_language,
-            set_force_dns_active_fn=lambda value: setattr(self, "_force_dns_active", value),
-            set_force_dns_toggle_fn=self._set_force_dns_toggle,
-            select_auto_dns_ui_fn=select_auto_dns_ui,
-            dns_cards=self.dns_cards,
-            auto_indicator=getattr(self, 'auto_indicator', None),
-            auto_card=getattr(self, 'auto_card', None),
-            custom_indicator=getattr(self, 'custom_indicator', None),
-            custom_card=getattr(self, 'custom_card', None),
-            indicator_on_qss=DNSProviderCard.indicator_on(),
-            indicator_off_qss=DNSProviderCard.indicator_off(),
-            set_card_selected_fn=self._set_dns_card_selected,
-            set_selected_provider_fn=lambda value: setattr(self, "_selected_provider", value),
-            update_force_dns_status_fn=self._update_force_dns_status,
-            update_dns_selection_state_fn=self._update_dns_selection_state,
-            refresh_adapters_dns_fn=self._refresh_adapters_dns,
-            info_bar_cls=InfoBar,
-            parent_window=self.window(),
-            tr_fn=self._tr,
-            log_fn=log,
-        )
+        self._request_force_dns_action("reset_dhcp")
 
     def _confirm_reset_dns_to_dhcp(self):
         if not self._confirm_action(
@@ -1017,6 +1121,14 @@ class NetworkPage(BasePage):
             self.loading_bar.stop()
         except Exception:
             pass
+        self._force_dns_action_pending.clear()
+        force_dns_worker = self.__dict__.get("_force_dns_action_worker")
+        if force_dns_worker is not None:
+            try:
+                force_dns_worker.quit()
+            except Exception:
+                pass
+            self._force_dns_action_worker = None
         cleanup_network_page(
             set_cleanup_in_progress_fn=lambda value: setattr(self, "_cleanup_in_progress", value),
             set_test_in_progress_fn=lambda value: setattr(self, "_test_in_progress", value),
