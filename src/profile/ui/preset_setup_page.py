@@ -710,34 +710,12 @@ class PresetSetupPageBase(BasePage):
         if not self._user_profile_operation_running():
             self._set_user_profile_actions_enabled(True)
 
-    def _apply_profile_move_locally(
-        self,
-        source_profile_key: str,
-        destination_kind: str,
-        destination_profile_key: str = "",
-        destination_group_key: str = "",
-    ) -> None:
-        if self._profiles_list is not None and self._profiles_list.move_profile_locally(
-            source_profile_key,
-            destination_kind,
-            destination_profile_key,
-            destination_group_key,
-        ):
-            return
-        self.refresh_from_preset_switch()
-
     def _on_profile_move_requested(
         self,
         source_profile_key: str,
         destination_profile_key: str,
         destination_group_key: str = "",
     ) -> None:
-        self._apply_profile_move_locally(
-            source_profile_key,
-            "profile",
-            destination_profile_key,
-            destination_group_key,
-        )
         self._request_profile_move(
             "before",
             source_profile_key,
@@ -751,12 +729,6 @@ class PresetSetupPageBase(BasePage):
         destination_profile_key: str,
         destination_group_key: str = "",
     ) -> None:
-        self._apply_profile_move_locally(
-            source_profile_key,
-            "profile_after",
-            destination_profile_key,
-            destination_group_key,
-        )
         self._request_profile_move(
             "after",
             source_profile_key,
@@ -765,11 +737,9 @@ class PresetSetupPageBase(BasePage):
         )
 
     def _on_profile_move_to_end_requested(self, profile_key: str) -> None:
-        self._apply_profile_move_locally(profile_key, "end")
         self._request_profile_move("end", profile_key)
 
     def _on_profile_move_to_folder_requested(self, profile_key: str, folder_key: str) -> None:
-        self._apply_profile_move_locally(profile_key, "folder", destination_group_key=folder_key)
         self._request_profile_move("folder", profile_key, destination_group_key=folder_key)
 
     def _request_profile_move(
@@ -817,8 +787,7 @@ class PresetSetupPageBase(BasePage):
     ) -> None:
         if request_id != int(getattr(self, "_profile_move_request_id", 0) or 0):
             return
-        if not result:
-            self.refresh_from_preset_switch()
+        self.refresh_from_preset_switch()
 
     def _on_profile_move_failed(self, request_id: int, error: str) -> None:
         if request_id != int(getattr(self, "_profile_move_request_id", 0) or 0):
