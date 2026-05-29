@@ -160,8 +160,8 @@ class ProfileSetupController:
 
         return ProfileUserProfileUpdateWorker(
             request_id,
-            self,
-            self._launch_method,
+            self.update_user_profile,
+            self.load_user_profile_items,
             profile_id=profile_id,
             name=name,
             protocol=protocol,
@@ -172,7 +172,12 @@ class ProfileSetupController:
     def create_user_profile_delete_worker(self, request_id: int, *, profile_id: str, parent=None):
         from profile.profile_setup_loader import ProfileUserProfileDeleteWorker
 
-        return ProfileUserProfileDeleteWorker(request_id, self, profile_id=profile_id, parent=parent)
+        return ProfileUserProfileDeleteWorker(
+            request_id,
+            self.delete_user_profile,
+            profile_id=profile_id,
+            parent=parent,
+        )
 
     def create_strategy_apply_worker(self, request_id: int, *, profile_key: str, strategy_id: str, parent=None):
         from profile.profile_setup_loader import ProfileStrategyApplyWorker
@@ -278,6 +283,11 @@ class ProfileSetupController:
 
     def list_profiles(self, launch_method: str = ""):
         return self._profile.list_profiles(launch_method or self._launch_method)
+
+    def load_user_profile_items(self, profile_id: str):
+        from profile.profile_setup_loader import load_user_profile_items_from_payload
+
+        return load_user_profile_items_from_payload(self.list_profiles, profile_id)
 
     def delete_user_profile(self, *, profile_id: str) -> int:
         return int(self._profile.delete_user_profile(profile_id))

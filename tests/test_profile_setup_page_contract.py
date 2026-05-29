@@ -203,14 +203,12 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             user_profile_id="user-1",
             profile_name="YouTube",
         )
-        payload = SimpleNamespace(items=(created_item,))
-        profile = Mock()
-        profile.create_user_profile.return_value = "user-1"
-        profile.list_profiles.return_value = payload
+        create_user_profile = Mock(return_value="user-1")
+        load_user_profile_items = Mock(return_value=(created_item,))
         worker = ProfileUserProfileCreateWorker(
             5,
-            profile,
-            "zapret2_mode",
+            create_user_profile,
+            load_user_profile_items,
             name="YouTube",
             protocol="TCP",
             ports="443",
@@ -223,12 +221,12 @@ class ProfileSetupPageContractTests(unittest.TestCase):
 
         worker.run()
 
-        profile.create_user_profile.assert_called_once_with(
+        create_user_profile.assert_called_once_with(
             name="YouTube",
             protocol="TCP",
             ports="443",
         )
-        profile.list_profiles.assert_called_once_with("zapret2_mode")
+        load_user_profile_items.assert_called_once_with("user-1")
         self.assertEqual(created, [(5, "user-1", created_item)])
 
     def test_preset_setup_user_profile_create_adds_item_without_full_refresh(self) -> None:
@@ -287,14 +285,12 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             user_profile_id="user-1",
             profile_name="YouTube New",
         )
-        payload = SimpleNamespace(items=(updated_item,))
-        profile = Mock()
-        profile.update_user_profile.return_value = 2
-        profile.list_profiles.return_value = payload
+        update_user_profile = Mock(return_value=2)
+        load_user_profile_items = Mock(return_value=(updated_item,))
         worker = ProfileUserProfileUpdateWorker(
             6,
-            profile,
-            "zapret2_mode",
+            update_user_profile,
+            load_user_profile_items,
             profile_id="user-1",
             name="YouTube New",
             protocol="TCP",
@@ -308,13 +304,13 @@ class ProfileSetupPageContractTests(unittest.TestCase):
 
         worker.run()
 
-        profile.update_user_profile.assert_called_once_with(
+        update_user_profile.assert_called_once_with(
             profile_id="user-1",
             name="YouTube New",
             protocol="TCP",
             ports="443",
         )
-        profile.list_profiles.assert_called_once_with("zapret2_mode")
+        load_user_profile_items.assert_called_once_with("user-1")
         self.assertEqual(updated, [(6, "user-1", 2, (updated_item,))])
 
     def test_preset_setup_user_profile_update_replaces_items_without_full_refresh(self) -> None:
@@ -2410,13 +2406,12 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             user_profile_id="user-1",
             profile_name="YouTube",
         )
-        controller = Mock()
-        controller.update_user_profile.return_value = 3
-        controller.list_profiles.return_value = SimpleNamespace(items=(updated_item,))
+        update_user_profile = Mock(return_value=3)
+        load_user_profile_items = Mock(return_value=(updated_item,))
         worker = ProfileUserProfileUpdateWorker(
             7,
-            controller,
-            "zapret2_mode",
+            update_user_profile,
+            load_user_profile_items,
             profile_id="user-1",
             name="YouTube",
             protocol="TCP",
@@ -2430,19 +2425,18 @@ class ProfileSetupPageContractTests(unittest.TestCase):
 
         worker.run()
 
-        controller.update_user_profile.assert_called_once_with(
+        update_user_profile.assert_called_once_with(
             profile_id="user-1",
             name="YouTube",
             protocol="TCP",
             ports="443",
         )
-        controller.list_profiles.assert_called_once_with("zapret2_mode")
+        load_user_profile_items.assert_called_once_with("user-1")
         self.assertEqual(updated, [(7, "user-1", 3, (updated_item,))])
 
     def test_user_profile_delete_worker_emits_changed_count(self) -> None:
-        controller = Mock()
-        controller.delete_user_profile.return_value = 2
-        worker = ProfileUserProfileDeleteWorker(8, controller, profile_id="user-1")
+        delete_user_profile = Mock(return_value=2)
+        worker = ProfileUserProfileDeleteWorker(8, delete_user_profile, profile_id="user-1")
         deleted = []
 
         worker.deleted.connect(
@@ -2451,7 +2445,7 @@ class ProfileSetupPageContractTests(unittest.TestCase):
 
         worker.run()
 
-        controller.delete_user_profile.assert_called_once_with(profile_id="user-1")
+        delete_user_profile.assert_called_once_with(profile_id="user-1")
         self.assertEqual(deleted, [(8, "user-1", 2)])
 
     def test_strategy_list_click_handlers_match_qlistwidget_signals(self) -> None:

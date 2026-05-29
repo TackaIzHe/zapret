@@ -342,8 +342,8 @@ class ProfileUserProfileCreateWorker(QThread):
     def __init__(
         self,
         request_id: int,
-        profile,
-        launch_method: str,
+        create_user_profile,
+        load_user_profile_items,
         *,
         name: str,
         protocol: str,
@@ -352,30 +352,26 @@ class ProfileUserProfileCreateWorker(QThread):
     ):
         super().__init__(parent)
         self._request_id = int(request_id)
-        self._profile = profile
-        self._launch_method = str(launch_method or "").strip()
+        self._create_user_profile = create_user_profile
+        self._load_user_profile_items = load_user_profile_items
         self._name = str(name or "").strip()
         self._protocol = str(protocol or "").strip()
         self._ports = str(ports or "").strip()
 
     def run(self) -> None:
         try:
-            profile_id = self._profile.create_user_profile(
+            profile_id = self._create_user_profile(
                 name=self._name,
                 protocol=self._protocol,
                 ports=self._ports,
             )
-            created_item = self._created_profile_item(str(profile_id or ""))
+            created_items = self._load_user_profile_items(str(profile_id or ""))
+            created_item = created_items[0] if created_items else None
         except Exception as exc:
             log(f"ProfileUserProfileCreateWorker: не удалось создать пользовательский profile: {exc}", "ERROR")
             self.failed.emit(self._request_id, str(exc))
             return
         self.created.emit(self._request_id, str(profile_id or ""), created_item)
-
-    def _created_profile_item(self, profile_id: str):
-        items = _user_profile_items(self._profile, self._launch_method, profile_id)
-        return items[0] if items else None
-
 
 class ProfileUserProfileUpdateWorker(QThread):
     updated = pyqtSignal(int, str, int, object)
@@ -384,8 +380,8 @@ class ProfileUserProfileUpdateWorker(QThread):
     def __init__(
         self,
         request_id: int,
-        controller,
-        launch_method: str,
+        update_user_profile,
+        load_user_profile_items,
         *,
         profile_id: str,
         name: str,
@@ -395,8 +391,8 @@ class ProfileUserProfileUpdateWorker(QThread):
     ):
         super().__init__(parent)
         self._request_id = int(request_id)
-        self._controller = controller
-        self._launch_method = str(launch_method or "").strip()
+        self._update_user_profile = update_user_profile
+        self._load_user_profile_items = load_user_profile_items
         self._profile_id = str(profile_id or "").strip()
         self._name = str(name or "").strip()
         self._protocol = str(protocol or "").strip()
@@ -404,13 +400,13 @@ class ProfileUserProfileUpdateWorker(QThread):
 
     def run(self) -> None:
         try:
-            changed = self._controller.update_user_profile(
+            changed = self._update_user_profile(
                 profile_id=self._profile_id,
                 name=self._name,
                 protocol=self._protocol,
                 ports=self._ports,
             )
-            updated_items = _user_profile_items(self._controller, self._launch_method, self._profile_id)
+            updated_items = self._load_user_profile_items(self._profile_id)
         except Exception as exc:
             log(f"ProfileUserProfileUpdateWorker: не удалось изменить пользовательский profile: {exc}", "ERROR")
             self.failed.emit(self._request_id, str(exc))
@@ -422,15 +418,15 @@ class ProfileUserProfileDeleteWorker(QThread):
     deleted = pyqtSignal(int, str, int)
     failed = pyqtSignal(int, str)
 
-    def __init__(self, request_id: int, controller, *, profile_id: str, parent=None):
+    def __init__(self, request_id: int, delete_user_profile, *, profile_id: str, parent=None):
         super().__init__(parent)
         self._request_id = int(request_id)
-        self._controller = controller
+        self._delete_user_profile = delete_user_profile
         self._profile_id = str(profile_id or "").strip()
 
     def run(self) -> None:
         try:
-            changed = self._controller.delete_user_profile(profile_id=self._profile_id)
+            changed = self._delete_user_profile(profile_id=self._profile_id)
         except Exception as exc:
             log(f"ProfileUserProfileDeleteWorker: не удалось удалить пользовательский profile: {exc}", "ERROR")
             self.failed.emit(self._request_id, str(exc))
@@ -438,12 +434,12 @@ class ProfileUserProfileDeleteWorker(QThread):
         self.deleted.emit(self._request_id, self._profile_id, int(changed or 0))
 
 
-def _user_profile_items(profile, launch_method: str, profile_id: str) -> tuple[object, ...]:
+def load_user_profile_items_from_payload(load_profiles, profile_id: str) -> tuple[object, ...]:
     clean_profile_id = str(profile_id or "").strip()
     if not clean_profile_id:
         return ()
     try:
-        payload = profile.list_profiles(str(launch_method or "").strip())
+        payload = load_profiles()
     except Exception:
         return ()
     return tuple(

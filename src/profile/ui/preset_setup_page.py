@@ -13,6 +13,7 @@ from profile.profile_setup_loader import (
     ProfileUserProfileCreateWorker,
     ProfileUserProfileDeleteWorker,
     ProfileUserProfileUpdateWorker,
+    load_user_profile_items_from_payload,
 )
 from profile.ui.profiles_list import ProfilesList
 from profile.ui.shell import build_profile_shell
@@ -598,8 +599,8 @@ class PresetSetupPageBase(BasePage):
     def _create_user_profile_create_worker(self, request_id: int, *, name: str, protocol: str, ports: str):
         return ProfileUserProfileCreateWorker(
             request_id,
-            self._profile,
-            self.launch_method,
+            self._profile.create_user_profile,
+            self._load_user_profile_items,
             name=name,
             protocol=protocol,
             ports=ports,
@@ -617,8 +618,8 @@ class PresetSetupPageBase(BasePage):
     ):
         return ProfileUserProfileUpdateWorker(
             request_id,
-            self._profile,
-            self.launch_method,
+            self._profile.update_user_profile,
+            self._load_user_profile_items,
             profile_id=profile_id,
             name=name,
             protocol=protocol,
@@ -629,9 +630,15 @@ class PresetSetupPageBase(BasePage):
     def _create_user_profile_delete_worker(self, request_id: int, *, profile_id: str):
         return ProfileUserProfileDeleteWorker(
             request_id,
-            self._profile,
+            self._profile.delete_user_profile,
             profile_id=profile_id,
             parent=self,
+        )
+
+    def _load_user_profile_items(self, profile_id: str):
+        return load_user_profile_items_from_payload(
+            lambda: self._profile.list_profiles(self.launch_method),
+            profile_id,
         )
 
     def _request_user_profile_create(self, *, name: str, protocol: str, ports: str) -> None:

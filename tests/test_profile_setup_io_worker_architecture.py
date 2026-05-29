@@ -133,6 +133,50 @@ class ProfileSetupIoWorkerArchitectureTests(unittest.TestCase):
         self.assertIn("self._save_feedback(", run_source)
         self.assertNotIn("self._controller.set_strategy_feedback", run_source)
 
+    def test_user_profile_create_worker_receives_create_and_lookup_functions(self) -> None:
+        from profile.profile_setup_loader import ProfileUserProfileCreateWorker
+
+        init_source = inspect.getsource(ProfileUserProfileCreateWorker.__init__)
+        run_source = inspect.getsource(ProfileUserProfileCreateWorker.run)
+
+        self.assertIn("create_user_profile", init_source)
+        self.assertIn("load_user_profile_items", init_source)
+        self.assertIn("self._create_user_profile", init_source)
+        self.assertIn("self._load_user_profile_items", init_source)
+        self.assertNotIn("self._profile", init_source)
+        self.assertNotIn("launch_method", init_source)
+        self.assertIn("self._create_user_profile(", run_source)
+        self.assertIn("self._load_user_profile_items(", run_source)
+        self.assertNotIn("self._profile.create_user_profile", run_source)
+
+    def test_user_profile_update_worker_receives_update_and_lookup_functions(self) -> None:
+        from profile.profile_setup_loader import ProfileUserProfileUpdateWorker
+
+        init_source = inspect.getsource(ProfileUserProfileUpdateWorker.__init__)
+        run_source = inspect.getsource(ProfileUserProfileUpdateWorker.run)
+
+        self.assertIn("update_user_profile", init_source)
+        self.assertIn("load_user_profile_items", init_source)
+        self.assertIn("self._update_user_profile", init_source)
+        self.assertIn("self._load_user_profile_items", init_source)
+        self.assertNotIn("self._controller", init_source)
+        self.assertNotIn("launch_method", init_source)
+        self.assertIn("self._update_user_profile(", run_source)
+        self.assertIn("self._load_user_profile_items(", run_source)
+        self.assertNotIn("self._controller.update_user_profile", run_source)
+
+    def test_user_profile_delete_worker_receives_delete_function(self) -> None:
+        from profile.profile_setup_loader import ProfileUserProfileDeleteWorker
+
+        init_source = inspect.getsource(ProfileUserProfileDeleteWorker.__init__)
+        run_source = inspect.getsource(ProfileUserProfileDeleteWorker.run)
+
+        self.assertIn("delete_user_profile", init_source)
+        self.assertIn("self._delete_user_profile", init_source)
+        self.assertNotIn("self._controller", init_source)
+        self.assertIn("self._delete_user_profile(", run_source)
+        self.assertNotIn("self._controller.delete_user_profile", run_source)
+
 
 if __name__ == "__main__":
     unittest.main()
