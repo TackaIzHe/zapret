@@ -19,10 +19,15 @@ class AutostartWorkerArchitectureTests(unittest.TestCase):
 
         self.assertNotIn("autostart_feature=feature", feature_source)
         self.assertNotIn("self._autostart", worker_source)
-        self.assertIn("autostart_public.enable_gui_autostart", worker_source)
-        self.assertIn("autostart_public.disable_gui_autostart", worker_source)
-        self.assertIn("autostart_public.save_gui_autostart_enabled", worker_source)
-        self.assertIn("autostart_public.get_current_launch_method", worker_source)
+        self.assertIn("enable_gui_autostart=feature.enable_gui_autostart", feature_source)
+        self.assertIn("disable_gui_autostart=feature.disable_gui_autostart", feature_source)
+        self.assertIn("save_gui_autostart_enabled=feature.save_gui_autostart_enabled", feature_source)
+        self.assertIn("get_current_launch_method=feature.get_current_launch_method", feature_source)
+        self.assertIn("self._enable_gui_autostart", worker_source)
+        self.assertIn("self._disable_gui_autostart", worker_source)
+        self.assertIn("self._save_gui_autostart_enabled", worker_source)
+        self.assertIn("self._get_current_launch_method", worker_source)
+        self.assertNotIn("import autostart.public", worker_source)
 
 
 if __name__ == "__main__":

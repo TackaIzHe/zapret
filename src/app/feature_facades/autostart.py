@@ -39,6 +39,9 @@ def build_autostart_feature(*, runtime_state=None) -> AutostartFeature:
         return AutostartActionWorker(
             request_id,
             action=action,
+            enable_gui_autostart=feature.enable_gui_autostart,
+            disable_gui_autostart=feature.disable_gui_autostart,
+            save_gui_autostart_enabled=feature.save_gui_autostart_enabled,
             enabled=enabled,
             strategy_name=strategy_name,
             parent=parent,
@@ -49,6 +52,7 @@ def build_autostart_feature(*, runtime_state=None) -> AutostartFeature:
 
         return AutostartModeLoadWorker(
             request_id,
+            get_current_launch_method=feature.get_current_launch_method,
             parent=parent,
         )
 
