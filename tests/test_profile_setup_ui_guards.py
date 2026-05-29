@@ -264,6 +264,35 @@ class ProfileSetupUiGuardTests(unittest.TestCase):
         self.assertEqual(page._list_file_text.read_only_calls, [])
         self.assertEqual(page._list_file_status_label.calls, [])
 
+    def test_list_file_validation_skips_duplicate_status_updates(self) -> None:
+        from unittest.mock import Mock
+
+        from profile.ui.profile_setup_page import ProfileSetupPageBase
+
+        page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        page._list_file_validation_request_id = 7
+        page._pending_list_file_validation = None
+        page._list_file_kind = "hostlist"
+        page._list_file_text = _PlainTextWidget("user.example", read_only=False)
+        page._list_file_base_text = _PlainTextWidget("base.example")
+        page._list_file_save_button = _BoolWidget(enabled=True)
+        page._list_file_status_label = _TextWidget(
+            "Записей всего: 2 • ваших: 1 • есть несохранённые изменения"
+        )
+        page._render_list_file_validation = Mock()
+
+        ProfileSetupPageBase._on_list_file_validation_finished(
+            page,
+            7,
+            "hostlist",
+            "user.example",
+            (),
+        )
+
+        self.assertEqual(page._list_file_save_button.enabled_calls, [])
+        self.assertEqual(page._list_file_status_label.calls, [])
+        page._render_list_file_validation.assert_called_once_with(())
+
     def test_match_tab_payload_skips_duplicate_plain_text(self) -> None:
         from types import SimpleNamespace
         from unittest.mock import Mock

@@ -1602,7 +1602,7 @@ class ProfileSetupPageBase(BasePage):
             return
         text = self._list_file_text.toPlainText()
         if self._list_file_status_label is not None:
-            self._list_file_status_label.setText("Проверка списка...")
+            set_widget_text_if_changed(self._list_file_status_label, "Проверка списка...")
         self._request_list_file_validation({
             "kind": self._list_file_kind,
             "text": text,
@@ -1653,10 +1653,14 @@ class ProfileSetupPageBase(BasePage):
         invalid_lines = tuple(invalid_lines or ())
         self._render_list_file_validation(tuple(invalid_lines or ()))
         if self._list_file_save_button is not None:
-            self._list_file_save_button.setEnabled(not invalid_lines and not self._list_file_text.isReadOnly())
+            editable = self._list_file_text is not None and not self._list_file_text.isReadOnly()
+            set_widget_enabled_if_changed(self._list_file_save_button, not invalid_lines and editable)
         if self._list_file_status_label is not None:
             if invalid_lines:
-                self._list_file_status_label.setText("Исправьте ошибки перед сохранением.")
+                set_widget_text_if_changed(
+                    self._list_file_status_label,
+                    "Исправьте ошибки перед сохранением.",
+                )
             else:
                 user_count = _list_file_entries_count(self._list_file_text.toPlainText())
                 base_count = _list_file_entries_count(
@@ -1664,8 +1668,9 @@ class ProfileSetupPageBase(BasePage):
                     if self._list_file_base_text is not None
                     else ""
                 )
-                self._list_file_status_label.setText(
-                    f"Записей всего: {base_count + user_count} • ваших: {user_count} • есть несохранённые изменения"
+                set_widget_text_if_changed(
+                    self._list_file_status_label,
+                    f"Записей всего: {base_count + user_count} • ваших: {user_count} • есть несохранённые изменения",
                 )
 
     def _on_list_file_validation_failed(self, request_id: int, error: str) -> None:
@@ -1676,9 +1681,9 @@ class ProfileSetupPageBase(BasePage):
             return
         self._render_list_file_validation((), fallback_error=str(error))
         if self._list_file_save_button is not None:
-            self._list_file_save_button.setEnabled(False)
+            set_widget_enabled_if_changed(self._list_file_save_button, False)
         if self._list_file_status_label is not None:
-            self._list_file_status_label.setText("Ошибка проверки списка.")
+            set_widget_text_if_changed(self._list_file_status_label, "Ошибка проверки списка.")
 
     def _on_list_file_validation_worker_finished(self, worker) -> None:
         if self.__dict__.get("_list_file_validation_worker") is worker:
@@ -1702,9 +1707,9 @@ class ProfileSetupPageBase(BasePage):
         self._list_file_save_request_id += 1
         request_id = self._list_file_save_request_id
         if self._list_file_status_label is not None:
-            self._list_file_status_label.setText("Сохранение списка...")
+            set_widget_text_if_changed(self._list_file_status_label, "Сохранение списка...")
         if self._list_file_save_button is not None:
-            self._list_file_save_button.setEnabled(False)
+            set_widget_enabled_if_changed(self._list_file_save_button, False)
         worker = self._controller.create_list_file_save_worker(
             request_id,
             self._profile_key,
@@ -1723,7 +1728,7 @@ class ProfileSetupPageBase(BasePage):
         if state is not None:
             self._apply_list_file_editor_state(state)
         if self._list_file_status_label is not None:
-            self._list_file_status_label.setText("Список сохранён.")
+            set_widget_text_if_changed(self._list_file_status_label, "Список сохранён.")
         if payload is None:
             self.reload_current_profile()
             self._on_profile_changed_callback(self._profile_key, "list_file")
@@ -1743,7 +1748,7 @@ class ProfileSetupPageBase(BasePage):
         log(f"{self.__class__.__name__}: не удалось сохранить файл списка profile: {error}", "ERROR")
         self._render_list_file_validation((), fallback_error=str(error))
         if self._list_file_save_button is not None:
-            self._list_file_save_button.setEnabled(True)
+            set_widget_enabled_if_changed(self._list_file_save_button, True)
         InfoBar.error(title="Ошибка", content=str(error), parent=self.window())
 
     def _on_list_file_save_worker_finished(self, worker) -> None:

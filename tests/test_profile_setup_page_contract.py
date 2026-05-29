@@ -3077,7 +3077,8 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         self.assertFalse(_profile_has_list_file_editor(l7_payload))
         self.assertTrue(_profile_has_list_file_editor(hostlist_payload))
         self.assertIn("filter_switchable", apply_settings)
-        self.assertIn("setVisible(filter_switchable)", apply_settings)
+        self.assertIn("set_widget_visible_if_changed(self._filter_combo, filter_switchable)", apply_settings)
+        self.assertIn("set_widget_visible_if_changed(self._filter_value, filter_switchable)", apply_settings)
 
     def test_strategy_list_rows_store_visual_description(self) -> None:
         set_rows = inspect.getsource(ProfileStrategyListWidget._rebuild_tree)
