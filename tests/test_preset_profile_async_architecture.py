@@ -2790,9 +2790,13 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         worker_init_source = inspect.getsource(profile_additional_settings_loader.AdditionalSettingsLoadWorker.__init__)
         worker_run_source = inspect.getsource(profile_additional_settings_loader.AdditionalSettingsLoadWorker.run)
 
-        self.assertIn("launch_method", worker_init_source)
-        self.assertIn("self._launch_method", worker_init_source)
-        self.assertIn("launch_method=self._launch_method", worker_run_source)
+        self.assertIn("state_loader", worker_init_source)
+        self.assertIn("self._state_loader", worker_init_source)
+        self.assertNotIn("self._profile", worker_init_source)
+        self.assertNotIn("launch_method", worker_init_source)
+        self.assertNotIn("self._launch_method", worker_init_source)
+        self.assertIn("self._state_loader()", worker_run_source)
+        self.assertNotIn("get_additional_settings_state", worker_run_source)
         self.assertNotIn("ZAPRET2_MODE", worker_run_source)
 
     def test_control_additional_settings_runtime_is_shared(self) -> None:

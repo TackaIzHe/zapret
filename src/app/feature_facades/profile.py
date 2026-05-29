@@ -308,7 +308,18 @@ class ProfileFeature:
     def create_additional_settings_load_worker(self, request_id: int, parent=None, *, launch_method: str):
         from profile.additional_settings_loader import AdditionalSettingsLoadWorker
 
-        return AdditionalSettingsLoadWorker(request_id, self, launch_method=launch_method, parent=parent)
+        settings_api = self._settings()
+
+        clean_launch_method = str(launch_method or "")
+
+        def _load_additional_settings_state():
+            return settings_api.get_additional_settings_state(self, launch_method=clean_launch_method)
+
+        return AdditionalSettingsLoadWorker(
+            request_id,
+            _load_additional_settings_state,
+            parent=parent,
+        )
 
     def create_profile_list_load_worker(self, request_id: int, launch_method: str, parent=None):
         from profile.profile_list_loader import ProfileListLoadWorker
