@@ -53,7 +53,11 @@ class LogsFeature:
     def create_open_folder_worker(self, request_id: int, *, parent=None):
         from log.open_folder_worker import LogsOpenFolderWorker
 
-        return LogsOpenFolderWorker(request_id, parent=parent)
+        return LogsOpenFolderWorker(
+            request_id,
+            open_logs_folder=self.open_logs_folder,
+            parent=parent,
+        )
 
     def create_support_prepare_worker(
         self,

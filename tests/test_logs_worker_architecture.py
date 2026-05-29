@@ -20,7 +20,10 @@ class LogsWorkerArchitectureTests(unittest.TestCase):
 
         self.assertNotIn("logs_feature=self", feature_source)
         self.assertNotIn("self._logs", worker_source)
-        self.assertIn("log_commands.open_logs_folder", worker_source)
+        self.assertIn("open_logs_folder=self.open_logs_folder", feature_source)
+        self.assertIn("open_logs_folder", inspect.signature(open_folder_worker.LogsOpenFolderWorker.__init__).parameters)
+        self.assertIn("self._open_logs_folder", inspect.getsource(open_folder_worker.LogsOpenFolderWorker.run))
+        self.assertNotIn("import log.commands", inspect.getsource(open_folder_worker.LogsOpenFolderWorker.run))
         self.assertIn("log_commands.prepare_support_bundle", worker_source)
 
 
