@@ -99,13 +99,11 @@ class ProfilesList(QWidget):
         self._model.set_profiles(())
 
     def expand_all(self) -> None:
-        self._model.set_all_groups_expanded(True)
-        for group_key in self._group_keys():
+        for group_key in self._model.set_all_groups_expanded(True):
             self.folder_toggled.emit(group_key, True)
 
     def collapse_all(self) -> None:
-        self._model.set_all_groups_expanded(False)
-        for group_key in self._group_keys():
+        for group_key in self._model.set_all_groups_expanded(False):
             self.folder_toggled.emit(group_key, False)
 
     def profile_item_for_key(self, profile_key: str):

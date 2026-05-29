@@ -199,12 +199,22 @@ class ProfileListModel(QAbstractListModel):
         self._rows = next_rows
         self.endResetModel()
 
-    def set_all_groups_expanded(self, expanded: bool) -> None:
+    def set_all_groups_expanded(self, expanded: bool) -> tuple[str, ...]:
+        expanded_value = bool(expanded)
+        group_keys = tuple(str(group_key) for group_key in _grouped_items(self._all_items))
+        changed_group_keys = tuple(
+            group_key
+            for group_key in group_keys
+            if self._group_expanded.get(group_key, True) != expanded_value
+        )
+        if not changed_group_keys:
+            return ()
         self.beginResetModel()
-        for group_key in _grouped_items(self._all_items):
-            self._group_expanded[str(group_key)] = bool(expanded)
+        for group_key in group_keys:
+            self._group_expanded[group_key] = expanded_value
         self._rows = self._build_rows()
         self.endResetModel()
+        return changed_group_keys
 
     def is_group_expanded(self, group_key: str) -> bool:
         return bool(self._group_expanded.get(str(group_key or ""), True))
