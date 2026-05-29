@@ -13,6 +13,8 @@ class Zapret2ControlLazyStartupTests(unittest.TestCase):
         deferred_source = inspect.getsource(zapret2_page.Zapret2ModeControlPage._build_deferred_sections)
 
         self.assertNotIn("from presets.ui.control.zapret2.deferred_build import", import_block)
+        self.assertNotIn("MessageBoxBase", import_block)
+        self.assertNotIn("SegmentedWidget", import_block)
         self.assertIn("from presets.ui.control.zapret2.deferred_build import", deferred_source)
 
     def test_additional_settings_workers_are_imported_only_when_requested(self) -> None:

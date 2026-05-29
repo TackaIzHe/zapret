@@ -37,9 +37,8 @@ import presets.ui.control.zapret2.page_runtime as zapret2_page_runtime
 from log.log import log
 
 from qfluentwidgets import (
-    CaptionLabel, StrongBodyLabel, SubtitleLabel, BodyLabel,
+    CaptionLabel, StrongBodyLabel,
     IndeterminateProgressBar, InfoBar,
-    SegmentedWidget, MessageBoxBase,
     PrimaryPushButton, PushButton, SettingCardGroup, PushSettingCard,
 )
 
@@ -56,82 +55,6 @@ def create_control_top_summary_worker(*args, **kwargs):
     from presets.ui.control.additional_settings_runtime import create_top_summary_worker
 
     return create_top_summary_worker(*args, **kwargs)
-
-
-class ProfileUiModeDialog(MessageBoxBase):
-    """Диалог выбора Basic / Advanced режима режима профилей."""
-
-    def __init__(self, current_mode: str, parent=None, language: str | None = None):
-        super().__init__(parent)
-        self.titleLabel = SubtitleLabel(
-            tr_catalog(
-                "page.winws2_control.mode.dialog.title",
-                language=language,
-                default="Режим отображения профилей",
-            ),
-            self.widget,
-        )
-        self.mode_seg = SegmentedWidget(self.widget)
-        self.mode_seg.addItem(
-            "basic",
-            tr_catalog("page.winws2_control.mode.basic", language=language, default="Basic"),
-        )
-        self.mode_seg.addItem(
-            "advanced",
-            tr_catalog("page.winws2_control.mode.advanced", language=language, default="Advanced"),
-        )
-        self.mode_seg.setCurrentItem(
-            current_mode if current_mode in ("basic", "advanced") else "basic"
-        )
-        self.basic_desc = BodyLabel(
-            tr_catalog(
-                "page.winws2_control.mode.dialog.description",
-                language=language,
-                default=(
-                    "Профили поддерживают несколько режимов: упрощённый и расширенный. "
-                    "Настройки не переносятся между режимами, поэтому можно выбрать любой. "
-                    "Рекомендуем начать с базового. Если базовый режим с готовыми стратегиями плохо открывает сайты, "
-                    "попробуйте продвинутый: там можно тоньше настроить техники дурения."
-                ),
-            ),
-            self.widget,
-        )
-        self.basic_desc = BodyLabel(
-            tr_catalog(
-                "page.winws2_control.mode.dialog.basic_description",
-                language=language,
-                default=(
-                    "Basic (базовый) — выбор готовой стратегии без настройки фаз. "
-                    "Свой набор аргументов в этом режиме собрать нельзя."
-                ),
-            ),
-            self.widget,
-        )
-        self.adv_desc = BodyLabel(
-            tr_catalog(
-                "page.winws2_control.mode.dialog.advanced_description",
-                language=language,
-                default=(
-                    "Advanced (продвинутый) — каждая функция настраивается индивидуально, "
-                    "можно выбирать несколько фаз и смешивать их друг с другом."
-                ),
-            ),
-            self.widget,
-        )
-        self.basic_desc.setWordWrap(True)
-        self.adv_desc.setWordWrap(True)
-        self.viewLayout.addWidget(self.titleLabel)
-        self.viewLayout.addSpacing(8)
-        self.viewLayout.addWidget(self.mode_seg)
-        self.viewLayout.addSpacing(8)
-        self.viewLayout.addWidget(self.basic_desc)
-        self.viewLayout.addWidget(self.adv_desc)
-        self.yesButton.setText(tr_catalog("page.winws2_control.mode.dialog.button.apply", language=language, default="Применить"))
-        self.cancelButton.setText(tr_catalog("page.winws2_control.mode.dialog.button.cancel", language=language, default="Отмена"))
-        self.widget.setMinimumWidth(440)
-
-    def get_mode(self) -> str:
-        return self.mode_seg.currentRouteKey()
 
 
 def _accent_fg_for_tokens(tokens) -> str:
