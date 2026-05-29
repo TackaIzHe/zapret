@@ -22,7 +22,9 @@ def premium_state_from_activation_info(activation_info: Mapping[str, Any] | None
     status_msg = str(info.get("status") or info.get("status_msg") or info.get("status_message") or "").strip()
     if not status_msg:
         status_msg = "Premium активен" if is_premium else "Не активировано"
-    source = "offline" if "offline" in status_msg.lower() else str(info.get("source") or "api").strip() or "api"
+    source = str(info.get("source") or "").strip()
+    if not source:
+        source = "offline" if "offline" in status_msg.lower() else "api"
     subscription_level = str(
         info.get("subscription_level")
         or info.get("level")
@@ -68,4 +70,3 @@ def _normalize_days(value: Any) -> int | None:
         return int(value)
     except Exception:
         return None
-

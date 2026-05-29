@@ -16,6 +16,7 @@ class ActivationStatus:
     # None means "unknown" (client will fallback to local token presence).
     is_linked: Optional[bool] = None
     subscription_level: str = "–"
+    source: str = "api"
 
     def get_formatted_expiry(self) -> str:
         if not self.is_activated:

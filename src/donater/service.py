@@ -254,8 +254,10 @@ class PremiumService:
             device_id = PremiumStorage.get_device_id()
             device_token = PremiumStorage.get_device_token() or ""
             network_cooldown_active = False
+            network_failure_seen = False
 
             def _apply_network_health(raw_any: Any) -> None:
+                nonlocal network_failure_seen
                 if not isinstance(raw_any, dict):
                     return
 
@@ -271,6 +273,7 @@ class PremiumService:
                     return
 
                 if str(raw_any.get("error") or "").strip() == "Ошибка сети":
+                    network_failure_seen = True
                     PremiumStorage.save_last_network_failure_now()
 
             if allow_network and automatic:
@@ -372,13 +375,19 @@ class PremiumService:
                                         dt = dt.replace(tzinfo=None)
                                     if dt <= datetime.now():
                                         raise ValueError("expired")
+                                cache_source = "offline" if network_failure_seen or network_cooldown_active else "cache"
                                 return ActivationStatus(
                                     is_activated=True,
                                     days_remaining=cached_signed.get("days_remaining"),
                                     expires_at=cached_signed.get("expires_at"),
-                                    status_message="Активировано (offline)",
+                                    status_message=(
+                                        "Активировано (offline)"
+                                        if cache_source == "offline"
+                                        else "Активировано"
+                                    ),
                                     is_linked=True,
                                     subscription_level=str(cached_signed.get("subscription_level") or "zapretik"),
+                                    source=cache_source,
                                 )
                         except Exception:
                             pass
@@ -515,13 +524,19 @@ class PremiumService:
                                     dt = dt.replace(tzinfo=None)
                                 if dt <= datetime.now():
                                     raise ValueError("expired")
+                            cache_source = "offline" if network_failure_seen or network_cooldown_active else "cache"
                             return ActivationStatus(
                                 is_activated=True,
                                 days_remaining=cached_signed.get("days_remaining"),
                                 expires_at=cached_signed.get("expires_at"),
-                                status_message="Активировано (offline)",
+                                status_message=(
+                                    "Активировано (offline)"
+                                    if cache_source == "offline"
+                                    else "Активировано"
+                                ),
                                 is_linked=True,
                                 subscription_level=str(cached_signed.get("subscription_level") or "zapretik"),
+                                source=cache_source,
                             )
                     except Exception:
                         pass
@@ -547,6 +562,7 @@ class PremiumService:
             "expires_at": st.expires_at,
             "level": "Premium" if st.subscription_level != "–" else "–",
             "subscription_level": st.subscription_level,
+            "source": st.source,
         }
 
     def get_full_subscription_info(self, *, use_cache: bool = False, automatic: bool = False) -> Dict[str, Any]:
@@ -558,6 +574,7 @@ class PremiumService:
             "status_msg": status_msg,
             "days_remaining": info["days_remaining"] if is_premium else None,
             "subscription_level": info["subscription_level"] if is_premium else "–",
+            "source": info.get("source") or "api",
         }
 
 
