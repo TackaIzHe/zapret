@@ -106,6 +106,35 @@ class UpdatePageRuntimeServerRecoveryTests(unittest.TestCase):
         )
         return runtime, view, runtime_feature
 
+    def _stub_retry_worker_start(self, runtime):
+        retry_runtime = runtime._server_retry_without_dpi_runtime
+
+        def _start_qthread_worker(**_kwargs):
+            request_id = retry_runtime.next_request_id()
+            retry_runtime.worker = object()
+            return request_id, retry_runtime.worker
+
+        return patch.object(retry_runtime, "start_qthread_worker", side_effect=_start_qthread_worker)
+
+    def test_retry_without_dpi_worker_stops_dpi_in_background(self) -> None:
+        from updater.retry_workers import UpdaterServerRetryWithoutDpiWorker
+
+        runtime_feature = SimpleNamespace(
+            is_any_running=Mock(return_value=True),
+            shutdown_sync=Mock(return_value=SimpleNamespace(still_running=False)),
+        )
+        worker = UpdaterServerRetryWithoutDpiWorker(7, runtime_feature=runtime_feature)
+        results = []
+        worker.loaded.connect(lambda *args: results.append(args))
+
+        worker.run()
+
+        runtime_feature.shutdown_sync.assert_called_once_with(
+            reason="server_status_probe_retry",
+            include_cleanup=True,
+        )
+        self.assertEqual(results, [(7, True, True, "")])
+
     def test_page_runtime_retries_server_check_without_dpi_after_full_source_failure(self) -> None:
         runtime, _view, runtime_feature = self._make_runtime()
 
@@ -113,17 +142,17 @@ class UpdatePageRuntimeServerRecoveryTests(unittest.TestCase):
             patch("updater.update_page_runtime.UpdateRateLimiter.record_servers_full_check"),
             patch.object(runtime, "_start_server_check_workflow") as start_server_check,
             patch.object(runtime, "_start_version_check_workflow") as start_version_check,
+            self._stub_retry_worker_start(runtime),
         ):
             runtime.start_checks(telegram_only=False, skip_server_rate_limit=True)
             runtime._on_server_checked("Telegram Bot", {"status": "offline"})
             runtime._on_server_checked("Primary", {"status": "error"})
             runtime._on_server_checked("GitHub API", {"status": "error"})
             runtime._on_servers_complete()
+            retry_request_id = runtime._server_retry_without_dpi_runtime.request_id
+            runtime._on_server_retry_without_dpi_finished(retry_request_id, True, True, "")
 
-        runtime_feature.shutdown_sync.assert_called_once_with(
-            reason="server_status_probe_retry",
-            include_cleanup=True,
-        )
+        runtime_feature.shutdown_sync.assert_not_called()
         self.assertEqual(start_server_check.call_count, 2)
         start_server_check.assert_called_with(telegram_only=False)
         start_version_check.assert_not_called()
@@ -135,14 +164,17 @@ class UpdatePageRuntimeServerRecoveryTests(unittest.TestCase):
             patch("updater.update_page_runtime.UpdateRateLimiter.record_servers_full_check"),
             patch.object(runtime, "_start_server_check_workflow"),
             patch.object(runtime, "_start_version_check_workflow") as start_version_check,
+            self._stub_retry_worker_start(runtime),
         ):
             runtime.start_checks(telegram_only=False, skip_server_rate_limit=True)
             runtime._on_server_checked("GitHub API", {"status": "error"})
             runtime._on_servers_complete()
+            retry_request_id = runtime._server_retry_without_dpi_runtime.request_id
+            runtime._on_server_retry_without_dpi_finished(retry_request_id, True, True, "")
             runtime._on_server_checked("Primary", {"status": "online", "is_current": True})
             runtime._on_servers_complete()
 
-        runtime_feature.shutdown_sync.assert_called_once()
+        runtime_feature.shutdown_sync.assert_not_called()
         runtime_feature.restart.assert_called_once()
         start_version_check.assert_called_once()
 
