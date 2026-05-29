@@ -9,15 +9,14 @@ class ProfileOrderListLoadWorker(QThread):
     loaded = pyqtSignal(int, object)
     failed = pyqtSignal(int, str)
 
-    def __init__(self, request_id: int, profile_feature, launch_method: str, parent=None):
+    def __init__(self, request_id: int, profile_service, parent=None):
         super().__init__(parent)
         self._request_id = int(request_id)
-        self._profile = profile_feature
-        self._launch_method = str(launch_method or "").strip()
+        self._service = profile_service
 
     def run(self) -> None:
         try:
-            payload = self._profile.list_preset_order_profiles(self._launch_method)
+            payload = self._service.list_preset_order_profiles()
         except Exception as exc:
             log(f"ProfileOrderListLoadWorker: не удалось прочитать порядок profile-ов: {exc}", "ERROR")
             self.failed.emit(self._request_id, str(exc))
@@ -32,8 +31,7 @@ class ProfilePresetOrderMoveWorker(QThread):
     def __init__(
         self,
         request_id: int,
-        profile_feature,
-        launch_method: str,
+        profile_service,
         *,
         action: str,
         source_profile_key: str,
@@ -42,8 +40,7 @@ class ProfilePresetOrderMoveWorker(QThread):
     ):
         super().__init__(parent)
         self._request_id = int(request_id)
-        self._profile = profile_feature
-        self._launch_method = str(launch_method or "").strip()
+        self._service = profile_service
         self._action = str(action or "").strip()
         self._source_profile_key = str(source_profile_key or "").strip()
         self._destination_profile_key = str(destination_profile_key or "").strip()
@@ -51,20 +48,17 @@ class ProfilePresetOrderMoveWorker(QThread):
     def run(self) -> None:
         try:
             if self._action == "before":
-                result = self._profile.move_preset_profile_before(
-                    self._launch_method,
+                result = self._service.move_preset_profile_before(
                     self._source_profile_key,
                     self._destination_profile_key,
                 )
             elif self._action == "after":
-                result = self._profile.move_preset_profile_after(
-                    self._launch_method,
+                result = self._service.move_preset_profile_after(
                     self._source_profile_key,
                     self._destination_profile_key,
                 )
             elif self._action == "end":
-                result = self._profile.move_preset_profile_to_end(
-                    self._launch_method,
+                result = self._service.move_preset_profile_to_end(
                     self._source_profile_key,
                 )
             else:
