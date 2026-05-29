@@ -512,9 +512,15 @@ class Win11NumberRow(FluentSettingCard):
             self._applying_theme_styles = False
 
     def setValue(self, value: int, block_signals: bool = False):
+        next_value = int(value)
+        try:
+            if int(self.spinbox.value()) == next_value:
+                return
+        except Exception:
+            pass
         if block_signals:
             self.spinbox.blockSignals(True)
-        self.spinbox.setValue(value)
+        self.spinbox.setValue(next_value)
         if block_signals:
             self.spinbox.blockSignals(False)
 
@@ -522,9 +528,24 @@ class Win11NumberRow(FluentSettingCard):
         return self.spinbox.value()
 
     def set_texts(self, title: str, description: str = "") -> None:
+        next_title = str(title or "")
+        next_description = str(description or "")
+        text_key = (next_title, next_description)
         try:
-            self.setTitle(title)
-            self.setContent(description)
+            title_label = getattr(self, "_title_label", None)
+            desc_label = getattr(self, "_desc_label", None)
+            current_title = str(title_label.text() if title_label is not None else "")
+            current_description = str(desc_label.text() if desc_label is not None else "")
+            if (current_title, current_description) == text_key:
+                self._last_win11_number_texts_key = text_key
+                return
+        except Exception:
+            if getattr(self, "_last_win11_number_texts_key", None) == text_key:
+                return
+        try:
+            self.setTitle(next_title)
+            self.setContent(next_description)
+            self._last_win11_number_texts_key = text_key
         except Exception:
             pass
 

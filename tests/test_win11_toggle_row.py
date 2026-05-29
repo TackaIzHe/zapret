@@ -34,6 +34,24 @@ class _SwitchButton:
         self.block_calls.append(bool(blocked))
 
 
+class _SpinBox:
+    def __init__(self, value: int) -> None:
+        self._value = int(value)
+        self.set_calls: list[int] = []
+        self.block_calls: list[bool] = []
+
+    def value(self) -> int:
+        return self._value
+
+    def setValue(self, value: int) -> None:  # noqa: N802
+        next_value = int(value)
+        self.set_calls.append(next_value)
+        self._value = next_value
+
+    def blockSignals(self, blocked: bool) -> None:  # noqa: N802
+        self.block_calls.append(bool(blocked))
+
+
 class Win11ToggleRowTests(unittest.TestCase):
     def test_set_checked_skips_duplicate_state(self) -> None:
         from ui.widgets.win11_controls import Win11ToggleRow
@@ -139,6 +157,77 @@ class Win11ToggleRowTests(unittest.TestCase):
         self.assertEqual(title_label.set_calls, ["Zapret 2"])
         self.assertEqual(desc_label.set_calls, ["Preset mode"])
         self.assertEqual(badge_label.set_calls, ["recommended"])
+
+    def test_number_row_set_value_skips_duplicate_value(self) -> None:
+        from ui.widgets.win11_controls import Win11NumberRow
+
+        row = Win11NumberRow.__new__(Win11NumberRow)
+        spinbox = _SpinBox(7)
+        row.spinbox = spinbox
+
+        Win11NumberRow.setValue(row, 7, block_signals=True)
+
+        self.assertEqual(spinbox.set_calls, [])
+        self.assertEqual(spinbox.block_calls, [])
+
+    def test_number_row_set_value_applies_changed_value_with_blocked_signals(self) -> None:
+        from ui.widgets.win11_controls import Win11NumberRow
+
+        row = Win11NumberRow.__new__(Win11NumberRow)
+        spinbox = _SpinBox(7)
+        row.spinbox = spinbox
+
+        Win11NumberRow.setValue(row, 8, block_signals=True)
+
+        self.assertEqual(spinbox.set_calls, [8])
+        self.assertEqual(spinbox.block_calls, [True, False])
+        self.assertEqual(spinbox.value(), 8)
+
+    def test_number_row_set_texts_skips_duplicate_title_and_description(self) -> None:
+        from ui.widgets.win11_controls import Win11NumberRow
+
+        row = Win11NumberRow.__new__(Win11NumberRow)
+        row._title_label = _TextLabel("Attempts")
+        row._desc_label = _TextLabel("Retry count")
+        title_calls: list[str] = []
+        content_calls: list[str] = []
+
+        def set_title(text: str) -> None:
+            title_calls.append(str(text))
+
+        def set_content(text: str) -> None:
+            content_calls.append(str(text))
+
+        row.setTitle = set_title
+        row.setContent = set_content
+
+        Win11NumberRow.set_texts(row, "Attempts", "Retry count")
+
+        self.assertEqual(title_calls, [])
+        self.assertEqual(content_calls, [])
+
+    def test_number_row_set_texts_applies_changed_title_and_description(self) -> None:
+        from ui.widgets.win11_controls import Win11NumberRow
+
+        row = Win11NumberRow.__new__(Win11NumberRow)
+        row._title_label = _TextLabel("Old")
+        row._desc_label = _TextLabel("Old description")
+        title_calls: list[str] = []
+        content_calls: list[str] = []
+
+        def set_title(text: str) -> None:
+            title_calls.append(str(text))
+
+        def set_content(text: str) -> None:
+            content_calls.append(str(text))
+
+        row.setTitle = set_title
+        row.setContent = set_content
+
+        Win11NumberRow.set_texts(row, "Attempts", "Retry count")
+
+        self.assertEqual(title_calls, ["Attempts"])
+        self.assertEqual(content_calls, ["Retry count"])
 
 
 if __name__ == "__main__":
