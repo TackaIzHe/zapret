@@ -40,46 +40,16 @@ class ControlTopSummaryWorker(QThread):
     def __init__(
         self,
         request_id: int,
-        presets_feature,
-        profile_feature,
-        *,
-        launch_method: str,
+        summary_loader,
         parent=None,
     ):
         super().__init__(parent)
         self._request_id = int(request_id)
-        self._presets_feature = presets_feature
-        self._profile_feature = profile_feature
-        self._launch_method = str(launch_method or "").strip()
+        self._summary_loader = summary_loader
 
     def run(self) -> None:
         try:
-            preset_text = ""
-            preset_tooltip = ""
-            try:
-                preset_display = self._presets_feature.get_selected_source_preset_display(
-                    self._launch_method,
-                )
-                if preset_display:
-                    preset_text = str(preset_display[0] or "")
-                    preset_tooltip = str(preset_display[1] or "")
-            except Exception as exc:
-                log(f"ControlTopSummaryWorker: не удалось прочитать выбранный preset: {exc}", "DEBUG")
-
-            profile_count = None
-            try:
-                count = self._profile_feature.get_enabled_profile_count_snapshot(
-                    self._launch_method,
-                )
-                profile_count = int(count) if count is not None else None
-            except Exception as exc:
-                log(f"ControlTopSummaryWorker: не удалось прочитать количество profile: {exc}", "DEBUG")
-
-            state = ControlTopSummaryState(
-                preset_text=preset_text,
-                preset_tooltip=preset_tooltip,
-                profile_count=profile_count,
-            )
+            state = self._summary_loader()
         except Exception as exc:
             log(f"ControlTopSummaryWorker: не удалось загрузить сводку: {exc}", "WARNING")
             self.failed.emit(self._request_id, str(exc))
@@ -95,11 +65,39 @@ def create_top_summary_worker(
     launch_method: str,
     parent=None,
 ):
+    clean_launch_method = str(launch_method or "").strip()
+
+    def _load_top_summary_state() -> ControlTopSummaryState:
+        preset_text = ""
+        preset_tooltip = ""
+        try:
+            preset_display = presets_feature.get_selected_source_preset_display(
+                clean_launch_method,
+            )
+            if preset_display:
+                preset_text = str(preset_display[0] or "")
+                preset_tooltip = str(preset_display[1] or "")
+        except Exception as exc:
+            log(f"ControlTopSummaryWorker: не удалось прочитать выбранный preset: {exc}", "DEBUG")
+
+        profile_count = None
+        try:
+            count = profile_feature.get_enabled_profile_count_snapshot(
+                clean_launch_method,
+            )
+            profile_count = int(count) if count is not None else None
+        except Exception as exc:
+            log(f"ControlTopSummaryWorker: не удалось прочитать количество profile: {exc}", "DEBUG")
+
+        return ControlTopSummaryState(
+            preset_text=preset_text,
+            preset_tooltip=preset_tooltip,
+            profile_count=profile_count,
+        )
+
     return ControlTopSummaryWorker(
         request_id,
-        presets_feature,
-        profile_feature,
-        launch_method=launch_method,
+        _load_top_summary_state,
         parent=parent,
     )
 

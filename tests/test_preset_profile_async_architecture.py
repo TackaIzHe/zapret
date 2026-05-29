@@ -2742,12 +2742,14 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         zapret2_source = inspect.getsource(Zapret2ModeControlPage)
         zapret1_source = inspect.getsource(Zapret1ModeControlPage)
         worker_source = inspect.getsource(control_additional_settings_runtime.ControlTopSummaryWorker.run)
+        factory_source = inspect.getsource(control_additional_settings_runtime.create_top_summary_worker)
 
         self.assertFalse(hasattr(Zapret2ModeControlPage, "_load_enabled_profile_count"))
         self.assertFalse(hasattr(Zapret1ModeControlPage, "_load_enabled_profile_count"))
         self.assertNotIn("count_enabled_profiles", zapret2_source)
         self.assertNotIn("count_enabled_profiles", zapret1_source)
-        self.assertIn("get_enabled_profile_count_snapshot", worker_source)
+        self.assertNotIn("get_enabled_profile_count_snapshot", worker_source)
+        self.assertIn("get_enabled_profile_count_snapshot", factory_source)
 
     def test_control_page_docs_open_through_worker(self) -> None:
         spec = importlib.util.find_spec("app.external_workers")
@@ -3084,7 +3086,9 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         winws1_page_source = inspect.getsource(Zapret1ModeControlPage)
         winws2_page_source = inspect.getsource(Zapret2ModeControlPage)
         runtime_source = inspect.getsource(control_additional_settings_runtime)
+        worker_init_source = inspect.getsource(control_additional_settings_runtime.ControlTopSummaryWorker.__init__)
         worker_source = inspect.getsource(control_additional_settings_runtime.ControlTopSummaryWorker.run)
+        factory_source = inspect.getsource(control_additional_settings_runtime.create_top_summary_worker)
 
         self.assertIn("_request_top_summary_worker", winws1_refresh_source)
         self.assertIn("_request_top_summary_worker", winws2_refresh_source)
@@ -3097,8 +3101,16 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertNotIn("get_enabled_profile_count_snapshot", winws1_page_source)
         self.assertNotIn("get_enabled_profile_count_snapshot", winws2_page_source)
         self.assertIn("create_top_summary_worker", runtime_source)
-        self.assertIn("get_selected_source_preset_display", worker_source)
-        self.assertIn("get_enabled_profile_count_snapshot", worker_source)
+        self.assertIn("summary_loader", worker_init_source)
+        self.assertIn("self._summary_loader", worker_init_source)
+        self.assertNotIn("_presets_feature", worker_init_source)
+        self.assertNotIn("_profile_feature", worker_init_source)
+        self.assertNotIn("launch_method", worker_init_source)
+        self.assertIn("self._summary_loader()", worker_source)
+        self.assertNotIn("get_selected_source_preset_display", worker_source)
+        self.assertNotIn("get_enabled_profile_count_snapshot", worker_source)
+        self.assertIn("get_selected_source_preset_display", factory_source)
+        self.assertIn("get_enabled_profile_count_snapshot", factory_source)
 
     def test_orchestra_clear_learned_runs_through_worker(self) -> None:
         spec = importlib.util.find_spec("orchestra.page_workers")
