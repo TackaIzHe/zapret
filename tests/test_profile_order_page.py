@@ -273,21 +273,24 @@ class ProfileOrderPageTests(unittest.TestCase):
     def test_order_workers_call_profile_service(self) -> None:
         from profile.profile_order_loader import ProfileOrderListLoadWorker, ProfilePresetOrderMoveWorker
 
-        service = Mock()
-        service.list_preset_order_profiles.return_value = SimpleNamespace(items=())
-        load_worker = ProfileOrderListLoadWorker(2, service)
+        load_profiles = Mock(return_value=SimpleNamespace(items=()))
+        load_worker = ProfileOrderListLoadWorker(2, load_profiles)
         loaded = []
         load_worker.loaded.connect(lambda request_id, payload: loaded.append((request_id, payload)))
 
         load_worker.run()
 
-        service.list_preset_order_profiles.assert_called_once_with()
-        self.assertEqual(loaded, [(2, service.list_preset_order_profiles.return_value)])
+        load_profiles.assert_called_once_with()
+        self.assertEqual(loaded, [(2, load_profiles.return_value)])
 
-        service.move_preset_profile_before.return_value = "profile-1"
+        move_before = Mock(return_value="profile-1")
+        move_after = Mock()
+        move_to_end = Mock()
         move_worker = ProfilePresetOrderMoveWorker(
             3,
-            service,
+            move_before,
+            move_after,
+            move_to_end,
             action="before",
             source_profile_key="profile-1",
             destination_profile_key="profile-2",
@@ -305,7 +308,7 @@ class ProfileOrderPageTests(unittest.TestCase):
 
         move_worker.run()
 
-        service.move_preset_profile_before.assert_called_once_with("profile-1", "profile-2")
+        move_before.assert_called_once_with("profile-1", "profile-2")
         self.assertEqual(moved, [(3, "before", "profile-1", "profile-2", "profile-1")])
 
     def test_order_page_has_breadcrumbs_back_to_profiles_and_control(self) -> None:

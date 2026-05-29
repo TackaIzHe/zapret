@@ -11,15 +11,15 @@ class ProfileListLoadWorker(QThread):
     loaded = pyqtSignal(int, object)
     failed = pyqtSignal(int, str)
 
-    def __init__(self, request_id: int, profile_service, parent=None):
+    def __init__(self, request_id: int, load_profiles, parent=None):
         super().__init__(parent)
         self._request_id = int(request_id)
-        self._service = profile_service
+        self._load_profiles = load_profiles
 
     def run(self) -> None:
         started_at = time.perf_counter()
         try:
-            payload = self._service.list_profiles()
+            payload = self._load_profiles()
         except Exception as exc:
             log(f"ProfileListLoadWorker: не удалось загрузить profile payload: {exc}", "ERROR")
             self.failed.emit(self._request_id, str(exc))

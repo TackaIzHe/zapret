@@ -325,13 +325,13 @@ class ProfileFeature:
         from profile.profile_list_loader import ProfileListLoadWorker
 
         service = self._commands()._profile_preset_service(self, launch_method)
-        return ProfileListLoadWorker(request_id, service, parent)
+        return ProfileListLoadWorker(request_id, service.list_profiles, parent)
 
     def create_profile_order_load_worker(self, request_id: int, launch_method: str, parent=None):
         from profile.profile_order_loader import ProfileOrderListLoadWorker
 
         service = self._commands()._profile_preset_service(self, launch_method)
-        return ProfileOrderListLoadWorker(request_id, service, parent)
+        return ProfileOrderListLoadWorker(request_id, service.list_preset_order_profiles, parent)
 
     def create_preset_profile_order_move_worker(
         self,
@@ -348,7 +348,9 @@ class ProfileFeature:
         service = self._commands()._profile_preset_service(self, launch_method)
         return ProfilePresetOrderMoveWorker(
             request_id,
-            service,
+            service.move_preset_profile_before,
+            service.move_preset_profile_after,
+            service.move_preset_profile_to_end,
             action=action,
             source_profile_key=source_profile_key,
             destination_profile_key=destination_profile_key,
