@@ -33,6 +33,28 @@ def preset_setup_title_for_payload(payload, default_title: str = "Настрой
     return f"{default_title}: {preset_name}"
 
 
+def set_widget_text_if_changed(widget, text: str) -> bool:
+    value = str(text or "")
+    try:
+        if str(widget.text()) == value:
+            return False
+    except Exception:
+        pass
+    widget.setText(value)
+    return True
+
+
+def set_widget_enabled_if_changed(widget, enabled: bool) -> bool:
+    value = bool(enabled)
+    try:
+        if bool(widget.isEnabled()) == value:
+            return False
+    except Exception:
+        pass
+    widget.setEnabled(value)
+    return True
+
+
 class PresetSetupPageBase(BasePage):
     profile_ui_mode_override: str | None = None
     launch_method = ZAPRET2_MODE
@@ -329,7 +351,7 @@ class PresetSetupPageBase(BasePage):
         if self.title_label is None:
             return
         base_title = tr_catalog(self.title_key, language=self._ui_language, default=self.page_title)
-        self.title_label.setText(preset_setup_title_for_payload(payload, base_title))
+        set_widget_text_if_changed(self.title_label, preset_setup_title_for_payload(payload, base_title))
 
     def _clear_dynamic_widgets(self) -> None:
         if self._content_host_layout is None:
@@ -579,7 +601,7 @@ class PresetSetupPageBase(BasePage):
 
     def _set_user_profile_actions_enabled(self, enabled: bool) -> None:
         if self._add_profile_btn is not None:
-            self._add_profile_btn.setEnabled(enabled)
+            set_widget_enabled_if_changed(self._add_profile_btn, enabled)
 
     def _user_profile_operation_running(self) -> bool:
         for worker in (

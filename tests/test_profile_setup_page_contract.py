@@ -36,6 +36,34 @@ from profile.ui.profiles_list import ProfilesList
 from ui.presets_menu.delegate import PresetListDelegate
 
 
+class _TextWidget:
+    def __init__(self, text: str = "") -> None:
+        self._text = str(text)
+        self.text_calls: list[str] = []
+
+    def text(self) -> str:
+        return self._text
+
+    def setText(self, text: str) -> None:  # noqa: N802
+        value = str(text)
+        self.text_calls.append(value)
+        self._text = value
+
+
+class _EnabledWidget:
+    def __init__(self, enabled: bool = True) -> None:
+        self._enabled = bool(enabled)
+        self.enabled_calls: list[bool] = []
+
+    def isEnabled(self) -> bool:  # noqa: N802
+        return self._enabled
+
+    def setEnabled(self, enabled: bool) -> None:  # noqa: N802
+        value = bool(enabled)
+        self.enabled_calls.append(value)
+        self._enabled = value
+
+
 class ProfileSetupPageContractTests(unittest.TestCase):
     def test_preset_setup_title_shows_selected_preset_name(self) -> None:
         payload = SimpleNamespace(
@@ -58,6 +86,29 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             preset_setup_title_for_payload(payload),
             "Настройка пресета: custom.txt",
         )
+
+    def test_selected_preset_title_skips_duplicate_text_update(self) -> None:
+        page = PresetSetupPageBase.__new__(PresetSetupPageBase)
+        page.title_label = _TextWidget("Настройка пресета: custom.txt")
+        page.title_key = "page.winws2_pages.title"
+        page.page_title = "Настройка пресета"
+        page._ui_language = "ru"
+        payload = SimpleNamespace(
+            selected_preset_name="",
+            selected_preset_file_name="custom.txt",
+        )
+
+        PresetSetupPageBase._apply_selected_preset_title(page, payload)
+
+        self.assertEqual(page.title_label.text_calls, [])
+
+    def test_user_profile_action_enabled_skips_duplicate_state(self) -> None:
+        page = PresetSetupPageBase.__new__(PresetSetupPageBase)
+        page._add_profile_btn = _EnabledWidget(True)
+
+        PresetSetupPageBase._set_user_profile_actions_enabled(page, True)
+
+        self.assertEqual(page._add_profile_btn.enabled_calls, [])
 
     def test_preset_setup_page_shows_normalization_infobar(self) -> None:
         apply_payload = inspect.getsource(PresetSetupPageBase._apply_payload)
