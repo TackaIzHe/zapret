@@ -11,9 +11,6 @@ from presets.ui.control.zapret2.build import (
     build_winws2_pages_management_section,
     build_winws2_pages_status_section,
 )
-from presets.ui.control.zapret2.deferred_build import (
-    build_winws2_pages_deferred_sections,
-)
 from presets.ui.control.zapret2.runtime_helpers import (
     apply_additional_settings_state,
     apply_profile_language,
@@ -36,11 +33,6 @@ from presets.ui.control.control_page_runtime_shared import apply_last_status_mes
 from app.ui_texts import tr as tr_catalog
 from presets.ui.control.windows_features.runtime import ControlPageWindowsFeatureMixin
 from presets.ui.control.top_summary_widget import ControlTopSummaryWidget
-from presets.ui.control.additional_settings_runtime import (
-    create_additional_settings_save_worker as create_control_additional_settings_save_worker,
-    create_additional_settings_worker as create_control_additional_settings_worker,
-    create_top_summary_worker as create_control_top_summary_worker,
-)
 import presets.ui.control.zapret2.page_runtime as zapret2_page_runtime
 from log.log import log
 
@@ -58,6 +50,12 @@ STARTUP_TOP_SUMMARY_AFTER_INTERACTIVE_MS = 350
 STARTUP_INITIAL_UI_STATE_AFTER_INTERACTIVE_MS = 350
 TOP_SUMMARY_PROFILE_RETRY_MS = 750
 TOP_SUMMARY_PROFILE_RETRY_LIMIT = 10
+
+
+def create_control_top_summary_worker(*args, **kwargs):
+    from presets.ui.control.additional_settings_runtime import create_top_summary_worker
+
+    return create_top_summary_worker(*args, **kwargs)
 
 
 class ProfileUiModeDialog(MessageBoxBase):
@@ -671,6 +669,9 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
 
     def _build_deferred_sections(self) -> None:
         self.add_spacing(8)
+        from presets.ui.control.zapret2.deferred_build import (
+            build_winws2_pages_deferred_sections,
+        )
         from ui.widgets.win11_controls import Win11ToggleRow
 
         deferred_widgets = build_winws2_pages_deferred_sections(
@@ -753,6 +754,10 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
         )
 
     def _schedule_additional_settings_reload(self, *, force: bool = False) -> None:
+        from presets.ui.control.additional_settings_runtime import (
+            create_additional_settings_worker as create_control_additional_settings_worker,
+        )
+
         runtime = self._refresh_runtime
         if not force and not runtime.additional_settings_dirty:
             return
@@ -796,6 +801,10 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
         self._request_additional_settings_save("debug_log", bool(enabled), launch_method=ZAPRET2_MODE)
 
     def _request_additional_settings_save(self, setting: str, enabled: bool, *, launch_method: str) -> None:
+        from presets.ui.control.additional_settings_runtime import (
+            create_additional_settings_save_worker as create_control_additional_settings_save_worker,
+        )
+
         runtime = self._refresh_runtime
         runtime.mark_additional_settings_written()
         worker = runtime.additional_settings_save_worker

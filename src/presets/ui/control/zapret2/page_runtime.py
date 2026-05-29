@@ -3,10 +3,6 @@ from __future__ import annotations
 from settings.mode import EXE_NAME_WINWS1, ZAPRET2_MODE
 from presets.ui.control import control_runtime
 from presets.ui.control.control_runtime import ControlStatusPlan, ControlStopButtonPlan
-from presets.ui.control.additional_settings_runtime import (
-    build_additional_settings_state,
-    create_refresh_runtime,
-)
 from profile.ui_mode import (
     PROFILE_UI_MODE_DEFAULT,
     load_current_profile_ui_mode,
@@ -14,6 +10,18 @@ from profile.ui_mode import (
     save_current_profile_ui_mode,
 )
 from app.ui_texts import tr as tr_catalog
+
+
+def create_refresh_runtime():
+    from presets.ui.control.additional_settings_runtime import create_refresh_runtime as _create_refresh_runtime
+
+    return _create_refresh_runtime()
+
+
+def build_additional_settings_state(state):
+    from presets.ui.control.additional_settings_runtime import build_additional_settings_state as _build_state
+
+    return _build_state(state)
 
 
 class ProfileUiModeLabelPlan:
