@@ -83,6 +83,52 @@ class _PropertyWidget(_BoolWidget):
         self._properties[key] = value
 
 
+class _PlainTextWidget(_BoolWidget):
+    def __init__(
+        self,
+        text: str = "",
+        *,
+        read_only: bool = False,
+        placeholder: str = "",
+        visible: bool = True,
+    ) -> None:
+        super().__init__(visible=visible)
+        self._text = str(text)
+        self._read_only = bool(read_only)
+        self._placeholder = str(placeholder)
+        self.block_calls: list[bool] = []
+        self.plain_text_calls: list[str] = []
+        self.read_only_calls: list[bool] = []
+        self.placeholder_calls: list[str] = []
+
+    def blockSignals(self, blocked: bool) -> None:  # noqa: N802
+        self.block_calls.append(bool(blocked))
+
+    def toPlainText(self) -> str:  # noqa: N802
+        return self._text
+
+    def setPlainText(self, text: str) -> None:  # noqa: N802
+        value = str(text)
+        self.plain_text_calls.append(value)
+        self._text = value
+
+    def isReadOnly(self) -> bool:  # noqa: N802
+        return self._read_only
+
+    def setReadOnly(self, read_only: bool) -> None:  # noqa: N802
+        value = bool(read_only)
+        self.read_only_calls.append(value)
+        self._read_only = value
+
+    def placeholderText(self) -> str:  # noqa: N802
+        return self._placeholder
+
+    def setPlaceholderText(self, text: str) -> None:  # noqa: N802
+        value = str(text)
+        self.placeholder_calls.append(value)
+        self._placeholder = value
+
+
 class _IndexWidget:
     def __init__(self, index: int = 0) -> None:
         self._index = int(index)
@@ -181,6 +227,42 @@ class ProfileSetupUiGuardTests(unittest.TestCase):
         self.assertEqual(page._notwork_button.property_calls, [])
         self.assertEqual(page._favorite_button.text_calls, [])
         self.assertEqual(page._favorite_button._text, "Убрать из избранного")
+
+    def test_list_file_editor_state_skips_duplicate_plain_text(self) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+
+        from profile.ui.profile_setup_page import ProfileSetupPageBase
+
+        page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        page._list_file_title = None
+        page._list_file_base_title = None
+        page._list_file_base_text = _PlainTextWidget("base.example")
+        page._list_file_user_title = None
+        page._list_file_text = _PlainTextWidget("user.example", read_only=False)
+        page._list_file_save_button = _BoolWidget(enabled=True)
+        page._list_file_status_label = _TextWidget("Записей всего: 2 • ваших: 1")
+        page._render_list_file_validation = Mock()
+
+        state = SimpleNamespace(
+            kind="hostlist",
+            display_path="",
+            text="user.example",
+            base_text="base.example",
+            user_text="user.example",
+            base_display_path="",
+            user_display_path="",
+            editable=True,
+            error_text="",
+            invalid_lines=(),
+        )
+
+        ProfileSetupPageBase._apply_list_file_editor_state(page, state)
+
+        self.assertEqual(page._list_file_base_text.plain_text_calls, [])
+        self.assertEqual(page._list_file_text.plain_text_calls, [])
+        self.assertEqual(page._list_file_text.read_only_calls, [])
+        self.assertEqual(page._list_file_status_label.calls, [])
 
 
 if __name__ == "__main__":

@@ -112,6 +112,39 @@ def set_widget_property_if_changed(widget, name: str, value) -> bool:
     return True
 
 
+def set_plain_text_if_changed(widget, text: str) -> bool:
+    value = str(text or "")
+    try:
+        if str(widget.toPlainText()) == value:
+            return False
+    except Exception:
+        pass
+    widget.setPlainText(value)
+    return True
+
+
+def set_read_only_if_changed(widget, read_only: bool) -> bool:
+    value = bool(read_only)
+    try:
+        if bool(widget.isReadOnly()) == value:
+            return False
+    except Exception:
+        pass
+    widget.setReadOnly(value)
+    return True
+
+
+def set_placeholder_text_if_changed(widget, text: str) -> bool:
+    value = str(text or "")
+    try:
+        if str(widget.placeholderText()) == value:
+            return False
+    except Exception:
+        pass
+    widget.setPlaceholderText(value)
+    return True
+
+
 def set_current_index_if_changed(widget, index: int) -> bool:
     value = int(index)
     try:
@@ -1512,50 +1545,56 @@ class ProfileSetupPageBase(BasePage):
         if display_path:
             title = f"{display_path} ({'IPset' if kind == 'ipset' else 'Hostlist'})"
         if self._list_file_title is not None:
-            self._list_file_title.setText(title)
+            set_widget_text_if_changed(self._list_file_title, title)
         if self._list_file_base_title is not None:
-            self._list_file_base_title.setVisible(editable)
-            self._list_file_base_title.setText(
+            set_widget_visible_if_changed(self._list_file_base_title, editable)
+            set_widget_text_if_changed(
+                self._list_file_base_title,
                 f"База: {base_display_path}" if base_display_path else "База"
             )
         if self._list_file_base_text is not None:
-            self._list_file_base_text.setVisible(editable)
+            set_widget_visible_if_changed(self._list_file_base_text, editable)
             self._list_file_base_text.blockSignals(True)
             try:
-                self._list_file_base_text.setPlainText(base_text)
+                set_plain_text_if_changed(self._list_file_base_text, base_text)
                 if kind == "ipset":
-                    self._list_file_base_text.setPlaceholderText("В базе пока нет IP или подсетей.")
+                    set_placeholder_text_if_changed(self._list_file_base_text, "В базе пока нет IP или подсетей.")
                 else:
-                    self._list_file_base_text.setPlaceholderText("В базе пока нет доменов.")
+                    set_placeholder_text_if_changed(self._list_file_base_text, "В базе пока нет доменов.")
             finally:
                 self._list_file_base_text.blockSignals(False)
         if self._list_file_user_title is not None:
-            self._list_file_user_title.setVisible(editable)
-            self._list_file_user_title.setText(
+            set_widget_visible_if_changed(self._list_file_user_title, editable)
+            set_widget_text_if_changed(
+                self._list_file_user_title,
                 f"Ваши записи: {user_display_path}" if user_display_path else "Ваши записи"
             )
         if self._list_file_text is not None:
             self._list_file_text.blockSignals(True)
             try:
-                self._list_file_text.setPlainText(user_text if editable else text)
-                self._list_file_text.setReadOnly(not editable)
+                set_plain_text_if_changed(self._list_file_text, user_text if editable else text)
+                set_read_only_if_changed(self._list_file_text, not editable)
                 if kind == "ipset":
-                    self._list_file_text.setPlaceholderText("IP или подсети по одному на строку:\n1.2.3.4\n10.0.0.0/8")
+                    set_placeholder_text_if_changed(self._list_file_text, "IP или подсети по одному на строку:\n1.2.3.4\n10.0.0.0/8")
                 else:
-                    self._list_file_text.setPlaceholderText("Домены по одному на строку:\nexample.com\nsub.example.org")
+                    set_placeholder_text_if_changed(self._list_file_text, "Домены по одному на строку:\nexample.com\nsub.example.org")
             finally:
                 self._list_file_text.blockSignals(False)
         if self._list_file_save_button is not None:
-            self._list_file_save_button.setEnabled(editable and not invalid_lines)
+            set_widget_enabled_if_changed(self._list_file_save_button, editable and not invalid_lines)
         if self._list_file_status_label is not None:
             if editable:
                 base_count = _list_file_entries_count(base_text)
                 user_count = _list_file_entries_count(user_text)
-                self._list_file_status_label.setText(
+                set_widget_text_if_changed(
+                    self._list_file_status_label,
                     f"Записей всего: {base_count + user_count} • ваших: {user_count}"
                 )
             else:
-                self._list_file_status_label.setText(error_text or "Файл списка недоступен для редактирования.")
+                set_widget_text_if_changed(
+                    self._list_file_status_label,
+                    error_text or "Файл списка недоступен для редактирования.",
+                )
         self._render_list_file_validation(invalid_lines, fallback_error=error_text if not editable else "")
 
     def _on_list_file_text_changed(self) -> None:
