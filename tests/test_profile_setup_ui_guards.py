@@ -51,6 +51,38 @@ class _BoolWidget:
         self._visible = value
 
 
+class _PropertyWidget(_BoolWidget):
+    def __init__(
+        self,
+        *,
+        checked: bool = False,
+        enabled: bool = True,
+        visible: bool = True,
+        properties: dict[str, object] | None = None,
+    ) -> None:
+        super().__init__(checked=checked, enabled=enabled, visible=visible)
+        self._properties = dict(properties or {})
+        self._text = ""
+        self.text_calls: list[str] = []
+        self.property_calls: list[tuple[str, object]] = []
+
+    def text(self) -> str:
+        return self._text
+
+    def setText(self, text: str) -> None:  # noqa: N802
+        value = str(text)
+        self.text_calls.append(value)
+        self._text = value
+
+    def property(self, name: str):  # noqa: A003
+        return self._properties.get(str(name))
+
+    def setProperty(self, name: str, value) -> None:  # noqa: N802
+        key = str(name)
+        self.property_calls.append((key, value))
+        self._properties[key] = value
+
+
 class _IndexWidget:
     def __init__(self, index: int = 0) -> None:
         self._index = int(index)
@@ -110,6 +142,45 @@ class ProfileSetupUiGuardTests(unittest.TestCase):
 
         self.assertTrue(set_current_index_if_changed(widget, 0))
         self.assertEqual(widget.calls, [0])
+
+    def test_property_update_skips_duplicate_value(self) -> None:
+        from profile.ui.profile_setup_page import set_widget_property_if_changed
+
+        widget = _PropertyWidget(properties={"selected": True})
+
+        self.assertFalse(set_widget_property_if_changed(widget, "selected", True))
+        self.assertEqual(widget.property_calls, [])
+
+        self.assertTrue(set_widget_property_if_changed(widget, "selected", False))
+        self.assertEqual(widget.property_calls, [("selected", False)])
+
+    def test_feedback_buttons_skip_duplicate_state(self) -> None:
+        from types import SimpleNamespace
+
+        from profile.ui.profile_setup_page import ProfileSetupPageBase
+
+        page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        page._work_button = _PropertyWidget(enabled=True, properties={"selected": True})
+        page._notwork_button = _PropertyWidget(enabled=True, properties={"selected": False})
+        page._favorite_button = _PropertyWidget(enabled=True)
+        page._favorite_button._text = "Убрать из избранного"
+        page._clear_feedback_button = _PropertyWidget(enabled=True)
+
+        payload = SimpleNamespace(
+            item=SimpleNamespace(in_preset=True, enabled=True, strategy_id="tls_fake"),
+            current_strategy_state=SimpleNamespace(favorite=True, rating="work"),
+        )
+
+        ProfileSetupPageBase._apply_feedback_buttons(page, payload)
+
+        self.assertEqual(page._work_button.enabled_calls, [])
+        self.assertEqual(page._notwork_button.enabled_calls, [])
+        self.assertEqual(page._favorite_button.enabled_calls, [])
+        self.assertEqual(page._clear_feedback_button.enabled_calls, [])
+        self.assertEqual(page._work_button.property_calls, [])
+        self.assertEqual(page._notwork_button.property_calls, [])
+        self.assertEqual(page._favorite_button.text_calls, [])
+        self.assertEqual(page._favorite_button._text, "Убрать из избранного")
 
 
 if __name__ == "__main__":

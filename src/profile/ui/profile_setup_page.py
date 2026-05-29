@@ -101,6 +101,17 @@ def set_widget_visible_if_changed(widget, visible: bool) -> bool:
     return True
 
 
+def set_widget_property_if_changed(widget, name: str, value) -> bool:
+    key = str(name or "")
+    try:
+        if widget.property(key) == value:
+            return False
+    except Exception:
+        pass
+    widget.setProperty(key, value)
+    return True
+
+
 def set_current_index_if_changed(widget, index: int) -> bool:
     value = int(index)
     try:
@@ -1783,13 +1794,16 @@ class ProfileSetupPageBase(BasePage):
         )
         for button in (self._work_button, self._notwork_button, self._favorite_button, self._clear_feedback_button):
             if button is not None:
-                button.setEnabled(editable)
+                set_widget_enabled_if_changed(button, editable)
         if self._favorite_button is not None:
-            self._favorite_button.setText("Убрать из избранного" if state.favorite else "В избранное")
+            set_widget_text_if_changed(
+                self._favorite_button,
+                "Убрать из избранного" if state.favorite else "В избранное",
+            )
         if self._work_button is not None:
-            self._work_button.setProperty("selected", state.rating == "work")
+            set_widget_property_if_changed(self._work_button, "selected", state.rating == "work")
         if self._notwork_button is not None:
-            self._notwork_button.setProperty("selected", state.rating == "notwork")
+            set_widget_property_if_changed(self._notwork_button, "selected", state.rating == "notwork")
 
     def _apply_editable_settings(self, payload) -> None:
         is_preset_mode = is_preset_launch_method(self.launch_method)
