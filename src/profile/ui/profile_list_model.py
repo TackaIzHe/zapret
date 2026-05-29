@@ -249,6 +249,9 @@ class ProfileListModel(QAbstractListModel):
         )
         if not changed_group_keys:
             return ()
+        if len(changed_group_keys) == 1:
+            self.set_group_expanded(changed_group_keys[0], expanded_value)
+            return changed_group_keys
         self.beginResetModel()
         for group_key in group_keys:
             self._group_expanded[group_key] = expanded_value
