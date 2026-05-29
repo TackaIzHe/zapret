@@ -369,31 +369,6 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("find_preset_row", source)
         self.assertNotIn("for row in range", source)
 
-    def test_user_presets_current_index_skips_already_selected_row(self) -> None:
-        class _Index:
-            def __init__(self, row: int) -> None:
-                self.row = row
-
-            def isValid(self) -> bool:
-                return True
-
-            def __eq__(self, other) -> bool:
-                return isinstance(other, _Index) and self.row == other.row
-
-        target_index = _Index(4)
-        model = Mock()
-        model.find_preset_row.return_value = 4
-        model.index.return_value = target_index
-        presets_list = Mock()
-        presets_list.currentIndex.return_value = target_index
-        page = SimpleNamespace(_presets_model=model, presets_list=presets_list)
-        service = UserPresetsRuntimeService.__new__(UserPresetsRuntimeService)
-        service._resolve_page = Mock(return_value=page)
-
-        UserPresetsRuntimeService.set_current_preset_index(service, "Default.txt")
-
-        presets_list.setCurrentIndex.assert_not_called()
-
     def test_user_presets_activation_runs_through_worker(self) -> None:
         handler_source = inspect.getsource(UserPresetsPageBase._on_activate_preset)
         request_source = inspect.getsource(UserPresetsPageBase._request_preset_activation)
@@ -1768,6 +1743,27 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("_open_bot_runtime", page_source)
         self.assertIn("create_open_extend_bot_worker", feature_source)
         self.assertIn("open_extend_bot", worker_source)
+
+    def test_premium_reset_storage_runs_through_worker(self) -> None:
+        spec = importlib.util.find_spec("donater.reset_worker")
+        self.assertIsNotNone(spec)
+        reset_worker = importlib.import_module("donater.reset_worker")
+
+        page_source = inspect.getsource(PremiumPage)
+        handler_source = inspect.getsource(PremiumPage._change_key)
+        workflow_source = inspect.getsource(__import__("donater.ui.status_workflow", fromlist=["apply_reset_plan_ui"]).apply_reset_plan_ui)
+        feature_source = inspect.getsource(__import__("app.feature_facades.premium", fromlist=["PremiumFeature"]).PremiumFeature)
+
+        self.assertTrue(hasattr(reset_worker, "PremiumResetStorageWorker"))
+        worker_source = inspect.getsource(reset_worker.PremiumResetStorageWorker.run)
+
+        self.assertIn("_request_reset_storage", handler_source)
+        self.assertNotIn("apply_reset_plan_ui(", handler_source)
+        self.assertNotIn("reset_premium_storage", workflow_source)
+        self.assertIn("create_reset_storage_worker", page_source)
+        self.assertIn("_reset_storage_runtime", page_source)
+        self.assertIn("create_reset_storage_worker", feature_source)
+        self.assertIn("reset_premium_storage", worker_source)
 
     def test_support_page_external_links_run_through_worker(self) -> None:
         spec = importlib.util.find_spec("ui.pages.support_open_worker")

@@ -167,7 +167,6 @@ def apply_connection_test_plan(
 
 def apply_reset_plan_ui(
     *,
-    premium_feature,
     key_input,
     set_activation_status: Callable[..., None],
     update_device_info: Callable[[], None],
@@ -177,7 +176,6 @@ def apply_reset_plan_ui(
     stop_autopoll: Callable[[], None],
     apply_subscription_state: Callable[[bool, int], None],
 ) -> tuple[str, int]:
-    premium_feature.reset_premium_storage()
     plan = premium_page_plans.build_reset_plan()
 
     if plan.clear_pair_input:

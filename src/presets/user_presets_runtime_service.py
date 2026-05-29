@@ -339,11 +339,6 @@ class UserPresetsRuntimeService:
             return
         index = page._presets_model.index(row, 0)
         if index.isValid():
-            try:
-                if page.presets_list.currentIndex() == index:
-                    return
-            except Exception:
-                pass
             page.presets_list.setCurrentIndex(index)
 
     def apply_active_preset_marker_for_file(

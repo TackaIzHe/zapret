@@ -116,6 +116,7 @@ class PremiumPage(BasePage):
         self._open_bot_pending = False
         self._device_info_runtime = OneShotWorkerRuntime()
         self._device_info_pending = False
+        self._reset_storage_runtime = OneShotWorkerRuntime()
 
         self._build_ui()
         self.bind_subscription_state_store(deps.subscription_state_store)
@@ -338,6 +339,10 @@ class PremiumPage(BasePage):
         self._device_info_runtime.stop(
             blocking=True,
             warning_prefix="Premium device info worker",
+        )
+        self._reset_storage_runtime.stop(
+            blocking=True,
+            warning_prefix="Premium reset storage worker",
         )
 
     # ── initialization ───────────────────────────────────────────────────────
@@ -864,8 +869,24 @@ class PremiumPage(BasePage):
             if not box.exec():
                 return
 
+        self._request_reset_storage()
+
+    def create_reset_storage_worker(self, request_id: int):
+        return self._premium.create_reset_storage_worker(request_id, parent=self)
+
+    def _request_reset_storage(self) -> None:
+        if self._reset_storage_runtime.is_running():
+            return
+        self._reset_storage_runtime.start_qthread_worker(
+            worker_factory=lambda request_id: self.create_reset_storage_worker(request_id),
+            on_loaded=self._on_reset_storage_finished,
+            on_failed=self._on_reset_storage_failed,
+        )
+
+    def _on_reset_storage_finished(self, request_id: int, _result) -> None:
+        if not self._reset_storage_runtime.is_current(request_id, cleanup_in_progress=self._cleanup_in_progress):
+            return
         self._days_state_kind, self._days_state_value = apply_reset_plan_ui(
-            premium_feature=self._premium,
             key_input=self.key_input,
             set_activation_status=self._set_activation_status,
             update_device_info=self._update_device_info,
@@ -876,3 +897,17 @@ class PremiumPage(BasePage):
             apply_subscription_state=self._apply_subscription_state,
         )
         self._render_days_label()
+
+    def _on_reset_storage_failed(self, request_id: int, error: str) -> None:
+        if not self._reset_storage_runtime.is_current(request_id, cleanup_in_progress=self._cleanup_in_progress):
+            return
+        if InfoBar:
+            InfoBar.warning(
+                title=self._tr("common.error.title", "Ошибка"),
+                content=self._tr(
+                    "page.premium.error.reset_activation",
+                    "Не удалось сбросить активацию: {error}",
+                    error=str(error or ""),
+                ),
+                parent=self.window(),
+            )
