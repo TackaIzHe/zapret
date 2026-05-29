@@ -64,6 +64,34 @@ class _RuntimeToggleButton:
         self.enabled_calls.append(bool(enabled))
 
 
+class _TextWidget:
+    def __init__(self, text: str = "") -> None:
+        self._text = str(text)
+        self.text_calls: list[str] = []
+
+    def text(self) -> str:
+        return self._text
+
+    def setText(self, text: str) -> None:  # noqa: N802
+        value = str(text)
+        self.text_calls.append(value)
+        self._text = value
+
+
+class _VisibleWidget:
+    def __init__(self, visible: bool = True) -> None:
+        self._visible = bool(visible)
+        self.visible_calls: list[bool] = []
+
+    def isVisible(self) -> bool:  # noqa: N802
+        return self._visible
+
+    def setVisible(self, visible: bool) -> None:  # noqa: N802
+        value = bool(visible)
+        self.visible_calls.append(value)
+        self._visible = value
+
+
 class PresetStatusBarPlanTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -78,6 +106,28 @@ class PresetStatusBarPlanTests(unittest.TestCase):
 
         self.assertIn("from ui.widgets.win11_spinner import Win11Spinner", source)
         self.assertNotIn("from ui.widgets import Win11Spinner", source)
+
+    def test_preset_header_text_update_skips_duplicate_text(self) -> None:
+        from presets.ui.common.preset_subpage_base import set_text_if_changed
+
+        widget = _TextWidget("Активный пресет")
+
+        self.assertFalse(set_text_if_changed(widget, "Активный пресет"))
+        self.assertEqual(widget.text_calls, [])
+
+        self.assertTrue(set_text_if_changed(widget, "Пользовательский пресет"))
+        self.assertEqual(widget.text_calls, ["Пользовательский пресет"])
+
+    def test_preset_header_visibility_update_skips_duplicate_state(self) -> None:
+        from presets.ui.common.preset_subpage_base import set_visible_if_changed
+
+        widget = _VisibleWidget(False)
+
+        self.assertFalse(set_visible_if_changed(widget, False))
+        self.assertEqual(widget.visible_calls, [])
+
+        self.assertTrue(set_visible_if_changed(widget, True))
+        self.assertEqual(widget.visible_calls, [True])
 
     def test_loaded_status_uses_success_check_and_clear_text(self) -> None:
         from presets.ui.common.preset_status_bar import build_preset_status_plan

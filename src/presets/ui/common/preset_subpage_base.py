@@ -108,6 +108,28 @@ def apply_runtime_toggle_button_plan(
     return plan.should_stop
 
 
+def set_text_if_changed(widget, text: str) -> bool:
+    value = str(text or "")
+    try:
+        if str(widget.text()) == value:
+            return False
+    except Exception:
+        pass
+    widget.setText(value)
+    return True
+
+
+def set_visible_if_changed(widget, visible: bool) -> bool:
+    value = bool(visible)
+    try:
+        if bool(widget.isVisible()) == value:
+            return False
+    except Exception:
+        pass
+    widget.setVisible(value)
+    return True
+
+
 class _RenameDialog(MessageBoxBase):
     def __init__(self, current_name: str, existing_names: list[str], parent=None):
         if parent is not None and not parent.isWindow():
@@ -451,10 +473,10 @@ class PresetRawEditorPage(BasePage):
             status = "Импортированный пресет"
         else:
             status = "Пользовательский пресет"
-        self.statusLabel.setText(status)
-        self.activateButton.setVisible(not is_active)
-        self.metaLabel.setText(f"Имя: {self._preset_name}")
-        self.pathLabel.setText(str(self._preset_path or ""))
+        set_text_if_changed(self.statusLabel, status)
+        set_visible_if_changed(self.activateButton, not is_active)
+        set_text_if_changed(self.metaLabel, f"Имя: {self._preset_name}")
+        set_text_if_changed(self.pathLabel, str(self._preset_path or ""))
 
     def _load_file(self) -> None:
         self._request_raw_preset_text()
