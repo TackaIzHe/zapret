@@ -123,6 +123,7 @@ class UpdatePageRuntime:
         self._server_worker_runtime = OneShotWorkerRuntime()
         self._version_worker_runtime = OneShotWorkerRuntime()
         self._server_retry_without_dpi_runtime = OneShotWorkerRuntime()
+        self._dpi_restart_runtime = OneShotWorkerRuntime()
         self._auto_check_load_runtime = OneShotWorkerRuntime()
         self._auto_check_save_runtime = OneShotWorkerRuntime()
         self._update_channel_open_runtime = OneShotWorkerRuntime()
@@ -131,6 +132,7 @@ class UpdatePageRuntime:
         self._cleanup_in_progress = False
         self._auto_check_save_pending: bool | None = None
         self._auto_check_user_changed = False
+        self._dpi_restart_after = ""
 
         self._found_state = UpdateFoundState()
         self._check_state = UpdateCheckState()
@@ -215,6 +217,7 @@ class UpdatePageRuntime:
                 "_server_worker_runtime",
                 "_version_worker_runtime",
                 "_server_retry_without_dpi_runtime",
+                "_dpi_restart_runtime",
                 "_auto_check_load_runtime",
                 "_update_channel_open_runtime",
                 "_update_thread",
@@ -244,6 +247,7 @@ class UpdatePageRuntime:
             cleanup_extraction_candidates=(
                 "_teardown_server_worker",
                 "_teardown_server_retry_without_dpi_worker",
+                "_teardown_dpi_restart_worker",
                 "_teardown_version_worker",
                 "_teardown_auto_check_load_worker",
                 "_teardown_update_channel_open_worker",
@@ -507,6 +511,7 @@ class UpdatePageRuntime:
         self._cleanup_in_progress = True
         self._teardown_server_worker()
         self._teardown_server_retry_without_dpi_worker()
+        self._teardown_dpi_restart_worker()
         self._teardown_version_worker()
         self._teardown_auto_check_load_worker()
         self._teardown_auto_check_save_worker()
@@ -640,6 +645,16 @@ class UpdatePageRuntime:
             parent=self._view.window(),
         )
 
+    def create_dpi_restart_worker(self, request_id: int, *, context: str):
+        from updater.retry_workers import UpdaterDpiRestartWorker
+
+        return UpdaterDpiRestartWorker(
+            request_id,
+            runtime_feature=self._runtime_feature,
+            context=context,
+            parent=self._view.window(),
+        )
+
     def _create_version_worker(self):
         from updater.server_status_workers import VersionCheckWorker
 
@@ -703,6 +718,15 @@ class UpdatePageRuntime:
             warning_prefix="server_retry_without_dpi_worker",
         )
         self._server_retry_without_dpi_runtime.cancel()
+
+    def _teardown_dpi_restart_worker(self) -> None:
+        self._dpi_restart_after = ""
+        self._dpi_restart_runtime.stop(
+            blocking=True,
+            log_fn=log,
+            warning_prefix="dpi_restart_worker",
+        )
+        self._dpi_restart_runtime.cancel()
 
     def _teardown_version_worker(self) -> None:
         self._version_worker_runtime.stop(
@@ -803,7 +827,8 @@ class UpdatePageRuntime:
             return
         if self._maybe_retry_server_check_without_dpi():
             return
-        self._restart_dpi_after_server_check_retry()
+        if self._restart_dpi_after_server_check_retry():
+            return
         self._start_version_check_workflow()
 
     def _observe_server_check_status(self, status: dict) -> None:
@@ -873,13 +898,17 @@ class UpdatePageRuntime:
         if self._server_retry_without_dpi_runtime.worker is worker:
             self._server_retry_without_dpi_runtime.worker = None
 
-    def _restart_dpi_after_server_check_retry(self) -> None:
+    def _restart_dpi_after_server_check_retry(self) -> bool:
         recovery = self._server_check_recovery
         if not recovery.dpi_stopped:
-            return
+            return False
         recovery.dpi_stopped = False
         recovery.retry_running = False
-        self._restart_dpi_after_update(context="повторной проверки серверов")
+        self._restart_dpi_after_update(
+            context="повторной проверки серверов",
+            after_restart="version_check",
+        )
+        return True
 
     def _on_version_found(self, channel: str, version_info: dict) -> None:
         if self._cleanup_in_progress:
@@ -967,15 +996,47 @@ class UpdatePageRuntime:
         except Exception:
             return None, ""
 
-    def _restart_dpi_after_update(self, *, context: str = "скачивания обновления") -> None:
+    def _restart_dpi_after_update(
+        self,
+        *,
+        context: str = "скачивания обновления",
+        after_restart: str = "",
+    ) -> None:
         if self._cleanup_in_progress:
             return
-        try:
-            if self._runtime_feature.is_available():
-                log(f"🔄 Перезапуск DPI после {context}", "🔁 UPDATE")
-                self._runtime_feature.restart()
-        except Exception as e:
-            log(f"Не удалось перезапустить DPI: {e}", "❌ ERROR")
+        self._request_dpi_restart(context=context, after_restart=after_restart)
+
+    def _request_dpi_restart(self, *, context: str, after_restart: str = "") -> None:
+        if self._dpi_restart_runtime.is_running():
+            if after_restart:
+                self._dpi_restart_after = str(after_restart or "")
+            return
+        self._dpi_restart_after = str(after_restart or "")
+        self._dpi_restart_runtime.start_qthread_worker(
+            worker_factory=lambda request_id: self.create_dpi_restart_worker(
+                request_id,
+                context=str(context or "скачивания обновления"),
+            ),
+            on_loaded=self._on_dpi_restart_finished,
+            on_failed=self._on_dpi_restart_failed,
+        )
+
+    def _on_dpi_restart_finished(self, request_id: int, _restarted: bool) -> None:
+        if not self._dpi_restart_runtime.is_current(request_id, cleanup_in_progress=self._cleanup_in_progress):
+            return
+        self._continue_after_dpi_restart()
+
+    def _on_dpi_restart_failed(self, request_id: int, error: str) -> None:
+        if not self._dpi_restart_runtime.is_current(request_id, cleanup_in_progress=self._cleanup_in_progress):
+            return
+        log(f"Не удалось перезапустить DPI: {error}", "❌ ERROR")
+        self._continue_after_dpi_restart()
+
+    def _continue_after_dpi_restart(self) -> None:
+        after_restart = str(self._dpi_restart_after or "")
+        self._dpi_restart_after = ""
+        if after_restart == "version_check" and not self._cleanup_in_progress:
+            self._start_version_check_workflow()
 
     def _is_download_in_progress(self) -> bool:
         try:

@@ -116,6 +116,16 @@ class UpdatePageRuntimeServerRecoveryTests(unittest.TestCase):
 
         return patch.object(retry_runtime, "start_qthread_worker", side_effect=_start_qthread_worker)
 
+    def _stub_dpi_restart_worker_start(self, runtime):
+        restart_runtime = runtime._dpi_restart_runtime
+
+        def _start_qthread_worker(**_kwargs):
+            request_id = restart_runtime.next_request_id()
+            restart_runtime.worker = object()
+            return request_id, restart_runtime.worker
+
+        return patch.object(restart_runtime, "start_qthread_worker", side_effect=_start_qthread_worker)
+
     def test_retry_without_dpi_worker_stops_dpi_in_background(self) -> None:
         from updater.retry_workers import UpdaterServerRetryWithoutDpiWorker
 
@@ -134,6 +144,22 @@ class UpdatePageRuntimeServerRecoveryTests(unittest.TestCase):
             include_cleanup=True,
         )
         self.assertEqual(results, [(7, True, True, "")])
+
+    def test_dpi_restart_worker_restarts_runtime_in_background(self) -> None:
+        from updater.retry_workers import UpdaterDpiRestartWorker
+
+        runtime_feature = SimpleNamespace(
+            is_available=Mock(return_value=True),
+            restart=Mock(return_value=True),
+        )
+        worker = UpdaterDpiRestartWorker(9, runtime_feature=runtime_feature, context="test")
+        results = []
+        worker.loaded.connect(lambda *args: results.append(args))
+
+        worker.run()
+
+        runtime_feature.restart.assert_called_once_with()
+        self.assertEqual(results, [(9, True)])
 
     def test_page_runtime_retries_server_check_without_dpi_after_full_source_failure(self) -> None:
         runtime, _view, runtime_feature = self._make_runtime()
@@ -165,6 +191,7 @@ class UpdatePageRuntimeServerRecoveryTests(unittest.TestCase):
             patch.object(runtime, "_start_server_check_workflow"),
             patch.object(runtime, "_start_version_check_workflow") as start_version_check,
             self._stub_retry_worker_start(runtime),
+            self._stub_dpi_restart_worker_start(runtime),
         ):
             runtime.start_checks(telegram_only=False, skip_server_rate_limit=True)
             runtime._on_server_checked("GitHub API", {"status": "error"})
@@ -173,9 +200,12 @@ class UpdatePageRuntimeServerRecoveryTests(unittest.TestCase):
             runtime._on_server_retry_without_dpi_finished(retry_request_id, True, True, "")
             runtime._on_server_checked("Primary", {"status": "online", "is_current": True})
             runtime._on_servers_complete()
+            start_version_check.assert_not_called()
+            restart_request_id = runtime._dpi_restart_runtime.request_id
+            runtime._on_dpi_restart_finished(restart_request_id, True)
 
         runtime_feature.shutdown_sync.assert_not_called()
-        runtime_feature.restart.assert_called_once()
+        runtime_feature.restart.assert_not_called()
         start_version_check.assert_called_once()
 
     def test_page_runtime_does_not_retry_without_dpi_when_any_source_is_online(self) -> None:

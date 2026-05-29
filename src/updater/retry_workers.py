@@ -42,4 +42,28 @@ class UpdaterServerRetryWithoutDpiWorker(QThread):
         self.loaded.emit(self._request_id, True, True, "")
 
 
-__all__ = ["UpdaterServerRetryWithoutDpiWorker"]
+class UpdaterDpiRestartWorker(QThread):
+    loaded = pyqtSignal(int, bool)
+    failed = pyqtSignal(int, str)
+
+    def __init__(self, request_id: int, *, runtime_feature, context: str = "", parent=None):
+        super().__init__(parent)
+        self._request_id = int(request_id)
+        self._runtime_feature = runtime_feature
+        self._context = str(context or "скачивания обновления")
+
+    def run(self) -> None:
+        try:
+            if not self._runtime_feature.is_available():
+                self.loaded.emit(self._request_id, False)
+                return
+            log(f"🔄 Перезапуск DPI после {self._context}", "🔁 UPDATE")
+            restarted = bool(self._runtime_feature.restart())
+        except Exception as exc:
+            log(f"Не удалось перезапустить DPI: {exc}", "❌ ERROR")
+            self.failed.emit(self._request_id, str(exc))
+            return
+        self.loaded.emit(self._request_id, restarted)
+
+
+__all__ = ["UpdaterServerRetryWithoutDpiWorker", "UpdaterDpiRestartWorker"]
