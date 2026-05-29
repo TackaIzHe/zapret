@@ -369,6 +369,31 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("find_preset_row", source)
         self.assertNotIn("for row in range", source)
 
+    def test_user_presets_current_index_skips_already_selected_row(self) -> None:
+        class _Index:
+            def __init__(self, row: int) -> None:
+                self.row = row
+
+            def isValid(self) -> bool:
+                return True
+
+            def __eq__(self, other) -> bool:
+                return isinstance(other, _Index) and self.row == other.row
+
+        target_index = _Index(4)
+        model = Mock()
+        model.find_preset_row.return_value = 4
+        model.index.return_value = target_index
+        presets_list = Mock()
+        presets_list.currentIndex.return_value = target_index
+        page = SimpleNamespace(_presets_model=model, presets_list=presets_list)
+        service = UserPresetsRuntimeService.__new__(UserPresetsRuntimeService)
+        service._resolve_page = Mock(return_value=page)
+
+        UserPresetsRuntimeService.set_current_preset_index(service, "Default.txt")
+
+        presets_list.setCurrentIndex.assert_not_called()
+
     def test_user_presets_activation_runs_through_worker(self) -> None:
         handler_source = inspect.getsource(UserPresetsPageBase._on_activate_preset)
         request_source = inspect.getsource(UserPresetsPageBase._request_preset_activation)
