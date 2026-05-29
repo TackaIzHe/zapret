@@ -91,6 +91,21 @@ class OrchestraManagedActionWorker(QThread):
             elif self._action == "blocked_clear_user":
                 result = self._controller.clear_user_strategies(user_count=self._user_count)
             elif self._action == "locked_change":
+                if self._controller.is_blocked_strategy(
+                    domain=self._domain,
+                    strategy=self._new_strategy,
+                ):
+                    payload = {
+                        "result": None,
+                        "snapshot": None,
+                        "blocked_by_policy": True,
+                        "current_strategy": self._controller.current_strategy(
+                            domain=self._domain,
+                            askey=self._askey,
+                        ),
+                    }
+                    self.loaded.emit(self._request_id, self._action, payload, context)
+                    return
                 result = self._controller.change_strategy(
                     domain=self._domain,
                     new_strategy=self._new_strategy,
@@ -102,6 +117,21 @@ class OrchestraManagedActionWorker(QThread):
                     askey=self._askey,
                 )
             elif self._action == "locked_add":
+                if self._controller.is_blocked_strategy(
+                    domain=self._domain,
+                    strategy=self._strategy,
+                ):
+                    payload = {
+                        "result": None,
+                        "snapshot": None,
+                        "blocked_by_policy": True,
+                        "current_strategy": self._controller.current_strategy(
+                            domain=self._domain,
+                            askey=self._askey,
+                        ),
+                    }
+                    self.loaded.emit(self._request_id, self._action, payload, context)
+                    return
                 result = self._controller.add_strategy(
                     domain=self._domain,
                     strategy=self._strategy,

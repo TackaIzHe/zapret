@@ -2961,6 +2961,24 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("clear_user_strategies", worker_source)
         self.assertIn("clear_strategies", worker_source)
 
+    def test_orchestra_locked_blocked_strategy_validation_runs_through_worker(self) -> None:
+        managed_workers = importlib.import_module("orchestra.managed_lists_workers")
+
+        change_source = inspect.getsource(OrchestraLockedPage._on_row_strategy_changed)
+        add_source = inspect.getsource(OrchestraLockedPage._lock_strategy)
+        loaded_source = inspect.getsource(OrchestraLockedPage._on_managed_action_loaded)
+        worker_source = inspect.getsource(managed_workers.OrchestraManagedActionWorker.run)
+
+        for source in (change_source, add_source):
+            self.assertIn("_request_managed_action", source)
+            self.assertNotIn("self._managed.is_blocked_strategy", source)
+            self.assertNotIn("self._managed.current_strategy", source)
+
+        self.assertIn("blocked_by_policy", loaded_source)
+        self.assertIn("current_strategy", loaded_source)
+        self.assertIn("is_blocked_strategy", worker_source)
+        self.assertIn("current_strategy", worker_source)
+
     def test_page_host_logs_first_and_repeat_show_for_all_pages(self) -> None:
         init_source = inspect.getsource(WindowPageHost.__init__)
         show_source = inspect.getsource(WindowPageHost.show_page)

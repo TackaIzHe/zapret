@@ -495,6 +495,20 @@ class OrchestraLockedPage(BasePage):
         payload = dict(payload or {})
         context = dict(context or {})
         result = payload.get("result")
+        if bool(payload.get("blocked_by_policy")):
+            strategy = int(context.get("new_strategy") or context.get("strategy") or 0)
+            domain = str(context.get("domain") or "")
+            askey = str(context.get("askey") or "")
+            self._show_blocked_warning(domain, strategy)
+            log(f"[USER] Попытка использовать заблокированную стратегию #{strategy} для {domain}", "WARNING")
+            if action == "locked_change":
+                self._restore_locked_strategy_spin(
+                    domain,
+                    askey,
+                    int(payload.get("current_strategy") or 1),
+                )
+            return
+
         if payload.get("snapshot") is not None:
             self._snapshot_load_runtime.cancel()
             self._refresh_data()
@@ -543,6 +557,15 @@ class OrchestraLockedPage(BasePage):
             pending = self._managed_action_pending.pop(0)
             self._start_managed_action(pending)
 
+    def _restore_locked_strategy_spin(self, domain: str, askey: str, strategy: int) -> None:
+        key = f"{domain}:{askey}"
+        if key not in self._domain_rows:
+            return
+        row = self._domain_rows[key]
+        row.strat_spin.blockSignals(True)
+        row.strat_spin.setValue(int(strategy))
+        row.strat_spin.blockSignals(False)
+
     def _refresh_locked_list(self):
         """Обновляет список залоченных стратегий"""
         if self._cleanup_in_progress:
@@ -590,23 +613,6 @@ class OrchestraLockedPage(BasePage):
             self._refresh_data()
             return
 
-        # Проверяем, не заблокирована ли эта стратегия для домена
-        if self._managed.is_blocked_strategy(domain=domain, strategy=new_strategy):
-            self._show_blocked_warning(domain, new_strategy)
-            log(f"[USER] Попытка изменить на заблокированную стратегию #{new_strategy} для {domain}", "WARNING")
-            # Восстанавливаем предыдущее значение в SpinBox
-            key = f"{domain}:{askey}"
-            if key in self._domain_rows:
-                row = self._domain_rows[key]
-                current = self._managed.current_strategy(
-                    domain=domain,
-                    askey=askey,
-                )
-                row.strat_spin.blockSignals(True)
-                row.strat_spin.setValue(current)
-                row.strat_spin.blockSignals(False)
-            return  # Не сохраняем заблокированную стратегию
-
         self._request_managed_action(
             "locked_change",
             domain=domain,
@@ -650,12 +656,6 @@ class OrchestraLockedPage(BasePage):
 
         strategy = self.strat_spin.value()
         askey = self.proto_combo.currentText().lower()
-
-        # Проверяем, не заблокирована ли эта стратегия для домена
-        if self._managed.is_blocked_strategy(domain=domain, strategy=strategy):
-            self._show_blocked_warning(domain, strategy)
-            log(f"[USER] Попытка залочить заблокированную стратегию #{strategy} для {domain}", "WARNING")
-            return  # Не лочим заблокированную стратегию
 
         self._request_managed_action(
             "locked_add",
