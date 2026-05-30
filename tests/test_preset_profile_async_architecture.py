@@ -1848,6 +1848,9 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("create_open_extend_bot_worker", page_source)
         self.assertIn("_open_bot_runtime", page_source)
         self.assertIn("create_open_extend_bot_worker", feature_source)
+        self.assertIn("open_extend_bot=self.open_extend_bot", feature_source)
+        self.assertIn("_open_extend_bot", worker_source)
+        self.assertNotIn("premium_commands", worker_source)
         self.assertIn("open_extend_bot", worker_source)
 
     def test_premium_reset_storage_runs_through_worker(self) -> None:
