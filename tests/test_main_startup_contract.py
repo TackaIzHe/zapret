@@ -19,6 +19,11 @@ if str(PROJECT_SRC) not in sys.path:
 
 
 class StartupRuntimeSetupTests(unittest.TestCase):
+    def test_post_interactive_startup_steps_have_no_fixed_gap(self) -> None:
+        from main import startup_coordinator
+
+        self.assertEqual(startup_coordinator.STARTUP_STEP_GAP_MS, 0)
+
     def test_phase_two_completion_dispatches_deferred_autostart(self) -> None:
         from main import startup_coordinator
         from main.startup_coordinator import StartupCoordinator
@@ -1795,86 +1800,31 @@ class StartupRuntimeSetupTests(unittest.TestCase):
         self.assertEqual(premium_effects.garland_enabled, True)
         self.assertEqual(premium_effects.snowflakes_enabled, False)
 
-    def test_zapret2_control_defers_heavy_sections_until_startup_interactive(self) -> None:
-        from presets.ui.control.zapret2 import page as zapret2_page
+    def test_control_pages_build_settings_sections_without_startup_delay(self) -> None:
+        from presets.ui.control.zapret1.page import Zapret1ModeControlPage
         from presets.ui.control.zapret2.page import Zapret2ModeControlPage
 
-        interactive_connected: list[object] = []
-        post_init_connected: list[object] = []
-        scheduled: list[tuple[int, object]] = []
+        for page_cls in (Zapret1ModeControlPage, Zapret2ModeControlPage):
+            with self.subTest(page_cls=page_cls.__name__):
+                page_source = inspect.getsource(page_cls)
+                build_ui_source = inspect.getsource(page_cls._build_ui)
 
-        class Signal:
-            def __init__(self, target: list[object]):
-                self._target = target
+                self.assertIn("_build_settings_sections", build_ui_source)
+                self.assertIn("_attach_program_settings_runtime", build_ui_source)
+                self.assertIn("_schedule_additional_settings_reload(force=True)", build_ui_source)
+                self.assertNotIn("startup_post_init_ready", page_source)
+                self.assertNotIn("startup_interactive_ready_for_deferred_sections", page_source)
+                self.assertNotIn("_deferred_sections_hydrated", page_source)
+                self.assertNotIn("_deferred_sections_built", page_source)
 
-            def connect(self, callback, *_args, **_kwargs) -> None:
-                self._target.append(callback)
-
-        control_page = Zapret2ModeControlPage.__new__(Zapret2ModeControlPage)
-        control_page._cleanup_in_progress = False
-        control_page._deferred_sections_built = False
-        control_page._deferred_sections_hydrated = False
-        control_page._startup_deferred_sections_waiting = False
-        control_page._startup_deferred_sections_allowed = False
-        control_page._startup_showevent_profile_logged = False
-        control_page._refresh_runtime = SimpleNamespace(additional_settings_dirty=False)
-        control_page.deferred_show_requested = SimpleNamespace(emit=Mock())
-        control_page.is_page_ready = Mock(return_value=True)
-        control_page.run_when_page_ready = Mock(side_effect=lambda callback: callback() or True)
-        control_page.window = Mock(
-            return_value=SimpleNamespace(
-                startup_state=SimpleNamespace(interactive_logged=False, post_init_ready=False),
-                startup_interactive_ready=Signal(interactive_connected),
-                startup_post_init_ready=Signal(post_init_connected),
-            )
-        )
-
-        with patch.object(zapret2_page, "_log_startup_winws2_control_metric"):
-            Zapret2ModeControlPage._apply_pending_mode_refresh_if_ready(control_page)
-
-        control_page.deferred_show_requested.emit.assert_not_called()
-        self.assertEqual(len(interactive_connected), 1)
-
-        control_page.window.return_value.startup_state.interactive_logged = True
-        with patch.object(
-            zapret2_page.QTimer,
-            "singleShot",
-            side_effect=lambda delay_ms, callback: scheduled.append((delay_ms, callback)),
-        ):
-            interactive_connected[0]("ui_ready")
-
-        self.assertEqual(scheduled, [])
-        self.assertEqual(len(post_init_connected), 1)
-        control_page.deferred_show_requested.emit.assert_not_called()
-
-        control_page.window.return_value.startup_state.post_init_ready = True
-        with patch.object(
-            zapret2_page.QTimer,
-            "singleShot",
-            side_effect=lambda delay_ms, callback: scheduled.append((delay_ms, callback)),
-        ):
-            post_init_connected[0]("post_init")
-
-        self.assertEqual(len(scheduled), 1)
-        self.assertGreaterEqual(scheduled[0][0], zapret2_page.STARTUP_DEFERRED_SECTIONS_AFTER_POST_INIT_MS)
-        control_page.deferred_show_requested.emit.assert_not_called()
-        scheduled[0][1]()
-
-        control_page.deferred_show_requested.emit.assert_called_once()
-
-    def test_zapret2_control_initial_state_does_not_wait_for_deferred_sections(self) -> None:
+    def test_zapret2_control_initial_state_is_not_delayed_by_startup_gate(self) -> None:
         from presets.ui.control.zapret2.page import Zapret2ModeControlPage
 
-        control_page = Zapret2ModeControlPage.__new__(Zapret2ModeControlPage)
-        control_page._startup_deferred_sections_allowed = False
-        control_page.window = Mock(
-            return_value=SimpleNamespace(
-                startup_state=SimpleNamespace(interactive_logged=True),
-            )
-        )
+        bind_source = inspect.getsource(Zapret2ModeControlPage.bind_ui_state_store)
 
-        self.assertTrue(Zapret2ModeControlPage._startup_can_apply_initial_ui_state(control_page))
-        self.assertFalse(Zapret2ModeControlPage._startup_can_run_deferred_sections(control_page))
+        self.assertNotIn("defer_initial_state", bind_source)
+        self.assertNotIn("_wait_for_startup_interactive_before_initial_ui_state", bind_source)
+        self.assertIn("bind_control_ui_state_store", bind_source)
 
     def test_zapret2_control_defers_top_summary_data_until_startup_interactive(self) -> None:
         from app.state_store import AppUiState
@@ -2153,7 +2103,6 @@ class StartupRuntimeSetupTests(unittest.TestCase):
                 control_page._apply_pending_additional_settings_refresh = Mock()
                 control_page.run_when_page_ready = Mock()
                 control_page.isVisible = Mock(return_value=True)
-                control_page._deferred_sections_hydrated = True
                 control_page.set_loading = Mock()
                 control_page.update_status = Mock()
                 control_page.update_strategy = Mock()
