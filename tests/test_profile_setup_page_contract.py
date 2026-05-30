@@ -3624,6 +3624,19 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         page._apply_feedback_buttons.assert_called_once_with(page._payload)
         page._on_profile_changed_callback.assert_called_once_with("profile-1", "feedback", page._payload.item)
 
+    def test_repeating_same_strategy_rating_does_not_start_feedback_worker(self) -> None:
+        page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        page._loading = False
+        page._profile_key = "profile-1"
+        page._payload = SimpleNamespace(
+            current_strategy_state=ProfileStrategyState(rating="work", favorite=False),
+        )
+        page._request_strategy_feedback_save = Mock(side_effect=AssertionError("same rating must not start worker"))
+
+        ProfileSetupPageBase._set_current_strategy_feedback(page, rating="work")
+
+        page._request_strategy_feedback_save.assert_not_called()
+
     def test_strategy_feedback_finish_for_previous_strategy_is_ignored(self) -> None:
         page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
         page._profile_key = "profile-1"

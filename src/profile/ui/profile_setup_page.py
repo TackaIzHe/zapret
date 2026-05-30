@@ -2553,7 +2553,12 @@ class ProfileSetupPageBase(BasePage):
     def _set_current_strategy_feedback(self, *, rating: str) -> None:
         if self._loading or not self._profile_key:
             return
-        self._request_strategy_feedback_save({"rating": rating, "favorite": None})
+        next_rating = str(rating or "").strip()
+        state = getattr(getattr(self, "_payload", None), "current_strategy_state", None)
+        current_rating = str(getattr(state, "rating", "") or "").strip()
+        if next_rating == current_rating:
+            return
+        self._request_strategy_feedback_save({"rating": next_rating, "favorite": None})
 
     def _toggle_current_strategy_favorite(self) -> None:
         if self._loading or not self._profile_key or self._payload is None:
