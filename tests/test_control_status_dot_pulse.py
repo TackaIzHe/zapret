@@ -302,6 +302,29 @@ class ControlStatusDotPulseTests(unittest.TestCase):
         self.assertEqual(toggle.calls, [(True, True)])
         self.assertTrue(toggle.checked)
 
+    def test_zapret2_additional_settings_state_skips_duplicate_toggles(self) -> None:
+        from presets.ui.control.zapret2.runtime_helpers import apply_additional_settings_state
+
+        state = SimpleNamespace(
+            discord_restart=True,
+            wssize_enabled=False,
+            debug_log_enabled=True,
+        )
+        discord_toggle = _ToggleTarget(True)
+        wssize_toggle = _ToggleTarget(False)
+        debug_log_toggle = _ToggleTarget(True)
+
+        apply_additional_settings_state(
+            state,
+            discord_restart_toggle=discord_toggle,
+            wssize_toggle=wssize_toggle,
+            debug_log_toggle=debug_log_toggle,
+        )
+
+        self.assertEqual(discord_toggle.calls, [])
+        self.assertEqual(wssize_toggle.calls, [])
+        self.assertEqual(debug_log_toggle.calls, [])
+
     def test_widget_text_visibility_and_enabled_updates_skip_duplicate_state(self) -> None:
         from presets.ui.control.control_page_runtime_shared import (
             set_enabled_if_changed,

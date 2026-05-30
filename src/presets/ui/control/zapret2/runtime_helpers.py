@@ -21,29 +21,12 @@ def apply_program_settings_snapshot(snapshot, *, auto_dpi_toggle, hide_to_tray_t
 
 
 def apply_additional_settings_state(state, *, discord_restart_toggle, wssize_toggle, debug_log_toggle) -> None:
-    try:
-        toggle = discord_restart_toggle
-        set_checked = getattr(toggle, "setChecked", None)
-        if callable(set_checked):
-            set_checked(bool(state.discord_restart), block_signals=True)
-    except Exception:
-        pass
-
-    try:
-        toggle = wssize_toggle
-        set_checked = getattr(toggle, "setChecked", None)
-        if callable(set_checked):
-            set_checked(bool(state.wssize_enabled), block_signals=True)
-    except Exception:
-        pass
-
-    try:
-        toggle = debug_log_toggle
-        set_checked = getattr(toggle, "setChecked", None)
-        if callable(set_checked):
-            set_checked(bool(state.debug_log_enabled), block_signals=True)
-    except Exception:
-        pass
+    if discord_restart_toggle is not None:
+        set_toggle_checked(discord_restart_toggle, bool(state.discord_restart))
+    if wssize_toggle is not None:
+        set_toggle_checked(wssize_toggle, bool(state.wssize_enabled))
+    if debug_log_toggle is not None:
+        set_toggle_checked(debug_log_toggle, bool(state.debug_log_enabled))
 
 
 def sync_profile_ui_mode_label(*, language: str, profile_ui_mode_label) -> None:
