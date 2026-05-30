@@ -242,9 +242,11 @@ class PresetSetupPageBase(BasePage):
     def _on_profile_payload_loaded(self, request_id: int, payload) -> None:
         if request_id != self._profile_load_request_id or self._cleanup_in_progress:
             return
+        view_state = getattr(payload, "view_state", None)
+        payload = getattr(payload, "payload", payload)
         self._profile_payload_loaded_once = True
         self._profile_payload_dirty = False
-        self._apply_payload(payload)
+        self._apply_payload(payload, view_state=view_state)
 
     def _apply_cached_profile_payload(self, payload) -> None:
         self._profile_payload_loaded_once = True
@@ -270,7 +272,7 @@ class PresetSetupPageBase(BasePage):
         if self._profile_payload_dirty and not self._cleanup_in_progress:
             self._schedule_profiles_payload_request(force=True)
 
-    def _apply_payload(self, payload) -> None:
+    def _apply_payload(self, payload, *, view_state=None) -> None:
         if self._content_host_layout is None:
             return
         total_started_at = time.perf_counter()
@@ -286,8 +288,11 @@ class PresetSetupPageBase(BasePage):
         profiles_list = self._profiles_list
         if profiles_list is not None:
             started_at = time.perf_counter()
-            profiles_list.update_profiles(tuple(payload.items))
-            profiles_list.set_search_query(self._profile_search_query)
+            if view_state is not None:
+                profiles_list.apply_view_state(view_state)
+            else:
+                profiles_list.update_profiles(tuple(payload.items))
+                profiles_list.set_search_query(self._profile_search_query)
             self._log_ui_timing("profile_ui.profile_list.update", started_at, extra=f"{len(payload.items)} items")
             self._log_ui_timing("profile_ui.apply_payload.total", total_started_at)
             return
@@ -306,8 +311,11 @@ class PresetSetupPageBase(BasePage):
         self._log_ui_timing("profile_ui.profile_list.create", create_started_at)
 
         started_at = time.perf_counter()
-        profiles_list.build_profiles(tuple(payload.items))
-        profiles_list.set_search_query(self._profile_search_query)
+        if view_state is not None:
+            profiles_list.apply_view_state(view_state)
+        else:
+            profiles_list.build_profiles(tuple(payload.items or ()))
+            profiles_list.set_search_query(self._profile_search_query)
         self._log_ui_timing("profile_ui.profile_list.build", started_at, extra=f"{len(payload.items)} items")
 
         attach_started_at = time.perf_counter()

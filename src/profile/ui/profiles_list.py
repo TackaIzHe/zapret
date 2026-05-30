@@ -88,6 +88,9 @@ class ProfilesList(QWidget):
             search_query=self._search_query,
         )
 
+    def apply_view_state(self, view_state) -> None:
+        self._model.apply_view_state(view_state)
+
     def update_profiles(self, items: tuple[Any, ...]) -> bool:
         return self._model.update_profiles(
             tuple(items or ()),

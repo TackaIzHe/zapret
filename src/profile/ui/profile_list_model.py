@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any
 
 from PyQt6.QtCore import QAbstractListModel, QMimeData, QModelIndex, Qt
@@ -10,6 +10,44 @@ from folders.defaults import build_default_profile_folders
 from profile.icons import resolve_profile_icon
 from profile.match_filters import is_voice_match, ports_label_from_match_lines, protocol_label_from_match_lines
 from profile.ui.profile_display_items import ProfileDisplayItem, build_profile_display_items, profile_display_sort_key
+
+
+@dataclass(slots=True)
+class ProfileListViewState:
+    all_items: tuple[ProfileDisplayItem, ...]
+    profile_items: dict[str, ProfileDisplayItem]
+    group_expanded: dict[str, bool]
+    active_profile_types: set[str]
+    search_query: str
+    rows: list[dict[str, Any]]
+
+
+def build_profile_list_view_state(
+    items: tuple[Any, ...],
+    *,
+    active_profile_types: set[str] | None = None,
+    search_query: str = "",
+    group_expanded: dict[str, bool] | None = None,
+) -> ProfileListViewState:
+    display_items = build_profile_display_items(tuple(items or ()))
+    active = _normalized_profile_types(active_profile_types)
+    normalized_search = _normalized_search_query(search_query)
+    next_group_expanded = dict(group_expanded or _initial_group_expanded(display_items))
+    for item in display_items:
+        next_group_expanded.setdefault(str(item.group or "common"), True)
+    return ProfileListViewState(
+        all_items=display_items,
+        profile_items={item.key: item for item in display_items},
+        group_expanded=next_group_expanded,
+        active_profile_types=active,
+        search_query=normalized_search,
+        rows=_build_profile_rows_from(
+            display_items,
+            next_group_expanded,
+            active_profile_types=active,
+            search_query=normalized_search,
+        ),
+    )
 
 
 class ProfileListModel(QAbstractListModel):
@@ -52,26 +90,28 @@ class ProfileListModel(QAbstractListModel):
         active_profile_types: set[str] | None = None,
         search_query: str | None = None,
     ) -> None:
-        display_items = build_profile_display_items(tuple(items or ()))
-        active = _normalized_profile_types(
-            self._active_profile_types if active_profile_types is None else active_profile_types
+        state = build_profile_list_view_state(
+            tuple(items or ()),
+            active_profile_types=self._active_profile_types if active_profile_types is None else active_profile_types,
+            search_query=self._search_query if search_query is None else search_query,
         )
-        normalized_search = self._search_query if search_query is None else _normalized_search_query(search_query)
-        group_expanded = _initial_group_expanded(display_items)
         if (
-            self._all_items == display_items
-            and self._group_expanded == group_expanded
-            and self._active_profile_types == active
-            and self._search_query == normalized_search
+            self._all_items == state.all_items
+            and self._group_expanded == state.group_expanded
+            and self._active_profile_types == state.active_profile_types
+            and self._search_query == state.search_query
         ):
             return
+        self.apply_view_state(state)
+
+    def apply_view_state(self, state: ProfileListViewState) -> None:
         self.beginResetModel()
-        self._all_items = display_items
-        self._profile_items = {item.key: item for item in display_items}
-        self._group_expanded = group_expanded
-        self._active_profile_types = active
-        self._search_query = normalized_search
-        self._rows = self._build_rows()
+        self._all_items = tuple(state.all_items or ())
+        self._profile_items = dict(state.profile_items or {})
+        self._group_expanded = dict(state.group_expanded or {})
+        self._active_profile_types = set(state.active_profile_types or {"all"})
+        self._search_query = str(state.search_query or "")
+        self._rows = list(state.rows or [])
         self.endResetModel()
 
     def update_profiles(
@@ -655,28 +695,12 @@ class ProfileListModel(QAbstractListModel):
         items: tuple[ProfileDisplayItem, ...],
         group_expanded: dict[str, bool],
     ) -> list[dict[str, Any]]:
-        rows: list[dict[str, Any]] = []
-        grouped = _grouped_items(items)
-        if not grouped:
-            return rows
-        for group_key in _ordered_group_keys(grouped):
-            group_items = tuple(item for item in grouped.get(group_key, ()) if self._matches_filter(item))
-            if not group_items:
-                continue
-            group_items = tuple(sorted(group_items, key=profile_display_sort_key))
-            group_name = str(group_items[0].group_name or group_key.title())
-            expanded = group_expanded.get(group_key, True)
-            rows.append({
-                "kind": "folder",
-                "group": group_key,
-                "group_name": group_name,
-                "collapsed": not expanded,
-                "count": len(group_items),
-            })
-            if not expanded:
-                continue
-            rows.extend(_row_for_profile(item) for item in group_items)
-        return rows
+        return _build_profile_rows_from(
+            items,
+            group_expanded,
+            active_profile_types=self._active_profile_types,
+            search_query=self._search_query,
+        )
 
     def _emit_data_changed_for_rows(self, rows: tuple[int, ...]) -> None:
         for row_index in rows:
@@ -686,7 +710,11 @@ class ProfileListModel(QAbstractListModel):
             self.dataChanged.emit(model_index, model_index, _profile_data_roles())
 
     def _matches_filter(self, item: ProfileDisplayItem) -> bool:
-        return self._matches_type_filter(item) and self._matches_search_query(item)
+        return _profile_matches_filter(
+            item,
+            active_profile_types=self._active_profile_types,
+            search_query=self._search_query,
+        )
 
     def _matches_type_filter(self, item: ProfileDisplayItem) -> bool:
         active = self._active_profile_types
@@ -760,6 +788,82 @@ def _row_for_profile(item: ProfileDisplayItem) -> dict[str, Any]:
         "icon_color": icon.color if item.in_preset else "#888888",
         "tooltip": tooltip,
     }
+
+
+def _build_profile_rows_from(
+    items: tuple[ProfileDisplayItem, ...],
+    group_expanded: dict[str, bool],
+    *,
+    active_profile_types: set[str],
+    search_query: str,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    grouped = _grouped_items(items)
+    if not grouped:
+        return rows
+    for group_key in _ordered_group_keys(grouped):
+        group_items = tuple(
+            item
+            for item in grouped.get(group_key, ())
+            if _profile_matches_filter(
+                item,
+                active_profile_types=active_profile_types,
+                search_query=search_query,
+            )
+        )
+        if not group_items:
+            continue
+        group_items = tuple(sorted(group_items, key=profile_display_sort_key))
+        group_name = str(group_items[0].group_name or group_key.title())
+        expanded = group_expanded.get(group_key, True)
+        rows.append({
+            "kind": "folder",
+            "group": group_key,
+            "group_name": group_name,
+            "collapsed": not expanded,
+            "count": len(group_items),
+        })
+        if not expanded:
+            continue
+        rows.extend(_row_for_profile(item) for item in group_items)
+    return rows
+
+
+def _profile_matches_filter(
+    item: ProfileDisplayItem,
+    *,
+    active_profile_types: set[str],
+    search_query: str,
+) -> bool:
+    return _profile_matches_type_filter(item, active_profile_types) and _profile_matches_search_query(item, search_query)
+
+
+def _profile_matches_type_filter(item: ProfileDisplayItem, active_profile_types: set[str]) -> bool:
+    if "all" in active_profile_types:
+        return True
+    match_lines = tuple(item.match_lines or ())
+    protocol = protocol_label_from_match_lines(match_lines).upper()
+    summary = _match_summary(item)
+    text = f"{item.display_name} {summary} {item.group}".lower()
+    if "tcp" in active_profile_types and "TCP" in protocol:
+        return True
+    if "udp" in active_profile_types and ("UDP" in protocol or "L7" in protocol):
+        return True
+    if "discord" in active_profile_types and "discord" in text:
+        return True
+    if "voice" in active_profile_types and is_voice_match(match_lines):
+        return True
+    if "games" in active_profile_types and "game" in text:
+        return True
+    return False
+
+
+def _profile_matches_search_query(item: ProfileDisplayItem, search_query: str) -> bool:
+    query = str(search_query or "")
+    if not query:
+        return True
+    search_text = _profile_search_text(item)
+    return all(part in search_text for part in query.split())
 
 
 def _single_inserted_row_index(
@@ -1020,4 +1124,4 @@ def _profile_search_text(item: ProfileDisplayItem) -> str:
     return " ".join(str(part or "") for part in parts).lower()
 
 
-__all__ = ["ProfileListModel"]
+__all__ = ["ProfileListModel", "ProfileListViewState", "build_profile_list_view_state"]

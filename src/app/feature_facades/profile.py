@@ -669,9 +669,10 @@ class ProfileFeature:
 
     def create_profile_list_load_worker(self, request_id: int, launch_method: str, parent=None):
         from profile.profile_list_loader import ProfileListLoadWorker
+        from profile.ui.profile_list_model import build_profile_list_view_state
 
         service = self._commands()._profile_preset_service(self, launch_method)
-        return ProfileListLoadWorker(request_id, service.list_profiles, parent)
+        return ProfileListLoadWorker(request_id, service.list_profiles, build_profile_list_view_state, parent)
 
     def create_profile_order_load_worker(self, request_id: int, launch_method: str, parent=None):
         from profile.profile_order_loader import ProfileOrderListLoadWorker
