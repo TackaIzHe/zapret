@@ -157,7 +157,7 @@
 
 --name=Tanki X
 --filter-tcp=80,443-65535
---hostlist=tankix.txt
+--hostlist=lists/tankix.txt
 --out-range=-n3
 --payload=all
 --lua-desync=multisplit:payload=all:pos=1:seqovl=681:seqovl_pattern=tls_google

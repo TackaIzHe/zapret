@@ -184,7 +184,7 @@
 
 --name=Tanki X
 --filter-tcp=80,443-65535
---hostlist=tankix.txt
+--hostlist=lists/tankix.txt
 --out-range=-n3
 --payload=all
 --lua-desync=fake:blob=fake_default_tls:tcp_seq=10000000:repeats=8:tls_mod=rnd,dupsid,sni=www.google.com
