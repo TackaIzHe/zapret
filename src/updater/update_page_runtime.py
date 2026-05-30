@@ -127,10 +127,12 @@ class UpdatePageRuntime:
         self._auto_check_load_runtime = OneShotWorkerRuntime()
         self._auto_check_save_runtime = OneShotWorkerRuntime()
         self._update_channel_open_runtime = OneShotWorkerRuntime()
+        self._cache_invalidate_runtime = OneShotWorkerRuntime()
         self._update_thread = None
         self._update_worker = None
         self._cleanup_in_progress = False
         self._auto_check_save_pending: bool | None = None
+        self._cache_invalidate_pending_context: str | None = None
         self._auto_check_user_changed = False
         self._dpi_restart_after = ""
 
@@ -185,6 +187,7 @@ class UpdatePageRuntime:
                 "_teardown_version_worker",
                 "_request_auto_check_load",
                 "request_open_update_channel",
+                "_request_update_cache_invalidate",
                 "_teardown_update_runtime",
             ),
             state_and_network_workflow_methods=(
@@ -220,6 +223,7 @@ class UpdatePageRuntime:
                 "_dpi_restart_runtime",
                 "_auto_check_load_runtime",
                 "_update_channel_open_runtime",
+                "_cache_invalidate_runtime",
                 "_update_thread",
                 "_update_worker",
             ),
@@ -251,6 +255,7 @@ class UpdatePageRuntime:
                 "_teardown_version_worker",
                 "_teardown_auto_check_load_worker",
                 "_teardown_update_channel_open_worker",
+                "_teardown_cache_invalidate_worker",
                 "_teardown_update_runtime",
             ),
             download_orchestration_candidates=(
@@ -387,12 +392,7 @@ class UpdatePageRuntime:
         self._view.hide_update_offer()
         self._reset_found_update_state()
 
-        from updater import invalidate_cache
-
-        invalidate_cache(CHANNEL)
-        log("🔄 Полная проверка всех серверов (ручная)", "🔄 UPDATE")
-
-        self.start_checks(telegram_only=False, skip_server_rate_limit=True)
+        self._request_update_cache_invalidate("manual_check")
 
     def install_update(self) -> None:
         self._cleanup_in_progress = False
@@ -404,10 +404,9 @@ class UpdatePageRuntime:
         self._download_state.is_installing = True
         log(f"Запуск установки обновления v{self._found_state.version}", "🔄 UPDATE")
 
-        from updater import invalidate_cache
+        self._request_update_cache_invalidate("install_update")
 
-        invalidate_cache(CHANNEL)
-
+    def _start_update_download(self) -> None:
         self._view.start_update_download(self._found_state.version)
         self._view.hide_update_status_card()
         self._view.set_update_check_enabled(False)
@@ -422,6 +421,50 @@ class UpdatePageRuntime:
             log(f"Ошибка при запуске обновления: {e}", "❌ ERROR")
             self._teardown_update_runtime()
             self._view.mark_update_download_failed(str(e)[:50])
+
+    def _request_update_cache_invalidate(self, context: str) -> None:
+        if self._cache_invalidate_runtime.is_running():
+            self._cache_invalidate_pending_context = str(context or "")
+            return
+        self._cache_invalidate_pending_context = None
+        self._cache_invalidate_runtime.start_qthread_worker(
+            worker_factory=lambda request_id: self._updater_feature.create_cache_invalidate_worker(
+                request_id,
+                channel=CHANNEL,
+                context=context,
+                parent=self._view.window(),
+            ),
+            on_loaded=self._on_update_cache_invalidate_finished,
+            on_failed=self._on_update_cache_invalidate_failed,
+            on_finished=self._on_update_cache_invalidate_worker_finished,
+        )
+
+    def _on_update_cache_invalidate_finished(self, request_id: int, context: str) -> None:
+        if not self._cache_invalidate_runtime.is_current(request_id, cleanup_in_progress=self._cleanup_in_progress):
+            return
+        self._continue_after_update_cache_invalidate(str(context or ""))
+
+    def _on_update_cache_invalidate_failed(self, request_id: int, context: str, error: str) -> None:
+        if not self._cache_invalidate_runtime.is_current(request_id, cleanup_in_progress=self._cleanup_in_progress):
+            return
+        log(f"Не удалось очистить кэш обновлений: {error}", "WARNING")
+        self._continue_after_update_cache_invalidate(str(context or ""))
+
+    def _continue_after_update_cache_invalidate(self, context: str) -> None:
+        if context == "manual_check":
+            log("🔄 Полная проверка всех серверов (ручная)", "🔄 UPDATE")
+            self.start_checks(telegram_only=False, skip_server_rate_limit=True)
+            return
+        if context == "install_update":
+            self._start_update_download()
+
+    def _on_update_cache_invalidate_worker_finished(self, _worker) -> None:
+        if self._cleanup_in_progress:
+            return
+        pending = self._cache_invalidate_pending_context
+        self._cache_invalidate_pending_context = None
+        if pending:
+            self._request_update_cache_invalidate(pending)
 
     def dismiss_update(self) -> None:
         version = self._resolve_dismissed_update_version()
@@ -516,6 +559,7 @@ class UpdatePageRuntime:
         self._teardown_auto_check_load_worker()
         self._teardown_auto_check_save_worker()
         self._teardown_update_channel_open_worker()
+        self._teardown_cache_invalidate_worker()
         self._teardown_update_runtime(wait_for_finish=True)
 
     def _resolve_idle_view_decision(self) -> UpdateIdleViewDecision:
@@ -755,6 +799,15 @@ class UpdatePageRuntime:
             warning_prefix="update_channel_open_worker",
         )
         self._update_channel_open_runtime.cancel()
+
+    def _teardown_cache_invalidate_worker(self) -> None:
+        self._cache_invalidate_pending_context = None
+        self._cache_invalidate_runtime.stop(
+            blocking=True,
+            log_fn=log,
+            warning_prefix="cache_invalidate_worker",
+        )
+        self._cache_invalidate_runtime.cancel()
 
     def _teardown_update_runtime(self, *, wait_for_finish: bool = False) -> None:
         thread = self._update_thread

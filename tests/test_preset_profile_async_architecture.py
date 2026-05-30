@@ -2718,6 +2718,29 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("create_update_install_worker", feature_source)
         self.assertIn("UpdateWorker", feature_source)
 
+    def test_updater_cache_invalidation_runs_through_worker(self) -> None:
+        settings_workers = importlib.import_module("updater.settings_workers")
+        update_runtime_cls = __import__("updater.update_page_runtime", fromlist=["UpdatePageRuntime"]).UpdatePageRuntime
+        updater_feature_cls = __import__("app.feature_facades.updater", fromlist=["UpdaterFeature"]).UpdaterFeature
+
+        manual_check_source = inspect.getsource(update_runtime_cls.request_manual_check)
+        install_source = inspect.getsource(update_runtime_cls.install_update)
+        runtime_source = inspect.getsource(update_runtime_cls)
+        feature_source = inspect.getsource(updater_feature_cls)
+
+        self.assertTrue(hasattr(settings_workers, "UpdaterCacheInvalidateWorker"))
+        worker_source = inspect.getsource(settings_workers.UpdaterCacheInvalidateWorker.run)
+
+        self.assertIn("_request_update_cache_invalidate", manual_check_source)
+        self.assertIn("_request_update_cache_invalidate", install_source)
+        self.assertNotIn("invalidate_cache", manual_check_source)
+        self.assertNotIn("invalidate_cache", install_source)
+        self.assertIn("_cache_invalidate_runtime", runtime_source)
+        self.assertIn("create_cache_invalidate_worker", runtime_source)
+        self.assertIn("create_cache_invalidate_worker", feature_source)
+        self.assertIn("invalidate_update_cache=self.invalidate_update_cache", feature_source)
+        self.assertIn("_invalidate_update_cache", worker_source)
+
     def test_updater_server_retry_without_dpi_runs_through_worker(self) -> None:
         retry_workers = importlib.import_module("updater.retry_workers")
         update_runtime_cls = __import__("updater.update_page_runtime", fromlist=["UpdatePageRuntime"]).UpdatePageRuntime

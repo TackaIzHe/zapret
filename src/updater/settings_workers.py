@@ -65,3 +65,32 @@ class UpdaterChannelOpenWorker(QThread):
             self.failed.emit(self._request_id, str(exc))
             return
         self.loaded.emit(self._request_id, result)
+
+
+class UpdaterCacheInvalidateWorker(QThread):
+    loaded = pyqtSignal(int, str)
+    failed = pyqtSignal(int, str, str)
+
+    def __init__(
+        self,
+        request_id: int,
+        *,
+        channel: str,
+        context: str,
+        invalidate_update_cache: Callable[[str], Any],
+        parent=None,
+    ):
+        super().__init__(parent)
+        self._request_id = int(request_id)
+        self._channel = str(channel or "")
+        self._context = str(context or "")
+        self._invalidate_update_cache = invalidate_update_cache
+
+    def run(self) -> None:
+        try:
+            self._invalidate_update_cache(self._channel)
+        except Exception as exc:
+            log(f"UpdaterCacheInvalidateWorker: кэш обновлений не очищен: {exc}", "ERROR")
+            self.failed.emit(self._request_id, self._context, str(exc))
+            return
+        self.loaded.emit(self._request_id, self._context)

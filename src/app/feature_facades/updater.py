@@ -46,6 +46,17 @@ class UpdaterFeature:
             parent=parent,
         )
 
+    def create_cache_invalidate_worker(self, request_id: int, *, channel: str, context: str, parent=None):
+        from updater.settings_workers import UpdaterCacheInvalidateWorker
+
+        return UpdaterCacheInvalidateWorker(
+            request_id,
+            channel=channel,
+            context=context,
+            invalidate_update_cache=self.invalidate_update_cache,
+            parent=parent,
+        )
+
     def create_server_retry_without_dpi_worker(self, request_id: int, *, is_any_running, shutdown_sync, parent=None):
         from updater.retry_workers import UpdaterServerRetryWithoutDpiWorker
 
@@ -85,6 +96,11 @@ class UpdaterFeature:
 
     def open_update_channel(self, channel: str):
         return self._commands().open_update_channel(channel)
+
+    def invalidate_update_cache(self, channel: str) -> None:
+        from updater import invalidate_cache
+
+        invalidate_cache(channel)
 
     def retry_server_check_without_dpi(self, *, is_any_running, shutdown_sync):
         return self._commands().retry_server_check_without_dpi(

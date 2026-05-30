@@ -40,6 +40,18 @@ class UpdaterSettingsWorkerArchitectureTests(unittest.TestCase):
         self.assertNotIn("updater_commands.open_update_channel", worker_source)
         self.assertNotIn("import updater.commands", worker_source)
 
+    def test_cache_invalidate_worker_receives_feature_action_callable(self) -> None:
+        feature_source = inspect.getsource(UpdaterFeature)
+        worker_source = inspect.getsource(settings_workers.UpdaterCacheInvalidateWorker)
+        worker_signature = inspect.signature(settings_workers.UpdaterCacheInvalidateWorker.__init__)
+
+        self.assertIn("create_cache_invalidate_worker", feature_source)
+        self.assertIn("invalidate_update_cache=self.invalidate_update_cache", feature_source)
+        self.assertIn("invalidate_update_cache", worker_signature.parameters)
+        self.assertIn("_invalidate_update_cache", worker_source)
+        self.assertNotIn("updater_commands.invalidate_cache", worker_source)
+        self.assertNotIn("import updater.commands", worker_source)
+
     def test_retry_workers_receive_feature_action_callables(self) -> None:
         feature_source = inspect.getsource(UpdaterFeature)
         retry_source = inspect.getsource(retry_workers.UpdaterServerRetryWithoutDpiWorker)
