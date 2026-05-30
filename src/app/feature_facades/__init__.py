@@ -1,69 +1,69 @@
 from __future__ import annotations
 
-from app.feature_facades.appearance import AppearanceFeature, build_appearance_feature
-from app.feature_facades.autostart import AutostartFeature, build_autostart_feature
-from app.feature_facades.blockcheck import BlockcheckFeature
-from app.feature_facades.blobs import BlobsFeature, build_blobs_feature
-from app.feature_facades.diagnostics import DiagnosticsFeature, build_diagnostics_feature
-from app.feature_facades.dns import DnsFeature, build_dns_feature
-from app.feature_facades.dpi_settings import DpiSettingsFeature, build_dpi_settings_feature
-from app.feature_facades.external import ExternalActionsFeature, build_external_actions_feature
-from app.feature_facades.hosts import HostsFeature, build_hosts_feature
-from app.feature_facades.lists import ListsFeature, build_lists_feature
-from app.feature_facades.logs import LogsFeature
-from app.feature_facades.orchestra import OrchestraFeature, build_orchestra_feature
-from app.feature_facades.premium import PremiumFeature, build_premium_feature
-from app.feature_facades.presets import PresetsFeature
-from app.feature_facades.profile import ProfileFeature
-from app.feature_facades.program_settings import ProgramSettingsFeature, build_program_settings_feature
-from app.feature_facades.runtime import RuntimeFeature, build_runtime_feature
-from app.feature_facades.telegram_proxy import TelegramProxyFeature, build_telegram_proxy_feature
-from app.feature_facades.tray import TrayFeature, build_tray_feature
-from app.feature_facades.updater import UpdaterFeature, build_updater_feature
-from app.feature_facades.window_geometry import WindowGeometryFeature, build_window_geometry_feature
+from importlib import import_module
 
 
-def build_logs_feature() -> LogsFeature:
+_EXPORTS: dict[str, tuple[str, str]] = {
+    "AppearanceFeature": ("app.feature_facades.appearance", "AppearanceFeature"),
+    "AutostartFeature": ("app.feature_facades.autostart", "AutostartFeature"),
+    "BlockcheckFeature": ("app.feature_facades.blockcheck", "BlockcheckFeature"),
+    "BlobsFeature": ("app.feature_facades.blobs", "BlobsFeature"),
+    "DiagnosticsFeature": ("app.feature_facades.diagnostics", "DiagnosticsFeature"),
+    "DnsFeature": ("app.feature_facades.dns", "DnsFeature"),
+    "DpiSettingsFeature": ("app.feature_facades.dpi_settings", "DpiSettingsFeature"),
+    "ExternalActionsFeature": ("app.feature_facades.external", "ExternalActionsFeature"),
+    "HostsFeature": ("app.feature_facades.hosts", "HostsFeature"),
+    "ListsFeature": ("app.feature_facades.lists", "ListsFeature"),
+    "LogsFeature": ("app.feature_facades.logs", "LogsFeature"),
+    "OrchestraFeature": ("app.feature_facades.orchestra", "OrchestraFeature"),
+    "PremiumFeature": ("app.feature_facades.premium", "PremiumFeature"),
+    "PresetsFeature": ("app.feature_facades.presets", "PresetsFeature"),
+    "ProfileFeature": ("app.feature_facades.profile", "ProfileFeature"),
+    "ProgramSettingsFeature": ("app.feature_facades.program_settings", "ProgramSettingsFeature"),
+    "RuntimeFeature": ("app.feature_facades.runtime", "RuntimeFeature"),
+    "TelegramProxyFeature": ("app.feature_facades.telegram_proxy", "TelegramProxyFeature"),
+    "TrayFeature": ("app.feature_facades.tray", "TrayFeature"),
+    "UpdaterFeature": ("app.feature_facades.updater", "UpdaterFeature"),
+    "WindowGeometryFeature": ("app.feature_facades.window_geometry", "WindowGeometryFeature"),
+    "build_appearance_feature": ("app.feature_facades.appearance", "build_appearance_feature"),
+    "build_autostart_feature": ("app.feature_facades.autostart", "build_autostart_feature"),
+    "build_blobs_feature": ("app.feature_facades.blobs", "build_blobs_feature"),
+    "build_diagnostics_feature": ("app.feature_facades.diagnostics", "build_diagnostics_feature"),
+    "build_dns_feature": ("app.feature_facades.dns", "build_dns_feature"),
+    "build_dpi_settings_feature": ("app.feature_facades.dpi_settings", "build_dpi_settings_feature"),
+    "build_external_actions_feature": ("app.feature_facades.external", "build_external_actions_feature"),
+    "build_hosts_feature": ("app.feature_facades.hosts", "build_hosts_feature"),
+    "build_lists_feature": ("app.feature_facades.lists", "build_lists_feature"),
+    "build_orchestra_feature": ("app.feature_facades.orchestra", "build_orchestra_feature"),
+    "build_premium_feature": ("app.feature_facades.premium", "build_premium_feature"),
+    "build_program_settings_feature": ("app.feature_facades.program_settings", "build_program_settings_feature"),
+    "build_runtime_feature": ("app.feature_facades.runtime", "build_runtime_feature"),
+    "build_telegram_proxy_feature": ("app.feature_facades.telegram_proxy", "build_telegram_proxy_feature"),
+    "build_tray_feature": ("app.feature_facades.tray", "build_tray_feature"),
+    "build_updater_feature": ("app.feature_facades.updater", "build_updater_feature"),
+    "build_window_geometry_feature": ("app.feature_facades.window_geometry", "build_window_geometry_feature"),
+}
+
+
+def __getattr__(name: str):
+    try:
+        module_name, attr_name = _EXPORTS[name]
+    except KeyError as exc:
+        raise AttributeError(name) from exc
+
+    value = getattr(import_module(module_name), attr_name)
+    globals()[name] = value
+    return value
+
+
+def build_logs_feature():
+    from app.feature_facades.logs import LogsFeature
+
     return LogsFeature()
 
-__all__ = [
-    "AutostartFeature",
-    "AppearanceFeature",
-    "BlockcheckFeature",
-    "BlobsFeature",
-    "DiagnosticsFeature",
-    "DnsFeature",
-    "DpiSettingsFeature",
-    "ExternalActionsFeature",
-    "HostsFeature",
-    "ListsFeature",
-    "LogsFeature",
-    "OrchestraFeature",
-    "PremiumFeature",
-    "PresetsFeature",
-    "ProfileFeature",
-    "ProgramSettingsFeature",
-    "RuntimeFeature",
-    "TelegramProxyFeature",
-    "TrayFeature",
-    "UpdaterFeature",
-    "WindowGeometryFeature",
-    "build_autostart_feature",
-    "build_appearance_feature",
-    "build_blobs_feature",
-    "build_diagnostics_feature",
-    "build_dns_feature",
-    "build_dpi_settings_feature",
-    "build_external_actions_feature",
-    "build_hosts_feature",
-    "build_lists_feature",
-    "build_logs_feature",
-    "build_orchestra_feature",
-    "build_premium_feature",
-    "build_program_settings_feature",
-    "build_runtime_feature",
-    "build_telegram_proxy_feature",
-    "build_tray_feature",
-    "build_updater_feature",
-    "build_window_geometry_feature",
-]
+
+def __dir__() -> list[str]:
+    return sorted((*globals().keys(), *_EXPORTS.keys()))
+
+
+__all__ = sorted((*_EXPORTS, "build_logs_feature"))
