@@ -150,12 +150,6 @@ class StartupCoordinator:
 
         phase_two_steps = [
             (
-                TASK_PROCESS_MONITOR,
-                "process monitor",
-                self.runtime.init_process_monitor,
-                None,
-            ),
-            (
                 TASK_THEME_MANAGER,
                 "theme manager",
                 self.window_shell.init_theme_manager,
@@ -180,6 +174,14 @@ class StartupCoordinator:
                 TASK_STARTUP_CORE_READY,
                 "startup core",
                 self._finalize_startup_core,
+                None,
+            )
+        )
+        phase_two_steps.append(
+            (
+                TASK_PROCESS_MONITOR,
+                "process monitor",
+                self.runtime.init_process_monitor,
                 None,
             )
         )

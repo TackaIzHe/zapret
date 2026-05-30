@@ -115,13 +115,13 @@ class StartupRuntimeSetupTests(unittest.TestCase):
             [
                 "runtime_api",
                 "runtime",
-                "process_monitor",
                 "autostart",
+                "process_monitor",
                 "core_startup",
             ],
         )
 
-    def test_core_startup_runs_in_background_after_deferred_autostart(self) -> None:
+    def test_background_startup_steps_run_after_deferred_autostart(self) -> None:
         from main import startup_coordinator
         from main.startup_coordinator import StartupCoordinator
 
@@ -188,7 +188,7 @@ class StartupRuntimeSetupTests(unittest.TestCase):
 
             self.assertEqual(
                 runtime.calls,
-                ["runtime_api", "runtime", "process_monitor", "theme", "autostart:zapret2_mode"],
+                ["runtime_api", "runtime", "theme", "autostart:zapret2_mode", "process_monitor"],
             )
             self.assertEqual(len(background_targets), 1)
             window_shell.mark_startup_post_init_done.assert_called_once()
@@ -203,9 +203,9 @@ class StartupRuntimeSetupTests(unittest.TestCase):
             [
                 "runtime_api",
                 "runtime",
-                "process_monitor",
                 "theme",
                 "autostart:zapret2_mode",
+                "process_monitor",
                 "core_startup",
             ],
         )
@@ -278,9 +278,9 @@ class StartupRuntimeSetupTests(unittest.TestCase):
             [
                 "runtime_api",
                 "runtime",
-                "process_monitor",
                 "theme",
                 "autostart:zapret2_mode",
+                "process_monitor",
             ],
         )
         self.assertEqual(len(background_targets), 1)
