@@ -5,7 +5,7 @@ import time
 from log.log import log
 
 
-def init_theme_manager(app) -> None:
+def init_theme_manager(app, *, appearance_feature) -> None:
     started_at = time.perf_counter()
 
     from PyQt6.QtWidgets import QApplication
@@ -14,6 +14,7 @@ def init_theme_manager(app) -> None:
     app.visual_state.theme_manager = ThemeManager(
         app=QApplication.instance(),
         widget=app,
+        create_theme_persist_worker=appearance_feature.create_theme_persist_worker,
     )
 
     current_theme = app.visual_state.theme_manager.current_theme

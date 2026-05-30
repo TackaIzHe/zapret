@@ -7,8 +7,6 @@ from dataclasses import dataclass
 from PyQt6.QtCore import QThread, QObject, pyqtSignal
 from PyQt6.QtGui import QPixmap, QColor, QIcon
 from config.config import THEME_FOLDER
-from settings import store as settings_store
-
 from log.log import log
 
 from typing import Optional
@@ -76,12 +74,6 @@ _THEME_DYNAMIC_LAYER_BEGIN = "/* __THEME_DYNAMIC_LAYER_BEGIN__ */"
 _THEME_DYNAMIC_LAYER_END = "/* __THEME_DYNAMIC_LAYER_END__ */"
 
 
-
-def set_selected_theme(theme_name: str) -> bool:
-    """Сохраняет выбранную тему в settings.json."""
-    result = settings_store.set_selected_theme(theme_name)
-    log(f"💾 Сохранение темы в settings.json: '{theme_name}' -> {result}", "DEBUG")
-    return result
 
 def _parse_rgb(rgb: str, *, default: tuple[int, int, int] = (0, 0, 0)) -> tuple[int, int, int]:
     try:
@@ -1204,29 +1196,13 @@ class ThemeBuildWorker(QObject):
             self.error.emit(str(e))
 
 
-class ThemePersistWorker(QThread):
-    saved = pyqtSignal(str, bool)
-    failed = pyqtSignal(str, str)
-
-    def __init__(self, theme_name: str, parent=None):
-        super().__init__(parent)
-        self._theme_name = str(theme_name or "").strip()
-
-    def run(self):
-        try:
-            result = set_selected_theme(self._theme_name)
-        except Exception as exc:
-            self.failed.emit(self._theme_name, str(exc))
-            return
-        self.saved.emit(self._theme_name, bool(result))
-
-
 class ThemeManager:
     """Класс для управления текущей темой приложения."""
 
-    def __init__(self, app, widget):
+    def __init__(self, app, widget, *, create_theme_persist_worker):
         self.app = app
         self.widget = widget
+        self._create_theme_persist_worker = create_theme_persist_worker
         self._cleanup_in_progress = False
 
         # Потоки для асинхронной генерации CSS темы
@@ -1236,7 +1212,7 @@ class ThemeManager:
         self._latest_theme_request_id = 0
         self._latest_requested_theme: str | None = None
         self._active_theme_build_jobs: dict[int, tuple[QThread, ThemeBuildWorker]] = {}
-        self._theme_persist_worker: Optional[ThemePersistWorker] = None
+        self._theme_persist_worker = None
         self._theme_persist_pending: str | None = None
         
 
@@ -1521,7 +1497,7 @@ class ThemeManager:
         self._start_theme_persist_worker(clean)
 
     def _start_theme_persist_worker(self, theme_name: str) -> None:
-        worker = ThemePersistWorker(theme_name, parent=self.widget)
+        worker = self._create_theme_persist_worker(theme_name, parent=self.widget)
         self._theme_persist_worker = worker
         worker.saved.connect(lambda saved_theme, _ok: log(f"💾 Тема сохранена: '{saved_theme}'", "DEBUG"))
         worker.failed.connect(lambda saved_theme, error: log(f"Не удалось сохранить тему '{saved_theme}': {error}", "WARNING"))

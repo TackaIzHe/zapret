@@ -776,6 +776,11 @@ def save_snowflakes_enabled(enabled: bool) -> AppearanceTogglePlan:
     store_warmed_premium_effects(None if current is None else current.garland_enabled, bool(enabled))
     return AppearanceTogglePlan(enabled=bool(enabled))
 
+def save_selected_theme(theme_name: str) -> bool:
+    from settings.store import set_selected_theme
+
+    return bool(set_selected_theme(str(theme_name or "").strip()))
+
 def build_premium_status_plan(
     *,
     is_premium: bool,
