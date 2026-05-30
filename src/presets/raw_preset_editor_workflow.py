@@ -206,8 +206,37 @@ def publish_raw_preset_content_changed(*, presets_feature, launch_method: str | 
 class RawPresetEditorController:
     """Действия raw preset editor без привязки к QWidget."""
 
-    def __init__(self, *, presets_feature, launch_method: str | None) -> None:
-        self._presets = presets_feature
+    def __init__(
+        self,
+        *,
+        save_preset_source_by_file_name,
+        get_preset_source_path_by_file_name,
+        get_preset_manifest_by_file_name,
+        open_preset_source_file,
+        rename_preset_by_file_name,
+        duplicate_preset_by_file_name,
+        export_preset_plain_text,
+        reset_preset_to_builtin_by_file_name,
+        delete_preset_by_file_name,
+        get_selected_source_preset_manifest,
+        get_selected_source_preset_file_name,
+        activate_preset_file,
+        publish_preset_content_changed,
+        launch_method: str | None,
+    ) -> None:
+        self._save_preset_source_by_file_name = save_preset_source_by_file_name
+        self._get_preset_source_path_by_file_name = get_preset_source_path_by_file_name
+        self._get_preset_manifest_by_file_name = get_preset_manifest_by_file_name
+        self._open_preset_source_file = open_preset_source_file
+        self._rename_preset_by_file_name = rename_preset_by_file_name
+        self._duplicate_preset_by_file_name = duplicate_preset_by_file_name
+        self._export_preset_plain_text = export_preset_plain_text
+        self._reset_preset_to_builtin_by_file_name = reset_preset_to_builtin_by_file_name
+        self._delete_preset_by_file_name = delete_preset_by_file_name
+        self._get_selected_source_preset_manifest = get_selected_source_preset_manifest
+        self._get_selected_source_preset_file_name = get_selected_source_preset_file_name
+        self._activate_preset_file = activate_preset_file
+        self._publish_preset_content_changed = publish_preset_content_changed
         self._launch_method = launch_method
 
     @property
@@ -215,34 +244,46 @@ class RawPresetEditorController:
         return self._launch_method
 
     def source_path(self, file_name: str) -> Path:
-        return get_raw_preset_source_path(
-            presets_feature=self._presets,
-            launch_method=self._launch_method,
-            file_name=file_name,
+        return self._get_preset_source_path_by_file_name(
+            self._launch_method,
+            str(file_name or "").strip(),
         )
 
     def manifest(self, file_name: str):
-        return get_raw_preset_manifest(
-            presets_feature=self._presets,
-            launch_method=self._launch_method,
-            file_name=file_name,
-        )
+        if not file_name:
+            return None
+        return self._get_preset_manifest_by_file_name(self._launch_method, file_name)
 
     def is_builtin(self, file_name: str) -> bool:
-        return is_builtin_raw_preset(
-            presets_feature=self._presets,
-            launch_method=self._launch_method,
-            file_name=file_name,
-        )
+        manifest = self.manifest(file_name)
+        return bool(manifest is not None and str(manifest.kind or "").strip().lower() == "builtin")
 
     def load_text(self, path: Path | None) -> RawPresetLoadResult:
         return load_raw_preset_text(path)
 
     def load_preset(self, file_name: str) -> RawPresetLoadResult:
-        return load_raw_preset_for_file(
-            presets_feature=self._presets,
-            launch_method=self._launch_method,
-            file_name=file_name,
+        candidate = str(file_name or "").strip()
+        if not candidate:
+            return load_raw_preset_text(None)
+
+        manifest = self.manifest(candidate)
+        resolved_file_name = candidate
+        display_name = Path(candidate).stem
+        origin = "user"
+        if manifest is not None:
+            resolved_file_name = str(manifest.file_name or candidate).strip() or candidate
+            display_name = str(manifest.name or display_name).strip() or display_name
+            origin = str(manifest.kind or "user").strip().lower() or "user"
+
+        path = self.source_path(resolved_file_name)
+        text_result = load_raw_preset_text(path)
+        return RawPresetLoadResult(
+            text=text_result.text,
+            footer_text=text_result.footer_text,
+            file_name=resolved_file_name,
+            display_name=display_name,
+            path=path,
+            origin=origin,
         )
 
     def create_load_worker(self, request_id: int, file_name: str, parent=None):
@@ -306,80 +347,66 @@ class RawPresetEditorController:
         source_text: str,
         publish_content_changed: bool = True,
     ) -> RawPresetSaveResult:
-        return save_raw_preset_text(
-            presets_feature=self._presets,
-            launch_method=self._launch_method,
-            file_name=file_name,
-            source_text=source_text,
+        if not file_name:
+            raise ValueError("Не удалось определить имя файла пресета для сохранения.")
+        updated = self._save_preset_source_by_file_name(
+            self._launch_method,
+            file_name,
+            source_text,
             publish_content_changed=publish_content_changed,
+        )
+        path = self._get_preset_source_path_by_file_name(
+            self._launch_method,
+            updated.file_name,
+        )
+        return RawPresetSaveResult(
+            updated=updated,
+            path=path,
+            footer_text=f"Сохранено {datetime.now().strftime('%H:%M:%S')}",
         )
 
     def publish_content_changed(self, file_name: str) -> None:
-        publish_raw_preset_content_changed(
-            presets_feature=self._presets,
-            launch_method=self._launch_method,
-            file_name=file_name,
-        )
+        if file_name:
+            self._publish_preset_content_changed(self._launch_method, file_name)
 
     def open_source_file(self, path: Path | None) -> None:
-        open_raw_preset_source_file(
-            presets_feature=self._presets,
-            path=path,
-        )
+        if path is not None:
+            self._open_preset_source_file(path)
 
     def rename(self, *, file_name: str, new_name: str):
-        return rename_raw_preset(
-            presets_feature=self._presets,
-            launch_method=self._launch_method,
-            file_name=file_name,
-            new_name=new_name,
-        )
+        if not file_name:
+            raise ValueError("Не удалось определить имя файла пресета для переименования.")
+        return self._rename_preset_by_file_name(self._launch_method, file_name, new_name)
 
     def duplicate(self, *, file_name: str, new_name: str):
-        return duplicate_raw_preset(
-            presets_feature=self._presets,
-            launch_method=self._launch_method,
-            file_name=file_name,
-            new_name=new_name,
-        )
+        if not file_name:
+            raise ValueError("Не удалось определить имя файла пресета для дублирования.")
+        return self._duplicate_preset_by_file_name(self._launch_method, file_name, new_name)
 
     def export(self, *, file_name: str, target_path: str) -> None:
-        export_raw_preset(
-            presets_feature=self._presets,
-            launch_method=self._launch_method,
-            file_name=file_name,
-            target_path=target_path,
-        )
+        if not file_name:
+            raise ValueError("Не удалось определить имя файла пресета для экспорта.")
+        self._export_preset_plain_text(self._launch_method, file_name, target_path)
 
     def reset_to_builtin(self, *, file_name: str):
-        return reset_raw_preset_to_builtin(
-            presets_feature=self._presets,
-            launch_method=self._launch_method,
-            file_name=file_name,
-        )
+        if not file_name:
+            raise ValueError("Не удалось определить имя файла пресета для сброса.")
+        return self._reset_preset_to_builtin_by_file_name(self._launch_method, file_name)
 
     def delete(self, *, file_name: str) -> None:
-        delete_raw_preset(
-            presets_feature=self._presets,
-            launch_method=self._launch_method,
-            file_name=file_name,
-        )
+        if not file_name:
+            raise ValueError("Не удалось определить имя файла пресета для удаления.")
+        self._delete_preset_by_file_name(self._launch_method, file_name)
 
     def selected_name(self) -> str:
-        return get_selected_raw_preset_name(
-            presets_feature=self._presets,
-            launch_method=self._launch_method,
-        )
+        selected = self._get_selected_source_preset_manifest(self._launch_method)
+        return (selected.name if selected is not None else "").strip()
 
     def selected_file_name(self) -> str:
-        return get_selected_raw_preset_file_name(
-            presets_feature=self._presets,
-            launch_method=self._launch_method,
-        )
+        return (self._get_selected_source_preset_file_name(self._launch_method) or "").strip()
 
     def activate(self, *, file_name: str) -> bool:
-        return activate_raw_preset(
-            presets_feature=self._presets,
-            launch_method=self._launch_method,
-            file_name=file_name,
-        )
+        if not file_name:
+            return False
+        self._activate_preset_file(self._launch_method, file_name)
+        return True

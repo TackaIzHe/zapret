@@ -156,7 +156,19 @@ def build_preset_raw_editor_page_kwargs(
 ) -> dict:
     method = ZAPRET2_MODE if page_name == PageName.ZAPRET2_PRESET_RAW_EDITOR else ZAPRET1_MODE
     return {
-        "presets_feature": presets_feature,
+        "save_preset_source_by_file_name": presets_feature.save_preset_source_by_file_name,
+        "get_preset_source_path_by_file_name": presets_feature.get_preset_source_path_by_file_name,
+        "get_preset_manifest_by_file_name": presets_feature.get_preset_manifest_by_file_name,
+        "open_preset_source_file": presets_feature.open_preset_source_file,
+        "rename_preset_by_file_name": presets_feature.rename_preset_by_file_name,
+        "duplicate_preset_by_file_name": presets_feature.duplicate_preset_by_file_name,
+        "export_preset_plain_text": presets_feature.export_preset_plain_text,
+        "reset_preset_to_builtin_by_file_name": presets_feature.reset_preset_to_builtin_by_file_name,
+        "delete_preset_by_file_name": presets_feature.delete_preset_by_file_name,
+        "get_selected_source_preset_manifest": presets_feature.get_selected_source_preset_manifest,
+        "get_selected_source_preset_file_name": presets_feature.get_selected_source_preset_file_name,
+        "activate_preset_file": presets_feature.activate_preset_file,
+        "publish_preset_content_changed": presets_feature.publish_preset_content_changed,
         "launch_method": method,
         "title": "Пресет Zapret 2" if method == ZAPRET2_MODE else "Пресет Zapret 1",
         "runtime_feature": runtime_feature,

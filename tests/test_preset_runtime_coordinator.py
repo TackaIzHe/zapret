@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from PyQt6.QtWidgets import QApplication
 
@@ -280,7 +280,19 @@ class PresetRuntimeCoordinatorTests(unittest.TestCase):
 
         feature = _PresetsFeature()
         controller = RawPresetEditorController(
-            presets_feature=feature,
+            save_preset_source_by_file_name=feature.save_preset_source_by_file_name,
+            get_preset_source_path_by_file_name=feature.get_preset_source_path_by_file_name,
+            get_preset_manifest_by_file_name=Mock(),
+            open_preset_source_file=Mock(),
+            rename_preset_by_file_name=Mock(),
+            duplicate_preset_by_file_name=Mock(),
+            export_preset_plain_text=Mock(),
+            reset_preset_to_builtin_by_file_name=Mock(),
+            delete_preset_by_file_name=Mock(),
+            get_selected_source_preset_manifest=Mock(return_value=None),
+            get_selected_source_preset_file_name=Mock(return_value=""),
+            activate_preset_file=Mock(),
+            publish_preset_content_changed=feature.publish_preset_content_changed,
             launch_method=ZAPRET2_MODE,
         )
 
