@@ -90,6 +90,11 @@ class UserPresetsRowsWorkerArchitectureTests(unittest.TestCase):
             inspect.getsource(runtime_module.UserPresetsListingApi),
         )
 
+    def test_user_presets_page_has_no_legacy_selected_source_reader(self) -> None:
+        from presets.ui.common.user_presets_page import UserPresetsPageBase
+
+        self.assertFalse(hasattr(UserPresetsPageBase, "_get_selected_source_preset_file_name_light"))
+
 
 if __name__ == "__main__":
     unittest.main()

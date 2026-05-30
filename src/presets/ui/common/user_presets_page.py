@@ -246,9 +246,6 @@ class UserPresetsPageBase(BasePage):
     def _listing_api(self):
         return self._page_runtime_api().listing
 
-    def _get_selected_source_preset_file_name_light(self) -> str:
-        return self._listing_api().get_selected_source_preset_file_name_light()
-
     def _resolve_display_name(self, reference: str) -> str:
         candidate = str(reference or "").strip()
         if not candidate:
