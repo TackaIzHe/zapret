@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PyQt6.QtCore import QThread, QTimer
+from PyQt6.QtCore import QTimer
 
 import diagnostics.page_plans as connection_page_plans
 from app.ui_texts import tr as tr_catalog
@@ -64,7 +64,6 @@ def refresh_test_combo_items(*, combo, language: str) -> None:
 
 def start_connection_test(
     *,
-    page,
     is_testing: bool,
     ui_language: str,
     test_combo,
@@ -73,9 +72,6 @@ def start_connection_test(
     set_status_callback,
     status_badge,
     progress_badge,
-    create_worker_fn,
-    worker_update_handler,
-    worker_finished_handler,
 ) -> dict | None:
     if is_testing:
         result_text.append("ℹ️ Тест уже выполняется. Дождитесь завершения.")
@@ -103,38 +99,26 @@ def start_connection_test(
     status_badge.set_status(plan.status_badge_text, plan.status_tone)
     progress_badge.set_status(plan.progress_badge_text, plan.status_tone)
 
-    worker_thread = QThread(page)
-    worker = create_worker_fn(plan.test_type)
-    worker.moveToThread(worker_thread)
-    worker_thread.started.connect(worker.run)
-    worker.update_signal.connect(worker_update_handler)
-    worker.finished_signal.connect(worker_finished_handler)
-    worker.finished_signal.connect(worker_thread.quit)
-    worker.finished_signal.connect(worker.deleteLater)
-    worker_thread.finished.connect(worker_thread.deleteLater)
-    worker_thread.start()
-
     return {
         "cleanup_in_progress": False,
         "finish_mode": "completed",
-        "worker": worker,
-        "worker_thread": worker_thread,
         "is_testing": True,
+        "test_type": plan.test_type,
     }
 
 
 def stop_connection_test(
     *,
     page,
-    worker,
-    worker_thread,
+    runtime,
     stop_check_timer,
     append_callback,
     set_status_callback,
     stop_btn,
     worker_finished_handler,
 ) -> tuple[dict | None, object | None]:
-    if not worker or not worker_thread:
+    worker = getattr(runtime, "worker", None)
+    if not worker or not runtime.is_running():
         return None, stop_check_timer
     if stop_check_timer is not None:
         return None, stop_check_timer
@@ -153,7 +137,7 @@ def stop_connection_test(
         attempts["count"] += 1
         poll_plan = connection_page_plans.build_stop_poll_plan(
             attempt_count=attempts["count"],
-            thread_running=bool(worker_thread and worker_thread.isRunning()),
+            thread_running=runtime.is_running(),
             max_attempts=plan.max_attempts,
             finalize_delay_ms=plan.finalize_delay_ms,
         )
@@ -166,8 +150,10 @@ def stop_connection_test(
             timer.stop()
             if poll_plan.append_line:
                 append_callback(poll_plan.append_line)
-            if worker_thread:
-                worker_thread.terminate()
+            target = getattr(runtime, "thread", None) or getattr(runtime, "worker", None)
+            terminate = getattr(target, "terminate", None)
+            if callable(terminate):
+                terminate()
                 QTimer.singleShot(poll_plan.finalize_delay_ms, worker_finished_handler)
 
     timer.timeout.connect(check_thread)
@@ -199,8 +185,7 @@ def finish_connection_test(
     *,
     cleanup_in_progress: bool,
     is_testing: bool,
-    worker,
-    worker_thread,
+    runtime,
     stop_check_timer,
     finish_mode: str,
     apply_interaction_state_callback,
@@ -211,14 +196,14 @@ def finish_connection_test(
 ) -> dict | None:
     if cleanup_in_progress:
         return None
-    if not is_testing and worker is None and worker_thread is None:
+    if not is_testing and not runtime.is_running():
         return None
 
     if stop_check_timer is not None:
         stop_check_timer.stop()
         stop_check_timer.deleteLater()
 
-    release_worker_resources(worker)
+    release_worker_resources(getattr(runtime, "worker", None))
 
     if finish_mode == "stopped":
         plan = connection_page_plans.build_stopped_finish_plan()
@@ -241,8 +226,6 @@ def finish_connection_test(
     return {
         "finish_mode": "completed",
         "is_testing": False,
-        "worker": None,
-        "worker_thread": None,
         "stop_check_timer": None,
     }
 
@@ -321,8 +304,7 @@ def cleanup_connection_runtime(
     cleanup_in_progress: bool,
     finish_mode: str,
     stop_check_timer,
-    worker,
-    worker_thread,
+    runtime,
     log_debug,
     log_warning,
 ) -> dict:
@@ -332,26 +314,26 @@ def cleanup_connection_runtime(
         stop_check_timer.deleteLater()
         stop_check_timer = None
 
+    worker = getattr(runtime, "worker", None)
+    thread_running = runtime.is_running()
     cleanup_plan = connection_page_plans.build_cleanup_plan(
         has_worker=worker is not None,
-        thread_running=bool(worker_thread and worker_thread.isRunning()),
+        thread_running=thread_running,
     )
-    if cleanup_plan.should_quit_thread and worker_thread and worker_thread.isRunning():
+    if cleanup_plan.should_quit_thread and thread_running:
         log_debug("Останавливаем connection test worker...")
-        if cleanup_plan.should_request_stop and worker:
-            worker.stop_gracefully()
-        worker_thread.quit()
-        if not worker_thread.wait(cleanup_plan.wait_timeout_ms):
-            log_warning("⚠ Connection test worker не завершился, принудительно завершаем")
-            if cleanup_plan.should_terminate:
-                worker_thread.terminate()
-                worker_thread.wait(cleanup_plan.terminate_wait_ms)
+    runtime.stop(
+        blocking=True,
+        wait_timeout_ms=cleanup_plan.wait_timeout_ms,
+        terminate_wait_ms=cleanup_plan.terminate_wait_ms,
+        log_fn=lambda text, level="DEBUG": log_warning(text) if str(level).upper() == "WARNING" else log_debug(text),
+        warning_prefix="connection_test_worker",
+    )
     release_worker_resources(worker)
+    runtime.cancel()
     return {
         "cleanup_in_progress": True,
         "finish_mode": "completed",
         "is_testing": False,
-        "worker": None,
-        "worker_thread": None,
         "stop_check_timer": None,
     }

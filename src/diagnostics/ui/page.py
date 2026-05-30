@@ -47,8 +47,6 @@ class ConnectionTestPage(BasePage):
         )
         self._diagnostics = diagnostics_feature
         self.is_testing = False
-        self.worker = None
-        self.worker_thread = None
         self.stop_check_timer = None
         self._actions_title_label = None
         self._actions_bar = None
@@ -56,6 +54,7 @@ class ConnectionTestPage(BasePage):
         self._pending_start_focus = False
         self._finish_mode = "completed"
         self._cleanup_in_progress = False
+        self._connection_test_runtime = OneShotWorkerRuntime()
         self._support_prepare_runtime = OneShotWorkerRuntime()
 
         # Контейнер с ограниченной шириной, чтобы не расползалось за края
@@ -181,7 +180,6 @@ class ConnectionTestPage(BasePage):
     # ──────────────────────────────────────────────────────────────
     def start_test(self):
         state = start_connection_test(
-            page=self,
             is_testing=self.is_testing,
             ui_language=self._ui_language,
             test_combo=self.test_combo,
@@ -190,23 +188,32 @@ class ConnectionTestPage(BasePage):
             set_status_callback=self._set_status,
             status_badge=self.status_badge,
             progress_badge=self.progress_badge,
-            create_worker_fn=self._diagnostics.create_connection_test_worker,
-            worker_update_handler=self._on_worker_update,
-            worker_finished_handler=self._on_worker_finished,
         )
         if state is None:
             return
         self._cleanup_in_progress = state["cleanup_in_progress"]
         self._finish_mode = state["finish_mode"]
-        self.worker = state["worker"]
-        self.worker_thread = state["worker_thread"]
         self.is_testing = state["is_testing"]
+        self._connection_test_runtime.start_qobject_worker(
+            parent=self,
+            worker_factory=lambda _request_id: self._diagnostics.create_connection_test_worker(
+                state["test_type"],
+            ),
+            on_finished=self._on_connection_test_worker_finished,
+            bind_worker=self._bind_connection_test_worker,
+        )
+
+    def _bind_connection_test_worker(self, worker) -> None:
+        worker.update_signal.connect(self._on_worker_update)
+        worker.finished_signal.connect(self._on_worker_finished)
+
+    def _on_connection_test_worker_finished(self, _request_id: int, _thread) -> None:
+        pass
 
     def stop_test(self):
         state, timer = stop_connection_test(
             page=self,
-            worker=self.worker,
-            worker_thread=self.worker_thread,
+            runtime=self._connection_test_runtime,
             stop_check_timer=self.stop_check_timer,
             append_callback=self._append,
             set_status_callback=self._set_status,
@@ -236,8 +243,7 @@ class ConnectionTestPage(BasePage):
         state = finish_connection_test(
             cleanup_in_progress=self._cleanup_in_progress,
             is_testing=self.is_testing,
-            worker=self.worker,
-            worker_thread=self.worker_thread,
+            runtime=self._connection_test_runtime,
             stop_check_timer=self.stop_check_timer,
             finish_mode=self._finish_mode,
             apply_interaction_state_callback=self._apply_interaction_state,
@@ -250,8 +256,6 @@ class ConnectionTestPage(BasePage):
             return
         self._finish_mode = state["finish_mode"]
         self.is_testing = state["is_testing"]
-        self.worker = state["worker"]
-        self.worker_thread = state["worker_thread"]
         self.stop_check_timer = state["stop_check_timer"]
 
     @staticmethod
@@ -360,16 +364,13 @@ class ConnectionTestPage(BasePage):
                 cleanup_in_progress=self._cleanup_in_progress,
                 finish_mode=self._finish_mode,
                 stop_check_timer=self.stop_check_timer,
-                worker=self.worker,
-                worker_thread=self.worker_thread,
+                runtime=self._connection_test_runtime,
                 log_debug=lambda text: log(text, "DEBUG"),
                 log_warning=lambda text: log(text, "WARNING"),
             )
             self._cleanup_in_progress = state["cleanup_in_progress"]
             self._finish_mode = state["finish_mode"]
             self.is_testing = state["is_testing"]
-            self.worker = state["worker"]
-            self.worker_thread = state["worker_thread"]
             self.stop_check_timer = state["stop_check_timer"]
             self._support_prepare_runtime.stop(
                 blocking=False,

@@ -15,6 +15,7 @@ class ConnectionTestWorker(QObject):
     """Рабочий поток для выполнения тестов соединения."""
     update_signal = pyqtSignal(str)
     finished_signal = pyqtSignal()
+    finished = pyqtSignal()
     
     def __init__(self, test_type="all"):
         super().__init__()
@@ -47,6 +48,9 @@ class ConnectionTestWorker(QObject):
         """Мягкая остановка теста."""
         self.log_message("⚠️ Получен запрос на остановку теста...", allow_after_stop=True)
         self._stop_requested = True
+
+    def stop(self) -> None:
+        self.stop_gracefully()
     
     def is_stop_requested(self):
         """Проверяет, запрошена ли остановка"""
@@ -871,3 +875,4 @@ class ConnectionTestWorker(QObject):
         finally:
             self._close_logger()
             self.finished_signal.emit()
+            self.finished.emit()

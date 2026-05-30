@@ -4077,6 +4077,24 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("prepare_connection_support", worker_source)
         self.assertFalse(hasattr(diagnostics_runtime_helpers, "open_support_with_log"))
 
+    def test_connection_test_run_uses_page_worker_runtime(self) -> None:
+        page_source = inspect.getsource(ConnectionTestPage)
+        start_source = inspect.getsource(ConnectionTestPage.start_test)
+        stop_source = inspect.getsource(ConnectionTestPage.stop_test)
+        cleanup_source = inspect.getsource(ConnectionTestPage.cleanup)
+        runtime_source = inspect.getsource(diagnostics_runtime_helpers.start_connection_test)
+        cleanup_runtime_source = inspect.getsource(diagnostics_runtime_helpers.cleanup_connection_runtime)
+
+        self.assertIn("_connection_test_runtime", page_source)
+        self.assertIn("OneShotWorkerRuntime", page_source)
+        self.assertIn("start_qobject_worker", start_source)
+        self.assertIn("stop_connection_test", stop_source)
+        self.assertIn("runtime=self._connection_test_runtime", cleanup_source)
+        self.assertIn("runtime.stop", cleanup_runtime_source)
+        self.assertNotIn("self.worker_thread", page_source)
+        self.assertNotIn("QThread", runtime_source)
+        self.assertNotIn("worker_thread.start()", runtime_source)
+
 
 if __name__ == "__main__":
     unittest.main()
