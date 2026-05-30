@@ -83,6 +83,16 @@ class HostsPageController:
             **kwargs,
         )
 
+    def create_catalog_refresh_worker(self, request_id: int, *, trigger: str, parent=None):
+        from hosts.catalog_refresh_worker import HostsCatalogRefreshWorker
+
+        return HostsCatalogRefreshWorker(
+            request_id,
+            trigger,
+            get_catalog_signature=self._hosts.get_catalog_signature,
+            parent=parent,
+        )
+
     def get_catalog_signature(self):
         return self._hosts.get_catalog_signature()
 

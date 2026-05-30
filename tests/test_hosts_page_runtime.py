@@ -66,6 +66,26 @@ class HostsPageRuntimeTests(unittest.TestCase):
             self.assertIn("_request_user_selection_save", source)
             self.assertNotIn("_controller.save_user_selection", source)
 
+    def test_catalog_refresh_signature_runs_through_worker(self) -> None:
+        from hosts.page_controller import HostsPageController
+        from hosts.ui.page import HostsPage
+        import hosts.catalog_refresh_worker as catalog_refresh_worker
+
+        controller_source = inspect.getsource(HostsPageController)
+        page_init_source = inspect.getsource(HostsPage.__init__)
+        refresh_source = inspect.getsource(HostsPage._refresh_catalog_if_needed)
+        worker_source = inspect.getsource(catalog_refresh_worker.HostsCatalogRefreshWorker)
+
+        self.assertIn("create_catalog_refresh_worker", controller_source)
+        self.assertIn("_catalog_refresh_runtime", page_init_source)
+        self.assertIn("start_qthread_worker", refresh_source)
+        self.assertIn("create_catalog_refresh_worker", refresh_source)
+        self.assertNotIn("get_catalog_signature_fn=self._controller.get_catalog_signature", refresh_source)
+        self.assertIn("get_catalog_signature=self._hosts.get_catalog_signature", controller_source)
+        self.assertIn("_get_catalog_signature", worker_source)
+        self.assertNotIn("hosts.commands", worker_source)
+        self.assertNotIn("self._controller", worker_source)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -52,9 +52,32 @@ def refresh_catalog_if_needed(
     log_info: Callable[[str], None],
 ):
     sig = get_catalog_signature_fn()
-    refresh_plan = hosts_page_plans.build_catalog_refresh_plan(
+    return apply_catalog_refresh_signature(
         current_signature=current_signature,
         new_signature=sig,
+        trigger=trigger,
+        services_layout_exists=services_layout_exists,
+        page_visible=page_visible,
+        invalidate_catalog_cache=invalidate_catalog_cache,
+        rebuild_services_selectors=rebuild_services_selectors,
+        log_info=log_info,
+    )
+
+
+def apply_catalog_refresh_signature(
+    *,
+    current_signature,
+    new_signature,
+    trigger: str,
+    services_layout_exists: bool,
+    page_visible: bool,
+    invalidate_catalog_cache: Callable[[], None],
+    rebuild_services_selectors: Callable[[], None],
+    log_info: Callable[[str], None],
+):
+    refresh_plan = hosts_page_plans.build_catalog_refresh_plan(
+        current_signature=current_signature,
+        new_signature=new_signature,
         trigger=trigger,
         services_layout_exists=services_layout_exists,
     )

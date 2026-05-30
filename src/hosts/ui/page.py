@@ -32,9 +32,9 @@ from hosts.ui.selection_workflow import (
     apply_profile_selection_ui,
 )
 from hosts.catalog_workflow import (
+    apply_catalog_refresh_signature,
     ensure_catalog_watcher,
     reconcile_catalog_after_hidden_refresh,
-    refresh_catalog_if_needed,
 )
 from hosts.ui.access_workflow import (
     apply_restore_hosts_permissions_result_flow,
@@ -150,6 +150,8 @@ class HostsPage(BasePage):
         self._worker = None
         self._thread = None
         self._services_catalog_runtime = OneShotWorkerRuntime()
+        self._catalog_refresh_runtime = OneShotWorkerRuntime()
+        self._catalog_refresh_pending_trigger = ""
         self._selection_load_runtime = OneShotWorkerRuntime()
         self._selection_load_show_access_errors = False
         self._selection_save_runtime = OneShotWorkerRuntime()
@@ -435,12 +437,33 @@ class HostsPage(BasePage):
             self._catalog_dirty = False
 
     def _refresh_catalog_if_needed(self, trigger: str) -> None:
-        result = refresh_catalog_if_needed(
+        if self._catalog_refresh_runtime.is_running():
+            self._catalog_refresh_pending_trigger = str(trigger or "watcher")
+            return
+        self._catalog_refresh_pending_trigger = ""
+        self._catalog_refresh_runtime.start_qthread_worker(
+            worker_factory=lambda request_id: self._controller.create_catalog_refresh_worker(
+                request_id,
+                trigger=str(trigger or "watcher"),
+                parent=self,
+            ),
+            on_loaded=self._on_catalog_refresh_loaded,
+            on_failed=self._on_catalog_refresh_failed,
+            on_finished=self._on_catalog_refresh_worker_finished,
+        )
+
+    def _on_catalog_refresh_loaded(self, request_id: int, trigger: str, catalog_sig) -> None:
+        if not self._catalog_refresh_runtime.is_current(
+            request_id,
+            cleanup_in_progress=self._cleanup_in_progress,
+        ):
+            return
+        result = apply_catalog_refresh_signature(
             current_signature=self._catalog_sig,
-            trigger=trigger,
+            new_signature=catalog_sig,
+            trigger=str(trigger or "watcher"),
             services_layout_exists=self._services_layout is not None,
             page_visible=self.isVisible(),
-            get_catalog_signature_fn=self._controller.get_catalog_signature,
             invalidate_catalog_cache=self._controller.invalidate_catalog_cache,
             rebuild_services_selectors=self._rebuild_services_selectors,
             log_info=lambda message: log(message, "INFO"),
@@ -449,6 +472,22 @@ class HostsPage(BasePage):
             return
         self._catalog_dirty = bool(result["catalog_dirty"])
         self._catalog_sig = result["catalog_sig"]
+
+    def _on_catalog_refresh_failed(self, request_id: int, trigger: str, error: str) -> None:
+        if not self._catalog_refresh_runtime.is_current(
+            request_id,
+            cleanup_in_progress=self._cleanup_in_progress,
+        ):
+            return
+        log(f"Hosts: ошибка проверки каталога ({trigger}): {error}", "ERROR")
+
+    def _on_catalog_refresh_worker_finished(self, _worker) -> None:
+        if self._cleanup_in_progress:
+            return
+        trigger = str(self._catalog_refresh_pending_trigger or "").strip()
+        self._catalog_refresh_pending_trigger = ""
+        if trigger:
+            self._refresh_catalog_if_needed(trigger)
 
     def _services_add_section_title(self, text: str) -> None:
         if self._services_layout is None:
@@ -1131,6 +1170,11 @@ class HostsPage(BasePage):
                 log_fn=log,
             )
             self._stop_services_catalog_worker(blocking=True)
+            self._catalog_refresh_runtime.stop(
+                blocking=True,
+                log_fn=log,
+                warning_prefix="Hosts catalog refresh worker",
+            )
             self._selection_load_runtime.stop(
                 blocking=True,
                 log_fn=log,
