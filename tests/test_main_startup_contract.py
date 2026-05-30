@@ -1138,10 +1138,18 @@ class StartupRuntimeSetupTests(unittest.TestCase):
 
         self.assertNotIn("from app.feature_facades import", top_level)
         self.assertIn(
-            "from app.feature_facades import PresetsFeature, ProfileFeature",
+            "from app.feature_facades.presets import PresetsFeature",
             inspect.getsource(feature_assembly.build_preset_profile_features),
         )
         self.assertIn(
+            "from app.feature_facades.profile import ProfileFeature",
+            inspect.getsource(feature_assembly.build_preset_profile_features),
+        )
+        self.assertIn(
+            "from app.feature_facades.blockcheck import BlockcheckFeature",
+            inspect.getsource(feature_assembly.build_app_features),
+        )
+        self.assertNotIn(
             "from app.feature_facades import (",
             inspect.getsource(feature_assembly.build_app_features),
         )
