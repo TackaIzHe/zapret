@@ -164,7 +164,10 @@ class ProfilesList(QWidget):
         return self._model.apply_folder_state(folder_state)
 
     def set_search_query(self, query: str) -> None:
-        self._search_query = str(query or "")
+        value = str(query or "")
+        if self._search_query == value:
+            return
+        self._search_query = value
         self._model.set_search_query(self._search_query)
 
     def _on_view_clicked(self, index) -> None:

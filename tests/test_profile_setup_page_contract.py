@@ -584,6 +584,15 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         self.assertIn("def set_smooth_scroll_enabled", list_source)
         self.assertIn("apply_smooth_scroll_mode(self._view, enabled)", list_source)
 
+    def test_profile_list_skips_duplicate_search_query(self) -> None:
+        profiles_list = ProfilesList.__new__(ProfilesList)
+        profiles_list._search_query = "youtube"
+        profiles_list._model = SimpleNamespace(set_search_query=Mock())
+
+        ProfilesList.set_search_query(profiles_list, "youtube")
+
+        profiles_list._model.set_search_query.assert_not_called()
+
     def test_profile_list_reserves_space_for_visible_fluent_scrollbar(self) -> None:
         list_source = inspect.getsource(ProfilesList._build_ui)
 
