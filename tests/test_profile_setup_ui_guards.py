@@ -159,6 +159,17 @@ class _LoadWorker:
         self.start_calls += 1
 
 
+class _SaveWorker:
+    def __init__(self) -> None:
+        self.saved = _Signal()
+        self.failed = _Signal()
+        self.finished = _Signal()
+        self.start_calls = 0
+
+    def start(self) -> None:
+        self.start_calls += 1
+
+
 class ProfileSetupUiGuardTests(unittest.TestCase):
     def test_text_update_skips_duplicate_value(self) -> None:
         from profile.ui.profile_setup_page import set_widget_text_if_changed
@@ -392,6 +403,33 @@ class ProfileSetupUiGuardTests(unittest.TestCase):
         self.assertEqual(page._raw_profile_text.read_only_calls, [])
         self.assertEqual(page._raw_profile_save_button.enabled_calls, [])
         page._apply_feedback_buttons.assert_called_once_with(payload)
+
+    def test_raw_profile_save_skips_duplicate_button_disable(self) -> None:
+        from unittest.mock import Mock
+
+        from profile.ui.profile_setup_page import ProfileSetupPageBase
+
+        worker = _SaveWorker()
+        page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        page._loading = False
+        page._profile_key = "profile-1"
+        page._raw_profile_text = _PlainTextWidget("--new\n")
+        page._raw_profile_save_worker = None
+        page._raw_profile_save_request_id = 0
+        page._raw_profile_save_button = _BoolWidget(enabled=False)
+        page._controller = Mock()
+        page._controller.create_raw_profile_save_worker.return_value = worker
+
+        ProfileSetupPageBase._on_raw_profile_save_clicked(page)
+
+        self.assertEqual(page._raw_profile_save_button.enabled_calls, [])
+        page._controller.create_raw_profile_save_worker.assert_called_once_with(
+            1,
+            "profile-1",
+            "--new\n",
+            parent=page,
+        )
+        self.assertEqual(worker.start_calls, 1)
 
     def test_editable_settings_skip_duplicate_text_and_visibility(self) -> None:
         from types import SimpleNamespace

@@ -2049,7 +2049,7 @@ class ProfileSetupPageBase(BasePage):
         self._raw_profile_save_request_id += 1
         request_id = self._raw_profile_save_request_id
         if self._raw_profile_save_button is not None:
-            self._raw_profile_save_button.setEnabled(False)
+            set_widget_enabled_if_changed(self._raw_profile_save_button, False)
         worker = self._controller.create_raw_profile_save_worker(
             request_id,
             self._profile_key,
@@ -2085,7 +2085,7 @@ class ProfileSetupPageBase(BasePage):
         if request_id != self._raw_profile_save_request_id:
             return
         if self._raw_profile_save_button is not None:
-            self._raw_profile_save_button.setEnabled(True)
+            set_widget_enabled_if_changed(self._raw_profile_save_button, True)
         log(f"{self.__class__.__name__}: не удалось сохранить сырой текст profile: {error}", "ERROR")
         InfoBar.error(
             title="Ошибка",
