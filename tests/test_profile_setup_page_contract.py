@@ -593,6 +593,15 @@ class ProfileSetupPageContractTests(unittest.TestCase):
 
         profiles_list._model.set_search_query.assert_not_called()
 
+    def test_profile_list_skips_duplicate_type_filter(self) -> None:
+        profiles_list = ProfilesList.__new__(ProfilesList)
+        profiles_list._active_profile_types = {"all"}
+        profiles_list._model = SimpleNamespace(set_active_profile_types=Mock())
+
+        ProfilesList._apply_profile_type_filter(profiles_list, {"all"})
+
+        profiles_list._model.set_active_profile_types.assert_not_called()
+
     def test_profile_list_reserves_space_for_visible_fluent_scrollbar(self) -> None:
         list_source = inspect.getsource(ProfilesList._build_ui)
 

@@ -190,7 +190,10 @@ class ProfilesList(QWidget):
         self.folder_toggled.emit(group_key, next_expanded)
 
     def _apply_profile_type_filter(self, active_profile_types: set[str]) -> None:
-        self._active_profile_types = set(active_profile_types or {"all"})
+        active = set(active_profile_types or {"all"})
+        if self._active_profile_types == active:
+            return
+        self._active_profile_types = active
         self._model.set_active_profile_types(self._active_profile_types)
 
     def _group_keys(self) -> tuple[str, ...]:
