@@ -19,6 +19,12 @@ label = game
 description = Базовая стратегия для многих игр
 --lua-desync=fake:repeats=6:blob=fake_default_quic
 
+[fake_6_stun_pat]
+name = Fake x6 stun_pat
+author = community
+description = 6 повтора stun_pat
+--lua-desync=fake:blob=stun_pat:repeats=6
+
 [fake_4_google]
 name = Fake x4 Google
 author = community
