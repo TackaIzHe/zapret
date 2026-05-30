@@ -1402,7 +1402,7 @@ class ProfileSetupPageBase(BasePage):
         updated_item = _updated_user_profile_item(profile_id, self._profile_key, _profile_items)
         if updated_item is not None:
             current_item = getattr(self.__dict__.get("_payload"), "item", None)
-            if current_item is updated_item:
+            if current_item == updated_item:
                 return
             if not self._apply_user_profile_update_locally(updated_item):
                 self.reload_current_profile()
