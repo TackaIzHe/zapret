@@ -224,6 +224,7 @@ class AutostartPage(BasePage):
         self._autostart_action_pending: list[tuple[str, bool | None, str | None]] = []
         self._mode_load_runtime = OneShotWorkerRuntime()
         self._mode_load_pending = False
+        self._last_status_render_key: tuple[bool, str, str] | None = None
 
         self._build_ui()
         self._apply_page_theme(force=True)
@@ -671,6 +672,10 @@ class AutostartPage(BasePage):
             or self.current_strategy_label.text()
             or self._tr("page.autostart.strategy.not_selected", "Не выбрана")
         )
+        status_key = (enabled, str(strategy_text or ""), str(getattr(self, "_ui_language", "") or ""))
+        if self.__dict__.get("_last_status_render_key") == status_key:
+            return
+        self.__dict__["_last_status_render_key"] = status_key
 
         if enabled:
             self.status_label.setText(self._tr("page.autostart.status.enabled.title", "Автозапуск включён"))

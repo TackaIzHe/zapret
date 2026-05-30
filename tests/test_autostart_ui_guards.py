@@ -56,6 +56,41 @@ class AutostartUiGuardTests(unittest.TestCase):
         page._update_mode.assert_not_called()
         self.assertEqual(page.current_strategy_label.text(), "New")
 
+    def test_duplicate_status_update_skips_full_repaint_and_mode_reload(self) -> None:
+        from autostart.ui.page import AutostartPage
+
+        page = AutostartPage.__new__(AutostartPage)
+        page.strategy_name = "Current"
+        page._ui_language = "ru"
+        page._tr = Mock(side_effect=lambda _key, default, **_kwargs: default)
+        page.status_label = _Label()
+        page.status_desc = _Label()
+        page.current_strategy_label = _Label("Current")
+        page.status_icon = Mock()
+        page.disable_btn = Mock()
+        page.gui_option = Mock()
+        page._update_mode = Mock()
+
+        AutostartPage.update_status(page, False, "Current")
+
+        page.status_label.setText = Mock(side_effect=AssertionError("same status must not rewrite title"))
+        page.status_desc.setText = Mock(side_effect=AssertionError("same status must not rewrite description"))
+        page.current_strategy_label.setText = Mock(side_effect=AssertionError("same strategy must not rewrite label"))
+        page.status_icon.setPixmap.side_effect = AssertionError("same status must not repaint icon")
+        page.disable_btn.setVisible.side_effect = AssertionError("same status must not rewrite visibility")
+        page.gui_option.set_disabled.side_effect = AssertionError("same status must not rewrite option state")
+        page._update_mode.side_effect = AssertionError("same status must not reload launch mode")
+
+        AutostartPage.update_status(page, False, "Current")
+
+        page.status_label.setText.assert_not_called()
+        page.status_desc.setText.assert_not_called()
+        page.current_strategy_label.setText.assert_not_called()
+        page.status_icon.setPixmap.assert_called_once()
+        page.disable_btn.setVisible.assert_called_once()
+        page.gui_option.set_disabled.assert_called_once()
+        page._update_mode.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()
