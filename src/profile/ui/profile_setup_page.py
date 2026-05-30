@@ -1965,6 +1965,8 @@ class ProfileSetupPageBase(BasePage):
         if payload is None:
             self.reload_current_profile()
             self._on_profile_changed_callback(self._profile_key, "list_file")
+        elif self.__dict__.get("_payload") is payload:
+            pass
         else:
             self._payload = payload
             self._apply_payload(payload)
