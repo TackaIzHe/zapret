@@ -1178,6 +1178,10 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertNotIn("def activate_preset(self, *, file_name", runtime_source)
         self.assertNotIn("def duplicate_preset(self, *, file_name", runtime_source)
         self.assertNotIn("def open_presets_info(self)", runtime_source)
+        self.assertNotIn(
+            "presets.ui.common.user_presets_page_runtime",
+            inspect.getsource(presets_feature_facade),
+        )
 
     def test_user_presets_item_file_actions_run_through_worker(self) -> None:
         worker_source = inspect.getsource(UserPresetItemActionWorker.run)

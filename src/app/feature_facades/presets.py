@@ -228,7 +228,7 @@ class PresetsFeature:
         from_current: bool = False,
         parent=None,
     ):
-        from presets.ui.common.user_presets_page_runtime import UserPresetActionResult
+        from presets.user_presets_action_results import UserPresetActionResult
         from presets.user_presets_action_workers import UserPresetEditActionWorker
 
         def _create_preset(*, name: str, from_current: bool) -> UserPresetActionResult:
@@ -288,7 +288,7 @@ class PresetsFeature:
     ):
         from pathlib import Path
 
-        from presets.ui.common.user_presets_page_runtime import UserPresetImportResult, UserPresetResetAllResult
+        from presets.user_presets_action_results import UserPresetImportResult, UserPresetResetAllResult
         from presets.user_presets_action_workers import UserPresetBulkActionWorker
 
         def _import_preset_from_file(*, file_path: str) -> UserPresetImportResult:
@@ -365,7 +365,7 @@ class PresetsFeature:
         activate_error_mode: str,
         parent=None,
     ):
-        from presets.ui.common.user_presets_page_runtime import UserPresetActivationResult
+        from presets.user_presets_action_results import UserPresetActivationResult
         from presets.user_presets_action_workers import UserPresetActivateWorker
 
         def _activate_preset(*, file_name: str, display_name: str) -> UserPresetActivationResult:
@@ -431,7 +431,7 @@ class PresetsFeature:
         file_path: str = "",
         parent=None,
     ):
-        from presets.ui.common.user_presets_page_runtime import UserPresetActionResult
+        from presets.user_presets_action_results import UserPresetActionResult
         from presets.user_presets_action_workers import UserPresetItemActionWorker
 
         def _duplicate_preset(*, file_name: str, display_name: str) -> UserPresetActionResult:
@@ -524,7 +524,7 @@ class PresetsFeature:
 
     def create_preset_link_action_worker(self, request_id: int, *, open_url, action: str, parent=None):
         from config.urls import PRESET_INFO_URL, SUPPORT_DISCUSSIONS_URL
-        from presets.ui.common.user_presets_page_runtime import UserPresetActionResult
+        from presets.user_presets_action_results import UserPresetActionResult
         from presets.user_presets_action_workers import UserPresetLinkActionWorker
 
         def _open_url_action(url: str, *, success_message: str, error_message: str) -> UserPresetActionResult:
