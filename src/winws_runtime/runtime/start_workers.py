@@ -147,8 +147,15 @@ class PresetLaunchStartWorker(QObject):
             log(f"Не удалось проверить preset перед остановкой предыдущего процесса: {e}", "DEBUG")
         return True
 
-    def _stop_previous_process_if_needed(self, *, skip_stop: bool) -> None:
-        process_running = self.launch_runtime_api.has_residual_processes(silent=True)
+    def _has_previous_process(self) -> bool:
+        try:
+            return bool(self.launch_runtime_api.has_residual_processes(silent=True))
+        except Exception as e:
+            log(f"Не удалось проверить предыдущий процесс перед стартом: {e}", "DEBUG")
+            return False
+
+    def _stop_previous_process_if_needed(self, *, skip_stop: bool, process_running: bool | None = None) -> None:
+        process_running = self._has_previous_process() if process_running is None else bool(process_running)
         if (not process_running) or skip_stop:
             return
 
@@ -247,15 +254,20 @@ class PresetLaunchStartWorker(QObject):
 
             is_preset_file, preset_path = self._extract_preset_launch_input()
             skip_stop = False
+            previous_process_running = self._has_previous_process()
 
-            if not self._validate_preset_before_stop(
-                is_preset_file=is_preset_file,
-                preset_path=preset_path,
+            if previous_process_running:
+                if not self._validate_preset_before_stop(
+                    is_preset_file=is_preset_file,
+                    preset_path=preset_path,
+                    skip_stop=skip_stop,
+                ):
+                    return
+
+            self._stop_previous_process_if_needed(
                 skip_stop=skip_stop,
-            ):
-                return
-
-            self._stop_previous_process_if_needed(skip_stop=skip_stop)
+                process_running=previous_process_running,
+            )
 
             self.progress.emit("Запуск DPI...")
 

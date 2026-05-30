@@ -269,6 +269,28 @@ class StartupAutostartTests(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("нет включённых profile", worker._last_error_message)
 
+    def test_startup_worker_skips_pre_stop_validation_when_no_previous_process(self) -> None:
+        from winws_runtime.runtime.start_workers import PresetLaunchStartWorker
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            preset_path = Path(tmp_dir) / "ready.txt"
+            preset_path.write_text("--new\n--filter-tcp=80\n", encoding="utf-8")
+
+            worker = PresetLaunchStartWorker(
+                {"is_preset_file": True, "preset_path": str(preset_path), "name": "Пресет"},
+                "zapret2_mode",
+                runtime_feature=SimpleNamespace(),
+                runtime_api=SimpleNamespace(has_residual_processes=Mock(return_value=False)),
+                startup_autostart=True,
+            )
+            worker._validate_preset_before_stop = Mock(return_value=True)
+            worker._start_presets_with_runner = Mock(return_value=True)
+
+            worker.run()
+
+        worker._validate_preset_before_stop.assert_not_called()
+        worker._start_presets_with_runner.assert_called_once_with(str(preset_path), "Пресет")
+
     def test_startup_worker_uses_short_stable_window_for_autostart(self) -> None:
         from winws_runtime.runtime.start_workers import PresetLaunchStartWorker
 
