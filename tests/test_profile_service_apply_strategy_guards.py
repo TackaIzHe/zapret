@@ -106,6 +106,38 @@ class ProfileServiceApplyStrategyGuardTests(unittest.TestCase):
         self.assertEqual(result, "profile:0")
         self.assertEqual(store.save_count, 0)
 
+    def test_save_profile_list_file_text_skips_write_when_user_text_is_unchanged(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            lists_dir = root / "lists" / "user"
+            lists_dir.mkdir(parents=True)
+            (lists_dir / "speedtest.txt").write_text("speedtest.net\n", encoding="utf-8")
+            store = _PresetStore(
+                "\n".join(
+                    (
+                        "--name=Speedtest",
+                        "--filter-tcp=443,8080",
+                        "--hostlist=lists/speedtest.txt",
+                        "--lua-desync=pass",
+                        "",
+                    )
+                )
+            )
+            feature = SimpleNamespace(
+                _presets_feature=store,
+                _app_paths=AppPaths(user_root=root, local_root=root),
+            )
+
+            service = ProfilePresetService(feature, "zapret2_mode")
+            with patch(
+                "profile.service.write_profile_list_file_text",
+                side_effect=AssertionError("unchanged list text must not be written"),
+            ):
+                state = service.save_profile_list_file_text("profile:0", "speedtest.net\n")
+
+        self.assertIsNotNone(state)
+        self.assertEqual(state.user_text, "speedtest.net\n")
+
     def test_apply_strategy_skips_save_when_profile_already_uses_strategy(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

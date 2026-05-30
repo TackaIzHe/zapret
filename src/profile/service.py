@@ -606,6 +606,15 @@ class ProfilePresetService:
         if profile is None:
             return None
         reference = profile_list_file_reference(profile, self._lists_root())
+        if not reference.editable or not reference.file_name:
+            raise ValueError(reference.error_text or "Файл списка недоступен для редактирования.")
+        invalid_lines = validate_profile_list_file_text(reference.kind, text)
+        if invalid_lines:
+            line, value = invalid_lines[0]
+            raise ValueError(f"Строка {line}: неверная запись `{value}`.")
+        text_parts = read_profile_list_file_text_parts(self._lists_root(), reference)
+        if text_parts.user_text == str(text or ""):
+            return self._list_editor_state_for_profile(profile)
         write_profile_list_file_text(self._lists_root(), reference, text)
         return self._list_editor_state_for_profile(profile)
 
