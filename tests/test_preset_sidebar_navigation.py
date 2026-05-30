@@ -718,6 +718,7 @@ class PresetSidebarNavigationTests(unittest.TestCase):
                 failed=SimpleNamespace(connect=Mock()),
                 finished=SimpleNamespace(connect=Mock()),
                 start=Mock(),
+                deleteLater=Mock(),
             )
             create_worker.return_value = worker
             sidebar_builder.init_navigation(window)
@@ -730,10 +731,13 @@ class PresetSidebarNavigationTests(unittest.TestCase):
 
     def test_sidebar_display_mode_save_is_queued_while_worker_runs(self) -> None:
         import ui.navigation.sidebar_builder as sidebar_builder
+        from ui.one_shot_worker_runtime import OneShotWorkerRuntime
 
         worker = SimpleNamespace(isRunning=Mock(return_value=True))
+        runtime = OneShotWorkerRuntime()
+        runtime.worker = worker
         session = SimpleNamespace(
-            sidebar_expanded_save_worker=worker,
+            sidebar_expanded_save_runtime=runtime,
             sidebar_expanded_save_pending=None,
             sidebar_expanded_save_worker_factory=Mock(),
         )

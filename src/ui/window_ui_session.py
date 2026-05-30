@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.page_names import PageName
+from ui.one_shot_worker_runtime import OneShotWorkerRuntime
 
 
 @dataclass
@@ -47,8 +48,8 @@ class WindowUiSession:
     sidebar_search_profile_loader: Callable[[str], tuple[object, ...]] | None = None
     sidebar_search_preset_loader: Callable[[str], tuple[object, ...]] | None = None
     sidebar_expanded_save_worker_factory: Callable[..., Any] | None = None
+    sidebar_expanded_save_runtime: OneShotWorkerRuntime = field(default_factory=OneShotWorkerRuntime)
     sidebar_search_runtime_cache: dict[str, tuple[float, tuple[object, ...]]] = field(default_factory=dict)
-    sidebar_expanded_save_worker: Any | None = None
     sidebar_expanded_save_pending: bool | None = None
 
 

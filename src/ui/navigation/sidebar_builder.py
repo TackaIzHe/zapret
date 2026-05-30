@@ -21,6 +21,7 @@ from ui.startup_ui_metrics import pump_startup_ui
 from app.ui_texts import tr as tr_catalog
 from ui.window_ui_session import get_window_ui_session
 from ui.navigation.sidebar_state import peek_warmed_sidebar_expanded
+from ui.one_shot_worker_runtime import OneShotWorkerRuntime
 
 
 SIDEBAR_SEARCH_AFTER_INTERACTIVE_MS = 300
@@ -97,39 +98,39 @@ def _start_sidebar_expanded_save_worker(window, expanded: bool) -> None:
     if session is None:
         return
 
-    worker = getattr(session, "sidebar_expanded_save_worker", None)
-    if worker is not None:
-        try:
-            if worker.isRunning():
-                session.sidebar_expanded_save_pending = bool(expanded)
-                return
-        except Exception:
-            session.sidebar_expanded_save_worker = None
+    runtime = _ensure_sidebar_expanded_save_runtime(session)
+    if runtime.is_running():
+        session.sidebar_expanded_save_pending = bool(expanded)
+        return
 
     create_worker = getattr(session, "sidebar_expanded_save_worker_factory", None)
     if create_worker is None:
         return
 
-    worker = create_worker(
-        expanded=bool(expanded),
-        state_key=SIDEBAR_EXPANDED_UI_STATE_KEY,
-        parent=window,
+    runtime.start_qthread_worker(
+        worker_factory=lambda _request_id: create_worker(
+            expanded=bool(expanded),
+            state_key=SIDEBAR_EXPANDED_UI_STATE_KEY,
+            parent=window,
+        ),
+        on_loaded=lambda _request_id, _expanded: None,
+        on_failed=lambda _request_id, error: log(f"Не удалось сохранить состояние сайдбара: {error}", "DEBUG"),
+        on_finished=lambda _worker, current_window=window: _on_sidebar_expanded_save_worker_finished(current_window),
+        signal_includes_request_id=False,
+        loaded_signal_name="saved",
     )
-    session.sidebar_expanded_save_worker = worker
-    worker.saved.connect(lambda _expanded: None)
-    worker.failed.connect(lambda error: log(f"Не удалось сохранить состояние сайдбара: {error}", "DEBUG"))
-    worker.finished.connect(lambda w=worker, current_window=window: _on_sidebar_expanded_save_worker_finished(current_window, w))
-    worker.start()
 
 
-def _on_sidebar_expanded_save_worker_finished(window, worker) -> None:
+def _ensure_sidebar_expanded_save_runtime(session) -> OneShotWorkerRuntime:
+    runtime = getattr(session, "sidebar_expanded_save_runtime", None)
+    if runtime is None:
+        runtime = OneShotWorkerRuntime()
+        session.sidebar_expanded_save_runtime = runtime
+    return runtime
+
+
+def _on_sidebar_expanded_save_worker_finished(window) -> None:
     session = get_window_ui_session(window)
-    if session is not None and getattr(session, "sidebar_expanded_save_worker", None) is worker:
-        session.sidebar_expanded_save_worker = None
-    try:
-        worker.deleteLater()
-    except Exception:
-        pass
     if session is None:
         return
     pending = getattr(session, "sidebar_expanded_save_pending", None)
