@@ -819,6 +819,7 @@ class ProfileSetupPageBase(BasePage):
         self._setup_load_worker = None
         self._list_file_load_request_id = 0
         self._list_file_load_worker = None
+        self._pending_list_file_load = False
         self._list_file_save_request_id = 0
         self._list_file_save_worker = None
         self._list_file_validation_request_id = 0
@@ -1161,6 +1162,7 @@ class ProfileSetupPageBase(BasePage):
         if worker is not None:
             try:
                 if worker.isRunning():
+                    self._pending_list_file_load = True
                     return
             except Exception:
                 return
@@ -1200,6 +1202,9 @@ class ProfileSetupPageBase(BasePage):
         if self._list_file_load_worker is worker:
             self._list_file_load_worker = None
         worker.deleteLater()
+        if self.__dict__.get("_pending_list_file_load"):
+            self._pending_list_file_load = False
+            self._request_list_file_editor_state()
 
     def _fill_range_combo(self, combo: CompactDisplayComboBox) -> None:
         combo.addItem("a — всегда", userData="a", compactText="a")
@@ -2750,6 +2755,7 @@ class ProfileSetupPageBase(BasePage):
             except Exception:
                 pass
         for attr in (
+            "_pending_list_file_load",
             "_pending_list_file_validation",
             "_pending_settings_save",
             "_pending_enabled_save",
