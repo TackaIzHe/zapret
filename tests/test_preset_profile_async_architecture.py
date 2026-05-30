@@ -2245,6 +2245,9 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
 
     def test_telegram_proxy_auto_deeplink_check_runs_through_worker(self) -> None:
         try_source = inspect.getsource(TelegramProxyPage._try_auto_deeplink)
+        request_source = inspect.getsource(TelegramProxyPage._request_auto_deeplink_check)
+        checked_source = inspect.getsource(TelegramProxyPage._on_auto_deeplink_checked)
+        cleanup_source = inspect.getsource(TelegramProxyPage.cleanup)
         page_source = inspect.getsource(TelegramProxyPage)
         feature_source = inspect.getsource(TelegramProxyFeature)
 
@@ -2255,7 +2258,15 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
 
         self.assertIn("_request_auto_deeplink_check", try_source)
         self.assertNotIn("telegram_proxy_settings.consume_auto_deeplink_request", try_source)
-        self.assertIn("_auto_deeplink_worker", page_source)
+        self.assertIn("_auto_deeplink_runtime", page_source)
+        self.assertIn("start_qthread_worker", request_source)
+        self.assertIn("bind_worker", request_source)
+        self.assertIn("worker.completed.connect(self._on_auto_deeplink_checked)", request_source)
+        self.assertIn("worker.failed.connect(self._on_auto_deeplink_failed)", request_source)
+        self.assertIn("_auto_deeplink_runtime.is_current", checked_source)
+        self.assertIn("_auto_deeplink_runtime.stop", cleanup_source)
+        self.assertNotIn("_auto_deeplink_worker =", page_source)
+        self.assertNotIn("worker.start()", request_source)
         self.assertIn("create_auto_deeplink_worker", feature_source)
         self.assertIn("telegram_proxy.settings", command_source)
         self.assertIn("consume_auto_deeplink_request", worker_source)
