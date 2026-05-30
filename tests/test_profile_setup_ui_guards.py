@@ -164,6 +164,19 @@ class _IndexWidget:
         self._index = value
 
 
+class _ListWidget:
+    def __init__(self) -> None:
+        self.clear_calls = 0
+        self.items = []
+
+    def clear(self) -> None:
+        self.clear_calls += 1
+        self.items.clear()
+
+    def addItem(self, item) -> None:  # noqa: N802
+        self.items.append(item)
+
+
 class _Signal:
     def connect(self, _callback) -> None:
         pass
@@ -308,6 +321,35 @@ class ProfileSetupUiGuardTests(unittest.TestCase):
         self.assertEqual(page._enabled_checkbox.enabled_calls, [])
         page._controller.create_load_worker.assert_called_once_with(1, "profile-1", page)
         self.assertEqual(worker.start_calls, 1)
+
+    def test_strategy_list_summary_skips_duplicate_text(self) -> None:
+        from types import SimpleNamespace
+
+        from profile.ui.profile_setup_page import ProfileStrategyListWidget
+
+        widget = ProfileStrategyListWidget.__new__(ProfileStrategyListWidget)
+        widget._search = _TextWidget("")
+        widget._list = _ListWidget()
+        widget._entries = {
+            "tls_fake": SimpleNamespace(
+                name="TLS fake",
+                args="--lua-desync=fake",
+                visual=SimpleNamespace(
+                    label="",
+                    description="",
+                    icon_name="",
+                    color="",
+                ),
+            )
+        }
+        widget._states = {}
+        widget._current_strategy_id = "none"
+        widget._item_by_strategy_id = {}
+        widget._summary = _TextWidget("1 из 1")
+
+        ProfileStrategyListWidget._rebuild_tree(widget)
+
+        self.assertEqual(widget._summary.calls, [])
 
     def test_list_file_request_skips_duplicate_loading_status(self) -> None:
         from unittest.mock import Mock
