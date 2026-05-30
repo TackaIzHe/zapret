@@ -97,6 +97,7 @@ def build_profile_setup_page_kwargs(
         else PageName.ZAPRET1_PRESET_SETUP
     )
     return {
+        "create_profile_setup_load_worker": profile_feature.create_profile_setup_load_worker,
         "profile_setup_actions": ProfileSetupActions(
             get_profile_setup=profile_feature.get_profile_setup,
             get_profile_list_file_editor_state=profile_feature.get_profile_list_file_editor_state,

@@ -361,6 +361,7 @@ class ProfileSetupUiGuardTests(unittest.TestCase):
         from unittest.mock import Mock
 
         from profile.ui.profile_setup_page import ProfileSetupPageBase
+        from settings.mode import ZAPRET2_MODE
 
         worker = _LoadWorker()
         page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
@@ -368,14 +369,18 @@ class ProfileSetupUiGuardTests(unittest.TestCase):
         page._setup_load_request_id = 0
         page._summary = _TextWidget("Загрузка profile...")
         page._enabled_checkbox = _BoolWidget(enabled=False)
-        page._controller = Mock()
-        page._controller.create_load_worker.return_value = worker
+        page._create_profile_setup_load_worker_fn = Mock(return_value=worker)
 
         ProfileSetupPageBase._request_profile_setup_payload(page)
 
         self.assertEqual(page._summary.calls, [])
         self.assertEqual(page._enabled_checkbox.enabled_calls, [])
-        page._controller.create_load_worker.assert_called_once_with(1, "profile-1", page)
+        page._create_profile_setup_load_worker_fn.assert_called_once_with(
+            1,
+            ZAPRET2_MODE,
+            profile_key="profile-1",
+            parent=page,
+        )
         self.assertEqual(worker.start_calls, 1)
 
     def test_strategy_list_summary_skips_duplicate_text(self) -> None:

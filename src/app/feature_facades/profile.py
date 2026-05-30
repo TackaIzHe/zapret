@@ -60,6 +60,21 @@ class ProfileFeature:
     def get_profile_setup(self, launch_method: str, profile_key: str):
         return self._commands().get_profile_setup(self, launch_method, profile_key)
 
+    def create_profile_setup_load_worker(self, request_id: int, launch_method: str, *, profile_key: str, parent=None):
+        from profile.profile_setup_loader import ProfileSetupLoadWorker
+
+        clean_launch_method = str(launch_method or "")
+
+        def _load_profile_setup(profile_key: str):
+            return self.get_profile_setup(clean_launch_method, profile_key)
+
+        return ProfileSetupLoadWorker(
+            request_id,
+            _load_profile_setup,
+            profile_key,
+            parent,
+        )
+
     def get_profile_list_file_editor_state(
         self,
         launch_method: str,

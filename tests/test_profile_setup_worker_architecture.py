@@ -37,6 +37,38 @@ class ProfileSetupWorkerArchitectureTests(unittest.TestCase):
         self.assertIs(actions.apply_strategy_to_profile, profile_feature.apply_strategy_to_profile)
         self.assertIs(actions.update_profile_raw_text, profile_feature.update_profile_raw_text)
 
+    def test_profile_setup_load_worker_comes_from_profile_feature(self) -> None:
+        from app.feature_facades.profile import ProfileFeature
+        from profile.ui.profile_setup_page import ProfileSetupPageBase
+        from ui.navigation_pages import PageName
+        from ui.page_deps.presets import build_profile_setup_page_kwargs
+
+        init_source = inspect.getsource(ProfileSetupPageBase.__init__)
+        request_source = inspect.getsource(ProfileSetupPageBase._request_profile_setup_payload)
+        create_source = inspect.getsource(ProfileSetupPageBase.create_profile_setup_load_worker)
+        feature_source = inspect.getsource(ProfileFeature)
+
+        self.assertIn("create_profile_setup_load_worker", init_source)
+        self.assertIn("_create_profile_setup_load_worker_fn", init_source)
+        self.assertIn("create_profile_setup_load_worker", request_source)
+        self.assertNotIn("_controller.create_load_worker", request_source)
+        self.assertIn("_create_profile_setup_load_worker_fn", create_source)
+        self.assertIn("create_profile_setup_load_worker", feature_source)
+
+        profile_feature = Mock()
+        kwargs = build_profile_setup_page_kwargs(
+            page_name=PageName.ZAPRET2_PROFILE_SETUP,
+            profile_feature=profile_feature,
+            show_page=Mock(),
+            on_profile_setup_changed=Mock(),
+        )
+
+        self.assertIs(
+            kwargs["create_profile_setup_load_worker"],
+            profile_feature.create_profile_setup_load_worker,
+        )
+        self.assertNotIn("profile_feature", kwargs)
+
     def test_context_action_worker_receives_action_functions(self) -> None:
         from profile.profile_setup_loader import ProfilePresetProfileActionWorker
 

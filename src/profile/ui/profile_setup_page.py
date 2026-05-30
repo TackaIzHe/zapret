@@ -753,12 +753,22 @@ class ProfileSetupPageBase(BasePage):
     profiles_key = "page.winws2_pages.title"
     profiles_default = "Настройка пресета"
 
-    def __init__(self, parent=None, *, profile_setup_actions: ProfileSetupActions, open_profiles, open_root, on_profile_changed):
+    def __init__(
+        self,
+        parent=None,
+        *,
+        create_profile_setup_load_worker,
+        profile_setup_actions: ProfileSetupActions,
+        open_profiles,
+        open_root,
+        on_profile_changed,
+    ):
         super().__init__(
             title="",
             parent=parent,
             title_key=self.title_key_name,
         )
+        self._create_profile_setup_load_worker_fn = create_profile_setup_load_worker
         self._controller = ProfileSetupController(
             profile_setup_actions=profile_setup_actions,
             launch_method=self.launch_method,
@@ -1473,6 +1483,14 @@ class ProfileSetupPageBase(BasePage):
     def reload_current_profile(self) -> None:
         self._request_profile_setup_payload()
 
+    def create_profile_setup_load_worker(self, request_id: int, profile_key: str, parent=None):
+        return self._create_profile_setup_load_worker_fn(
+            request_id,
+            self.launch_method,
+            profile_key=profile_key,
+            parent=parent,
+        )
+
     def _request_profile_setup_payload(self) -> None:
         if not self._profile_key:
             return
@@ -1480,7 +1498,7 @@ class ProfileSetupPageBase(BasePage):
         request_id = self._setup_load_request_id
         set_widget_text_if_changed(self._summary, "Загрузка profile...")
         set_widget_enabled_if_changed(self._enabled_checkbox, False)
-        worker = self._controller.create_load_worker(request_id, self._profile_key, self)
+        worker = self.create_profile_setup_load_worker(request_id, self._profile_key, self)
         self._setup_load_worker = worker
         worker.loaded.connect(self._on_profile_setup_payload_loaded)
         worker.failed.connect(self._on_profile_setup_payload_failed)
