@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 from PyQt6.QtCore import QEvent, QTimer
 from PyQt6.QtGui import QTextCursor, QTextDocument
@@ -64,6 +65,13 @@ class RuntimeToggleButtonPlan:
     icon_name: str
     should_stop: bool
     enabled: bool
+
+
+@dataclass(frozen=True, slots=True)
+class RawPresetRuntimeActions:
+    start: Callable[..., object]
+    stop: Callable[..., object]
+    is_available: Callable[[], object]
 
 
 def build_runtime_toggle_button_plan(
@@ -222,7 +230,7 @@ class PresetRawEditorPage(BasePage):
         title: str,
         open_back,
         open_root,
-        runtime_feature,
+        runtime_actions: RawPresetRuntimeActions | None,
         ui_state_store,
     ):
         self._launch_method = str(launch_method or "").strip()
@@ -230,7 +238,7 @@ class PresetRawEditorPage(BasePage):
         super().__init__(self._title, "", parent)
         self._open_back_callback = open_back
         self._open_root_callback = open_root
-        self._runtime_feature = runtime_feature
+        self._runtime_actions = runtime_actions
         self._preset_name = ""
         self._preset_file_name = ""
         self._preset_path: Path | None = None
@@ -826,11 +834,11 @@ class PresetRawEditorPage(BasePage):
         self._runtime_toggle_should_stop = apply_runtime_toggle_button_plan(
             button,
             plan,
-            runtime_available=self._runtime_feature is not None,
+            runtime_available=self._runtime_actions is not None,
         )
 
     def _toggle_runtime(self) -> None:
-        runtime = self._runtime_feature
+        runtime = self._runtime_actions
         if runtime is None:
             self._show_error("Управление Zapret сейчас недоступно.")
             return

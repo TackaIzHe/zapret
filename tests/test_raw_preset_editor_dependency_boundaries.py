@@ -51,6 +51,36 @@ class RawPresetEditorDependencyBoundaryTests(unittest.TestCase):
             self.assertIs(kwargs[key], getattr(presets, key))
         self.assertNotIn("presets_feature", kwargs)
 
+    def test_raw_preset_editor_receives_runtime_actions_instead_of_runtime_feature(self) -> None:
+        from presets.ui.common.preset_subpage_base import PresetRawEditorPage
+        from ui.navigation_pages import PageName
+        from ui.page_deps.presets import build_preset_raw_editor_page_kwargs
+
+        page_init_source = inspect.getsource(PresetRawEditorPage.__init__)
+        page_source = inspect.getsource(PresetRawEditorPage)
+
+        self.assertIn("runtime_actions", page_init_source)
+        self.assertNotIn("runtime_feature", page_init_source)
+        self.assertNotIn("self._runtime_feature", page_source)
+        self.assertIn("self._runtime_actions", page_source)
+
+        presets = Mock()
+        runtime = Mock()
+        kwargs = build_preset_raw_editor_page_kwargs(
+            page_name=PageName.ZAPRET2_PRESET_RAW_EDITOR,
+            presets_feature=presets,
+            runtime_feature=runtime,
+            show_page=Mock(),
+            ui_state_store=Mock(),
+        )
+
+        self.assertIn("runtime_actions", kwargs)
+        self.assertNotIn("runtime_feature", kwargs)
+        actions = kwargs["runtime_actions"]
+        self.assertIs(actions.start, runtime.start)
+        self.assertIs(actions.stop, runtime.stop)
+        self.assertIs(actions.is_available, runtime.is_available)
+
 
 if __name__ == "__main__":
     unittest.main()

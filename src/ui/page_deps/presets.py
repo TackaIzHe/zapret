@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.page_names import PageName
 from profile.setup_controller import ProfileSetupActions
 from settings.mode import ZAPRET1_MODE, ZAPRET2_MODE
+from presets.ui.common.preset_subpage_base import RawPresetRuntimeActions
 from presets.ui.common.user_presets_page_runtime import UserPresetsRuntimeActions
 from ui.navigation_pages import (
     resolve_preset_raw_editor_back_page_for_method,
@@ -207,7 +208,11 @@ def build_preset_raw_editor_page_kwargs(
         "publish_preset_content_changed": presets_feature.publish_preset_content_changed,
         "launch_method": method,
         "title": "Пресет Zapret 2" if method == ZAPRET2_MODE else "Пресет Zapret 1",
-        "runtime_feature": runtime_feature,
+        "runtime_actions": RawPresetRuntimeActions(
+            start=runtime_feature.start,
+            stop=runtime_feature.stop,
+            is_available=runtime_feature.is_available,
+        ),
         "open_back": lambda m=method: show_page(
             resolve_preset_raw_editor_back_page_for_method(m),
             allow_internal=True,
