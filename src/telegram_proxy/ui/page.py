@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ui.pages.base_page import BasePage
+from ui.one_shot_worker_runtime import OneShotWorkerRuntime
 from telegram_proxy.ui.build import (
     build_telegram_proxy_diag_panel,
     build_telegram_proxy_logs_panel,
@@ -117,7 +118,7 @@ class TelegramProxyPage(BasePage):
         self._stats_timer = None
         self._diag_poll_timer = None
         self._upstream_restart_timer = None
-        self._diag_worker = None
+        self._diag_runtime = OneShotWorkerRuntime()
         self._proxy_start_worker = None
         self._proxy_stop_worker = None
         self._restart_stop_worker = None
@@ -390,6 +391,7 @@ class TelegramProxyPage(BasePage):
             btn_run_diag=self._btn_run_diag,
             diag_edit=self._diag_edit,
             existing_poll_timer=self._diag_poll_timer,
+            diag_runtime=self._diag_runtime,
             proxy_port=self._port_spin.value(),
             telegram_proxy_feature=self._telegram_proxy,
             publish_diag_result=self._publish_diag_result,
@@ -1306,6 +1308,12 @@ class TelegramProxyPage(BasePage):
             self._diag_poll_timer.stop()
             self._diag_poll_timer.deleteLater()
             self._diag_poll_timer = None
+        self._diag_runtime.stop(
+            blocking=False,
+            log_fn=log,
+            warning_prefix="telegram proxy diagnostics worker",
+        )
+        self._diag_runtime.cancel()
         if self._upstream_restart_timer is not None:
             self._upstream_restart_timer.stop()
             self._upstream_restart_timer.deleteLater()

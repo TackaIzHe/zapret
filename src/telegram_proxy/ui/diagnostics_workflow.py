@@ -12,6 +12,7 @@ def start_diagnostics(
     btn_run_diag,
     diag_edit,
     existing_poll_timer,
+    diag_runtime,
     proxy_port: int,
     telegram_proxy_feature,
     publish_diag_result,
@@ -31,21 +32,21 @@ def start_diagnostics(
     set_diag_result(None)
     set_thread_done(False)
 
-    worker = telegram_proxy_feature.create_diagnostics_worker(
-        proxy_port=proxy_port,
-        parent=page,
-    )
-
     def _apply_diag_result(result_text: str) -> None:
         set_diag_result(result_text)
         set_thread_done(True)
 
-    worker.progress.connect(publish_diag_result)
-    worker.completed.connect(_apply_diag_result)
-    worker.finished.connect(lambda: setattr(page, "_diag_worker", None))
-    worker.finished.connect(worker.deleteLater)
-    setattr(page, "_diag_worker", worker)
-    worker.start()
+    def _bind_worker(worker) -> None:
+        worker.progress.connect(publish_diag_result)
+        worker.completed.connect(_apply_diag_result)
+
+    diag_runtime.start_qthread_worker(
+        worker_factory=lambda _request_id: telegram_proxy_feature.create_diagnostics_worker(
+            proxy_port=proxy_port,
+            parent=page,
+        ),
+        bind_worker=_bind_worker,
+    )
 
     poll_timer = existing_poll_timer
     if poll_timer is not None:

@@ -470,6 +470,7 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         page = UserPresetsPageBase.__new__(UserPresetsPageBase)
         page._preset_activate_request_id = 4
         page._pending_preset_activation = None
+        page._restore_preset_activation_marker_file_name = "Before.txt"
         page._runtime_service = Mock()
         page._refresh_presets_view_from_cache = Mock(
             side_effect=AssertionError("activation error must not reload the whole preset list")
@@ -489,12 +490,14 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         with patch("presets.ui.common.user_presets_page.InfoBar.error"):
             UserPresetsPageBase._on_preset_activation_finished(page, 4, result)
 
-        page._runtime_service.apply_active_preset_marker.assert_called_once_with()
+        page._runtime_service.apply_active_preset_marker.assert_not_called()
+        page._runtime_service.apply_active_preset_marker_for_file.assert_called_once_with("Before.txt")
 
     def test_user_presets_activation_failure_restores_marker_without_list_reload(self) -> None:
         page = UserPresetsPageBase.__new__(UserPresetsPageBase)
         page._preset_activate_request_id = 5
         page._pending_preset_activation = None
+        page._restore_preset_activation_marker_file_name = "Before.txt"
         page._runtime_service = Mock()
         page._refresh_presets_view_from_cache = Mock(
             side_effect=AssertionError("activation failure must not reload the whole preset list")
@@ -505,7 +508,8 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         with patch("presets.ui.common.user_presets_page.InfoBar.error"):
             UserPresetsPageBase._on_preset_activation_failed(page, 5, "bad")
 
-        page._runtime_service.apply_active_preset_marker.assert_called_once_with()
+        page._runtime_service.apply_active_preset_marker.assert_not_called()
+        page._runtime_service.apply_active_preset_marker_for_file.assert_called_once_with("Before.txt")
 
     def test_preset_model_removes_visible_preset_without_full_reset(self) -> None:
         model = PresetListModel()
@@ -4047,12 +4051,17 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
 
     def test_telegram_diagnostics_worker_uses_progress_signal(self) -> None:
         workflow_source = inspect.getsource(telegram_diag_workflow.start_diagnostics)
+        page_source = inspect.getsource(TelegramProxyPage)
         worker_source = inspect.getsource(TelegramProxyDiagnosticsWorker)
 
         self.assertNotIn("progress_callback=publish_diag_result", workflow_source)
         self.assertIn("worker.progress.connect(publish_diag_result)", workflow_source)
         self.assertIn("progress = pyqtSignal", worker_source)
         self.assertIn("progress_callback=self.progress.emit", worker_source)
+        self.assertIn("_diag_runtime", page_source)
+        self.assertIn("start_qthread_worker", workflow_source)
+        self.assertNotIn("_diag_worker", page_source)
+        self.assertNotIn("worker.start()", workflow_source)
 
     def test_connection_support_bundle_prepares_through_worker(self) -> None:
         support_worker = importlib.import_module("diagnostics.support_worker")
