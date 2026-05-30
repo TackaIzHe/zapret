@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ui.pages.base_page import BasePage
+from ui.one_shot_worker_runtime import OneShotWorkerRuntime
 from blobs.ui.build import build_blobs_page_header
 from blobs.ui.components import BlobItemWidget
 from blobs.ui.runtime_helpers import (
@@ -47,15 +48,12 @@ class BlobsPage(BasePage):
         self._actions_group = None
         self._actions_meta_card = None
         self._actions_bar = None
-        self._blobs_load_worker = None
-        self._blobs_load_request_id = 0
+        self._blobs_load_runtime = OneShotWorkerRuntime()
         self._blobs_load_pending = False
         self._blobs_load_pending_reload = False
-        self._blob_action_worker = None
-        self._blob_action_request_id = 0
+        self._blob_action_runtime = OneShotWorkerRuntime()
         self._blob_action_pending: list[dict[str, str]] = []
-        self._blob_open_action_worker = None
-        self._blob_open_action_request_id = 0
+        self._blob_open_action_runtime = OneShotWorkerRuntime()
         self._blob_open_action_pending: list[str] = []
 
         self._build_ui()
@@ -175,33 +173,30 @@ class BlobsPage(BasePage):
             return
         if reload and hasattr(self, "reload_btn"):
             self.reload_btn.set_loading(True)
-        worker = self.__dict__.get("_blobs_load_worker")
-        if worker is not None:
-            try:
-                if worker.isRunning():
-                    self._blobs_load_pending = True
-                    self._blobs_load_pending_reload = bool(self._blobs_load_pending_reload) or bool(reload)
-                    return
-            except Exception:
-                self._blobs_load_pending = True
-                self._blobs_load_pending_reload = bool(self._blobs_load_pending_reload) or bool(reload)
-                return
+        if self._blobs_load_runtime.is_running():
+            self._blobs_load_pending = True
+            self._blobs_load_pending_reload = bool(self._blobs_load_pending_reload) or bool(reload)
+            return
         self._start_blobs_load_worker(reload=bool(reload))
 
     def _start_blobs_load_worker(self, *, reload: bool = False) -> None:
         self._blobs_load_pending = False
         self._blobs_load_pending_reload = False
-        self._blobs_load_request_id += 1
-        request_id = self._blobs_load_request_id
-        worker = self.create_blobs_load_worker(request_id, reload=bool(reload))
-        self._blobs_load_worker = worker
-        worker.loaded.connect(self._on_blobs_loaded)
-        worker.failed.connect(self._on_blobs_load_failed)
-        worker.finished.connect(lambda w=worker: self._on_blobs_load_worker_finished(w))
-        worker.start()
+        self._blobs_load_runtime.start_qthread_worker(
+            worker_factory=lambda request_id: self.create_blobs_load_worker(
+                request_id,
+                reload=bool(reload),
+            ),
+            on_loaded=self._on_blobs_loaded,
+            on_failed=self._on_blobs_load_failed,
+            on_finished=self._on_blobs_load_worker_finished,
+        )
 
     def _on_blobs_loaded(self, request_id: int, blobs_info: dict, reloaded: bool) -> None:
-        if request_id != self._blobs_load_request_id or self._cleanup_in_progress:
+        if not self._blobs_load_runtime.is_current(
+            request_id,
+            cleanup_in_progress=self._cleanup_in_progress,
+        ):
             return
         load_blobs_into_ui(
             cleanup_in_progress=self._cleanup_in_progress,
@@ -219,7 +214,10 @@ class BlobsPage(BasePage):
             log("Блобы перезагружены", "INFO")
 
     def _on_blobs_load_failed(self, request_id: int, error: str, _reload: bool) -> None:
-        if request_id != self._blobs_load_request_id or self._cleanup_in_progress:
+        if not self._blobs_load_runtime.is_current(
+            request_id,
+            cleanup_in_progress=self._cleanup_in_progress,
+        ):
             return
         log(f"Ошибка загрузки блобов: {error}", "ERROR")
         try:
@@ -233,10 +231,7 @@ class BlobsPage(BasePage):
         except Exception:
             pass
 
-    def _on_blobs_load_worker_finished(self, worker) -> None:
-        if self.__dict__.get("_blobs_load_worker") is worker:
-            self._blobs_load_worker = None
-        worker.deleteLater()
+    def _on_blobs_load_worker_finished(self, _worker) -> None:
         if hasattr(self, "reload_btn"):
             self.reload_btn.set_loading(False)
         if self._blobs_load_pending and not self._cleanup_in_progress:
@@ -313,36 +308,34 @@ class BlobsPage(BasePage):
             "value": str(value or ""),
             "description": str(description or ""),
         }
-        worker = self.__dict__.get("_blob_action_worker")
-        if worker is not None:
-            try:
-                if worker.isRunning():
-                    self._blob_action_pending.append(payload)
-                    return
-            except Exception:
-                self._blob_action_pending.append(payload)
-                return
+        if self._blob_action_runtime.is_running():
+            self._blob_action_pending.append(payload)
+            return
         self._start_blob_action_worker(payload)
 
     def _start_blob_action_worker(self, payload: dict[str, str]) -> None:
-        self._blob_action_request_id += 1
-        request_id = self._blob_action_request_id
-        worker = self.create_blob_action_worker(
-            request_id,
-            action=payload.get("action", ""),
-            name=payload.get("name", ""),
-            blob_type=payload.get("blob_type", ""),
-            value=payload.get("value", ""),
-            description=payload.get("description", ""),
+        self._blob_action_runtime.start_qthread_worker(
+            worker_factory=lambda request_id: self.create_blob_action_worker(
+                request_id,
+                action=payload.get("action", ""),
+                name=payload.get("name", ""),
+                blob_type=payload.get("blob_type", ""),
+                value=payload.get("value", ""),
+                description=payload.get("description", ""),
+            ),
+            on_failed=self._on_blob_action_failed,
+            on_finished=self._on_blob_action_worker_finished,
+            bind_worker=self._bind_blob_action_worker,
         )
-        self._blob_action_worker = worker
+
+    def _bind_blob_action_worker(self, worker) -> None:
         worker.completed.connect(self._on_blob_action_finished)
-        worker.failed.connect(self._on_blob_action_failed)
-        worker.finished.connect(lambda w=worker: self._on_blob_action_worker_finished(w))
-        worker.start()
 
     def _on_blob_action_finished(self, request_id: int, action: str, result: bool, context) -> None:
-        if request_id != self._blob_action_request_id or self._cleanup_in_progress:
+        if not self._blob_action_runtime.is_current(
+            request_id,
+            cleanup_in_progress=self._cleanup_in_progress,
+        ):
             return
         context = dict(context or {})
         name = str(context.get("name") or "")
@@ -365,7 +358,10 @@ class BlobsPage(BasePage):
         )
 
     def _on_blob_action_failed(self, request_id: int, action: str, error: str, context) -> None:
-        if request_id != self._blob_action_request_id or self._cleanup_in_progress:
+        if not self._blob_action_runtime.is_current(
+            request_id,
+            cleanup_in_progress=self._cleanup_in_progress,
+        ):
             return
         log(f"Ошибка действия blob ({action}): {error}", "ERROR")
         name = str((dict(context or {})).get("name") or "")
@@ -382,10 +378,7 @@ class BlobsPage(BasePage):
             parent=self.window(),
         )
 
-    def _on_blob_action_worker_finished(self, worker) -> None:
-        if self.__dict__.get("_blob_action_worker") is worker:
-            self._blob_action_worker = None
-        worker.deleteLater()
+    def _on_blob_action_worker_finished(self, _worker) -> None:
         if self._blob_action_pending and not self._cleanup_in_progress:
             pending = self._blob_action_pending.pop(0)
             self._start_blob_action_worker(pending)
@@ -413,27 +406,26 @@ class BlobsPage(BasePage):
         action = str(action or "").strip()
         if not action:
             return
-        worker = self.__dict__.get("_blob_open_action_worker")
-        if worker is not None:
-            try:
-                if worker.isRunning():
-                    self._blob_open_action_pending.append(action)
-                    return
-            except RuntimeError:
-                self._blob_open_action_worker = None
+        if self._blob_open_action_runtime.is_running():
+            self._blob_open_action_pending.append(action)
+            return
         self._start_blob_open_action_worker(action)
 
     def _start_blob_open_action_worker(self, action: str) -> None:
-        self._blob_open_action_request_id += 1
-        request_id = self._blob_open_action_request_id
-        worker = self.create_blob_open_action_worker(request_id, action=action)
-        self._blob_open_action_worker = worker
-        worker.failed.connect(self._on_blob_open_action_failed)
-        worker.finished.connect(lambda w=worker: self._on_blob_open_action_worker_finished(w))
-        worker.start()
+        self._blob_open_action_runtime.start_qthread_worker(
+            worker_factory=lambda request_id: self.create_blob_open_action_worker(
+                request_id,
+                action=action,
+            ),
+            on_failed=self._on_blob_open_action_failed,
+            on_finished=self._on_blob_open_action_worker_finished,
+        )
 
     def _on_blob_open_action_failed(self, request_id: int, action: str, error: str) -> None:
-        if request_id != self._blob_open_action_request_id or self._cleanup_in_progress:
+        if not self._blob_open_action_runtime.is_current(
+            request_id,
+            cleanup_in_progress=self._cleanup_in_progress,
+        ):
             return
         log(f"Ошибка открытия blobs action {action}: {error}", "ERROR")
         message_key = "page.blobs.error.open_file" if action == "blobs_json" else "page.blobs.error.open_folder"
@@ -444,10 +436,7 @@ class BlobsPage(BasePage):
             parent=self.window(),
         )
 
-    def _on_blob_open_action_worker_finished(self, worker) -> None:
-        if self.__dict__.get("_blob_open_action_worker") is worker:
-            self._blob_open_action_worker = None
-        worker.deleteLater()
+    def _on_blob_open_action_worker_finished(self, _worker) -> None:
         if self._blob_open_action_pending and not self._cleanup_in_progress:
             pending = self._blob_open_action_pending.pop(0)
             self._start_blob_open_action_worker(pending)
@@ -473,24 +462,21 @@ class BlobsPage(BasePage):
         self._blob_open_action_pending.clear()
         self._blobs_load_pending = False
         self._blobs_load_pending_reload = False
-        load_worker = self.__dict__.get("_blobs_load_worker")
-        if load_worker is not None:
-            try:
-                load_worker.quit()
-            except Exception:
-                pass
-            self._blobs_load_worker = None
-        action_worker = self.__dict__.get("_blob_action_worker")
-        if action_worker is not None:
-            try:
-                action_worker.quit()
-            except Exception:
-                pass
-            self._blob_action_worker = None
-        open_action_worker = self.__dict__.get("_blob_open_action_worker")
-        if open_action_worker is not None:
-            try:
-                open_action_worker.quit()
-            except Exception:
-                pass
-            self._blob_open_action_worker = None
+        self._blobs_load_runtime.stop(
+            blocking=False,
+            log_fn=log,
+            warning_prefix="blobs_load_worker",
+        )
+        self._blobs_load_runtime.cancel()
+        self._blob_action_runtime.stop(
+            blocking=False,
+            log_fn=log,
+            warning_prefix="blob_action_worker",
+        )
+        self._blob_action_runtime.cancel()
+        self._blob_open_action_runtime.stop(
+            blocking=False,
+            log_fn=log,
+            warning_prefix="blob_open_action_worker",
+        )
+        self._blob_open_action_runtime.cancel()
