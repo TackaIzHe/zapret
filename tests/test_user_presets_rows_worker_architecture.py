@@ -41,6 +41,14 @@ class UserPresetsRowsWorkerArchitectureTests(unittest.TestCase):
         self.assertIn("selected_source_file_name=adapter.selected_source_file_name", request_source)
         self.assertNotIn("active_file_name=adapter.selected_source_file_name()", request_source)
 
+    def test_single_metadata_update_uses_model_active_marker_without_settings_read(self) -> None:
+        import presets.user_presets_runtime_service as runtime_service
+
+        source = inspect.getsource(runtime_service.UserPresetsRuntimeService.try_apply_single_preset_metadata_update)
+
+        self.assertIn("active_preset_file_name", source)
+        self.assertNotIn("adapter.selected_source_file_name()", source)
+
 
 if __name__ == "__main__":
     unittest.main()

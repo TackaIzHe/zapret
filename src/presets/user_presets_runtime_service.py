@@ -455,7 +455,6 @@ class UserPresetsRuntimeService:
         page=None,
     ) -> bool:
         page = self._resolve_page(page)
-        adapter = self._resolve_adapter()
         model = page._presets_model
         if model is None or model.find_preset_row(normalized_file_name) < 0:
             return False
@@ -469,7 +468,7 @@ class UserPresetsRuntimeService:
         if query and query not in next_display_name.lower():
             return False
 
-        active_file_name = adapter.selected_source_file_name()
+        active_file_name = self.active_preset_file_name(page)
         return model.update_preset_row(
             normalized_file_name,
             name=next_display_name,
