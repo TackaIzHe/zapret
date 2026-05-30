@@ -4058,6 +4058,7 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         support_worker = importlib.import_module("diagnostics.support_worker")
         page_source = inspect.getsource(ConnectionTestPage)
         handler_source = inspect.getsource(ConnectionTestPage.open_support_with_log)
+        request_source = inspect.getsource(ConnectionTestPage._request_support_prepare)
         handler_body = handler_source.split("\n", 1)[1]
         worker_source = inspect.getsource(support_worker.ConnectionSupportPrepareWorker.run)
         feature_source = inspect.getsource(DiagnosticsFeature)
@@ -4066,7 +4067,9 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("_request_support_prepare", handler_source)
         self.assertNotIn("open_support_with_log(", handler_body)
         self.assertIn("create_support_prepare_worker", page_source)
-        self.assertIn("_support_prepare_worker", page_source)
+        self.assertIn("_support_prepare_runtime", page_source)
+        self.assertIn("start_qthread_worker", request_source)
+        self.assertNotIn("worker.start()", request_source)
         self.assertIn("create_connection_support_prepare_worker", feature_source)
         self.assertIn("prepare_connection_support=", feature_build_source)
         self.assertIn("_prepare_connection_support", worker_source)

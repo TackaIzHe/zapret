@@ -15,6 +15,7 @@ from qfluentwidgets import (
 )
 
 from ui.pages.base_page import BasePage
+from ui.one_shot_worker_runtime import OneShotWorkerRuntime
 from diagnostics.ui.build import (
     build_connection_controls,
     build_connection_header,
@@ -55,8 +56,7 @@ class ConnectionTestPage(BasePage):
         self._pending_start_focus = False
         self._finish_mode = "completed"
         self._cleanup_in_progress = False
-        self._support_prepare_worker = None
-        self._support_prepare_request_id = 0
+        self._support_prepare_runtime = OneShotWorkerRuntime()
 
         # Контейнер с ограниченной шириной, чтобы не расползалось за края
         self.container = QWidget(self.content)
@@ -273,48 +273,46 @@ class ConnectionTestPage(BasePage):
         self._request_support_prepare(selection=self.test_combo.currentText())
 
     def _request_support_prepare(self, *, selection: str) -> None:
-        worker = self.__dict__.get("_support_prepare_worker")
-        if worker is not None:
-            try:
-                if worker.isRunning():
-                    self._set_status("Подготовка обращения уже идёт...", "info")
-                    return
-            except Exception:
-                return
-
-        self._support_prepare_request_id += 1
-        request_id = self._support_prepare_request_id
+        if self._support_prepare_runtime.is_running():
+            self._set_status("Подготовка обращения уже идёт...", "info")
+            return
         self._set_status("Подготовка обращения...", "info")
         if self.send_log_btn is not None:
             self.send_log_btn.setEnabled(False)
 
-        worker = self.create_support_prepare_worker(request_id, selection=selection)
-        self._support_prepare_worker = worker
+        self._support_prepare_runtime.start_qthread_worker(
+            worker_factory=lambda request_id: self.create_support_prepare_worker(
+                request_id,
+                selection=selection,
+            ),
+            on_failed=self._on_support_prepare_failed,
+            on_finished=self._on_support_prepare_worker_finished,
+            bind_worker=self._bind_support_prepare_worker,
+        )
+
+    def _bind_support_prepare_worker(self, worker) -> None:
         worker.completed.connect(self._on_support_prepare_finished)
-        worker.failed.connect(self._on_support_prepare_failed)
-        worker.finished.connect(lambda w=worker: self._on_support_prepare_worker_finished(w))
-        worker.start()
 
     def _on_support_prepare_finished(self, request_id: int, plan) -> None:
-        if request_id != self._support_prepare_request_id or self._cleanup_in_progress:
+        if not self._support_prepare_runtime.is_current(
+            request_id,
+            cleanup_in_progress=self._cleanup_in_progress,
+        ):
             return
         for line in plan.log_lines:
             self._append(line)
         self._set_status(plan.status_text, plan.status_tone)
 
     def _on_support_prepare_failed(self, request_id: int, error: str) -> None:
-        if request_id != self._support_prepare_request_id or self._cleanup_in_progress:
+        if not self._support_prepare_runtime.is_current(
+            request_id,
+            cleanup_in_progress=self._cleanup_in_progress,
+        ):
             return
         self._append(f"❌ Не удалось подготовить обращение: {error}")
         self._set_status("Ошибка подготовки обращения", "error")
 
-    def _on_support_prepare_worker_finished(self, worker) -> None:
-        if self.__dict__.get("_support_prepare_worker") is worker:
-            self._support_prepare_worker = None
-        try:
-            worker.deleteLater()
-        except Exception:
-            pass
+    def _on_support_prepare_worker_finished(self, _worker) -> None:
         if not self._cleanup_in_progress and self.send_log_btn is not None:
             self.send_log_btn.setEnabled(True)
 
@@ -373,13 +371,12 @@ class ConnectionTestPage(BasePage):
             self.worker = state["worker"]
             self.worker_thread = state["worker_thread"]
             self.stop_check_timer = state["stop_check_timer"]
-            support_worker = self.__dict__.get("_support_prepare_worker")
-            if support_worker is not None:
-                try:
-                    support_worker.quit()
-                except Exception:
-                    pass
-                self._support_prepare_worker = None
+            self._support_prepare_runtime.stop(
+                blocking=False,
+                log_fn=lambda text, level="DEBUG": log(text, level),
+                warning_prefix="connection_support_prepare_worker",
+            )
+            self._support_prepare_runtime.cancel()
             
         except Exception as e:
             log(f"Ошибка при очистке connection_page: {e}", "DEBUG")
