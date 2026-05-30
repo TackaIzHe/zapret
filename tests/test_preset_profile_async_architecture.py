@@ -1086,23 +1086,24 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertFalse(page._is_builtin_preset_file("fallback.txt"))
 
     def test_user_presets_cleanup_stops_action_workers_and_pending_requests(self) -> None:
-        class _Worker:
+        class _Runtime:
             def __init__(self) -> None:
-                self.quit = Mock()
+                self.stop = Mock()
+                self.cancel = Mock()
 
         class _Timer:
             def __init__(self) -> None:
                 self.stop = Mock()
 
-        worker_attrs = (
-            "_preset_activate_worker",
-            "_preset_item_action_worker",
-            "_preset_bulk_action_worker",
-            "_preset_edit_action_worker",
-            "_preset_storage_action_worker",
-            "_preset_folder_action_worker",
-            "_preset_open_folder_worker",
-            "_preset_link_action_worker",
+        runtime_attrs = (
+            "_preset_activate_runtime",
+            "_preset_item_action_runtime",
+            "_preset_bulk_action_runtime",
+            "_preset_edit_action_runtime",
+            "_preset_storage_action_runtime",
+            "_preset_folder_action_runtime",
+            "_preset_open_folder_runtime",
+            "_preset_link_action_runtime",
         )
         request_attrs = (
             "_preset_activate_request_id",
@@ -1115,9 +1116,9 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
             "_preset_link_action_request_id",
         )
         page = UserPresetsPageBase.__new__(UserPresetsPageBase)
-        workers = {attr: _Worker() for attr in worker_attrs}
-        for attr, worker in workers.items():
-            setattr(page, attr, worker)
+        runtimes = {attr: _Runtime() for attr in runtime_attrs}
+        for attr, runtime in runtimes.items():
+            setattr(page, attr, runtime)
         for attr in request_attrs:
             setattr(page, attr, 7)
         page._pending_preset_activation = ("next.txt", "Next")
@@ -1135,10 +1136,9 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
 
         UserPresetsPageBase.cleanup(page)
 
-        for worker in workers.values():
-            worker.quit.assert_called_once()
-        for attr in worker_attrs:
-            self.assertIsNone(getattr(page, attr))
+        for runtime in runtimes.values():
+            runtime.stop.assert_called_once()
+            runtime.cancel.assert_called_once()
         for attr in request_attrs:
             self.assertEqual(getattr(page, attr), 8)
         self.assertIsNone(page._pending_preset_activation)
@@ -1282,7 +1282,9 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("self._open_presets_info", worker_source)
         self.assertIn("self._open_new_configs_post", worker_source)
         self.assertNotIn("actions_api.", worker_source)
-        self.assertIn("_preset_link_action_worker", cleanup_source)
+        self.assertIn("_preset_link_action_runtime", cleanup_source)
+        self.assertIn(".stop(", cleanup_source)
+        self.assertIn(".cancel()", cleanup_source)
 
     def test_user_presets_storage_actions_run_through_worker(self) -> None:
         pin_source = inspect.getsource(UserPresetsPageBase._on_toggle_pin_preset)

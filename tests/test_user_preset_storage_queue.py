@@ -25,10 +25,18 @@ class _Worker:
         return self._running
 
 
+class _Runtime:
+    def __init__(self, *, running: bool = False) -> None:
+        self._running = running
+
+    def is_running(self) -> bool:
+        return self._running
+
+
 class UserPresetStorageQueueTests(unittest.TestCase):
     def test_storage_action_keeps_latest_pending_action_while_worker_runs(self) -> None:
         page = UserPresetsPageBase.__new__(UserPresetsPageBase)
-        page._preset_storage_action_worker = _Worker(running=True)
+        page._preset_storage_action_runtime = _Runtime(running=True)
         page._pending_preset_storage_action = None
 
         UserPresetsPageBase._request_preset_storage_action(
@@ -60,7 +68,6 @@ class UserPresetStorageQueueTests(unittest.TestCase):
         page = UserPresetsPageBase.__new__(UserPresetsPageBase)
         old_worker = _Worker(running=False)
         next_worker = _Worker(running=False)
-        page._preset_storage_action_worker = old_worker
         page._preset_storage_action_request_id = 0
         page.create_preset_storage_action_worker = Mock(return_value=next_worker)
         page._pending_preset_storage_action = {

@@ -80,6 +80,7 @@ from ui.presets_menu.delegate import PresetListDelegate
 from ui.presets_menu.model import PresetListModel
 from ui.presets_menu.toolbar import PresetsToolbarLayout
 from ui.presets_menu.common import tr_text as _tr_text
+from ui.one_shot_worker_runtime import OneShotWorkerRuntime
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,27 +173,27 @@ class UserPresetsPageBase(BasePage):
         self._ui_state_store: Optional[MainWindowStateStore] = None
         self._ui_state_unsubscribe = None
         self._cleanup_in_progress = False
-        self._preset_activate_worker = None
+        self._preset_activate_runtime = OneShotWorkerRuntime()
         self._preset_activate_request_id = 0
         self._pending_preset_activation: tuple[str, str] | None = None
         self._restore_preset_activation_marker_file_name = ""
-        self._preset_item_action_worker = None
+        self._preset_item_action_runtime = OneShotWorkerRuntime()
         self._preset_item_action_request_id = 0
-        self._preset_bulk_action_worker = None
+        self._preset_bulk_action_runtime = OneShotWorkerRuntime()
         self._preset_bulk_action_request_id = 0
         self._preset_bulk_action_kind = ""
-        self._preset_edit_action_worker = None
+        self._preset_edit_action_runtime = OneShotWorkerRuntime()
         self._preset_edit_action_request_id = 0
-        self._preset_storage_action_worker = None
+        self._preset_storage_action_runtime = OneShotWorkerRuntime()
         self._preset_storage_action_request_id = 0
         self._pending_preset_storage_action: dict[str, object] | None = None
-        self._preset_folder_action_worker = None
+        self._preset_folder_action_runtime = OneShotWorkerRuntime()
         self._preset_folder_action_request_id = 0
         self._preset_folder_action_pending: list[dict[str, object]] = []
-        self._preset_open_folder_worker = None
+        self._preset_open_folder_runtime = OneShotWorkerRuntime()
         self._preset_open_folder_request_id = 0
         self._preset_open_folder_pending = False
-        self._preset_link_action_worker = None
+        self._preset_link_action_runtime = OneShotWorkerRuntime()
         self._preset_link_action_request_id = 0
         self._preset_link_action_pending = ""
         self._build_ui()
@@ -201,6 +202,19 @@ class UserPresetsPageBase(BasePage):
 
     def _tr(self, key: str, default: str, **kwargs) -> str:
         return _tr_text(key, self._ui_language, default, **kwargs)
+
+    def _worker_runtime(self, attr: str) -> OneShotWorkerRuntime:
+        runtime = self.__dict__.get(attr)
+        if runtime is None:
+            runtime = OneShotWorkerRuntime()
+            setattr(self, attr, runtime)
+        return runtime
+
+    def _worker_runtime_is_running(self, attr: str) -> bool:
+        runtime = self.__dict__.get(attr)
+        if runtime is None:
+            return False
+        return bool(runtime.is_running())
 
     def _build_page_runtime(self):
         return UserPresetsPageRuntime(
@@ -559,25 +573,24 @@ class UserPresetsPageBase(BasePage):
         )
 
     def _request_preset_open_folder_action(self) -> None:
-        worker = self.__dict__.get("_preset_open_folder_worker")
-        if worker is not None:
-            try:
-                if worker.isRunning():
-                    self._preset_open_folder_pending = True
-                    return
-            except RuntimeError:
-                self._preset_open_folder_worker = None
+        if self._worker_runtime_is_running("_preset_open_folder_runtime"):
+            self._preset_open_folder_pending = True
+            return
         self._start_preset_open_folder_worker()
 
     def _start_preset_open_folder_worker(self) -> None:
         self._preset_open_folder_pending = False
-        self._preset_open_folder_request_id = int(getattr(self, "_preset_open_folder_request_id", 0) or 0) + 1
+        self._preset_open_folder_request_id = int(self.__dict__.get("_preset_open_folder_request_id", 0) or 0) + 1
         request_id = self._preset_open_folder_request_id
-        worker = self.create_preset_open_folder_worker(request_id)
-        self._preset_open_folder_worker = worker
-        worker.failed.connect(self._on_preset_open_folder_failed)
-        worker.finished.connect(lambda w=worker: self._on_preset_open_folder_worker_finished(w))
-        worker.start()
+
+        def _bind_worker(worker) -> None:
+            worker.failed.connect(self._on_preset_open_folder_failed)
+
+        self._worker_runtime("_preset_open_folder_runtime").start_qthread_worker(
+            worker_factory=lambda _runtime_request_id: self.create_preset_open_folder_worker(request_id),
+            bind_worker=_bind_worker,
+            on_finished=self._on_preset_open_folder_worker_finished,
+        )
 
     def _on_preset_open_folder_failed(self, request_id: int, error: str) -> None:
         if request_id != int(getattr(self, "_preset_open_folder_request_id", 0) or 0):
@@ -595,9 +608,6 @@ class UserPresetsPageBase(BasePage):
             )
 
     def _on_preset_open_folder_worker_finished(self, worker) -> None:
-        if self.__dict__.get("_preset_open_folder_worker") is worker:
-            self._preset_open_folder_worker = None
-        worker.deleteLater()
         if self._preset_open_folder_pending:
             self._start_preset_open_folder_worker()
 
@@ -715,28 +725,28 @@ class UserPresetsPageBase(BasePage):
         new_name: str = "",
         from_current: bool = False,
     ) -> None:
-        worker = self.__dict__.get("_preset_edit_action_worker")
-        if worker is not None:
-            try:
-                if worker.isRunning():
-                    return
-            except Exception:
-                return
-        self._preset_edit_action_request_id = int(getattr(self, "_preset_edit_action_request_id", 0) or 0) + 1
+        runtime = self._worker_runtime("_preset_edit_action_runtime")
+        if runtime.is_running():
+            return
+        self._preset_edit_action_request_id = int(self.__dict__.get("_preset_edit_action_request_id", 0) or 0) + 1
         request_id = self._preset_edit_action_request_id
-        worker = self.create_preset_edit_action_worker(
-            request_id,
-            action=str(action or ""),
-            name=str(name or ""),
-            current_name=str(current_name or ""),
-            new_name=str(new_name or ""),
-            from_current=bool(from_current),
+
+        def _bind_worker(worker) -> None:
+            worker.completed.connect(self._on_preset_edit_action_finished)
+            worker.failed.connect(self._on_preset_edit_action_failed)
+
+        runtime.start_qthread_worker(
+            worker_factory=lambda _runtime_request_id: self.create_preset_edit_action_worker(
+                request_id,
+                action=str(action or ""),
+                name=str(name or ""),
+                current_name=str(current_name or ""),
+                new_name=str(new_name or ""),
+                from_current=bool(from_current),
+            ),
+            bind_worker=_bind_worker,
+            on_finished=self._on_preset_edit_action_worker_finished,
         )
-        self._preset_edit_action_worker = worker
-        worker.completed.connect(self._on_preset_edit_action_finished)
-        worker.failed.connect(self._on_preset_edit_action_failed)
-        worker.finished.connect(lambda w=worker: self._on_preset_edit_action_worker_finished(w))
-        worker.start()
 
     def _on_preset_edit_action_finished(self, request_id: int, action: str, result, context) -> None:
         if request_id != int(getattr(self, "_preset_edit_action_request_id", 0) or 0):
@@ -775,9 +785,7 @@ class UserPresetsPageBase(BasePage):
         )
 
     def _on_preset_edit_action_worker_finished(self, worker) -> None:
-        if self.__dict__.get("_preset_edit_action_worker") is worker:
-            self._preset_edit_action_worker = None
-        worker.deleteLater()
+        return
 
     def _on_create_clicked(self):
         self._show_inline_action_create()
@@ -811,26 +819,26 @@ class UserPresetsPageBase(BasePage):
         )
 
     def _request_preset_bulk_action(self, action: str, *, file_path: str = "") -> bool:
-        worker = self.__dict__.get("_preset_bulk_action_worker")
-        if worker is not None:
-            try:
-                if worker.isRunning():
-                    return False
-            except Exception:
-                return False
-        self._preset_bulk_action_request_id = int(getattr(self, "_preset_bulk_action_request_id", 0) or 0) + 1
+        runtime = self._worker_runtime("_preset_bulk_action_runtime")
+        if runtime.is_running():
+            return False
+        self._preset_bulk_action_request_id = int(self.__dict__.get("_preset_bulk_action_request_id", 0) or 0) + 1
         request_id = self._preset_bulk_action_request_id
         self._preset_bulk_action_kind = str(action or "")
-        worker = self.create_preset_bulk_action_worker(
-            request_id,
-            action=str(action or ""),
-            file_path=str(file_path or ""),
+
+        def _bind_worker(worker) -> None:
+            worker.completed.connect(self._on_preset_bulk_action_finished)
+            worker.failed.connect(self._on_preset_bulk_action_failed)
+
+        runtime.start_qthread_worker(
+            worker_factory=lambda _runtime_request_id: self.create_preset_bulk_action_worker(
+                request_id,
+                action=str(action or ""),
+                file_path=str(file_path or ""),
+            ),
+            bind_worker=_bind_worker,
+            on_finished=self._on_preset_bulk_action_worker_finished,
         )
-        self._preset_bulk_action_worker = worker
-        worker.completed.connect(self._on_preset_bulk_action_finished)
-        worker.failed.connect(self._on_preset_bulk_action_failed)
-        worker.finished.connect(lambda w=worker: self._on_preset_bulk_action_worker_finished(w))
-        worker.start()
         return True
 
     def _on_preset_bulk_action_finished(self, request_id: int, action: str, result, _context) -> None:
@@ -875,10 +883,7 @@ class UserPresetsPageBase(BasePage):
 
     def _on_preset_bulk_action_worker_finished(self, worker) -> None:
         action = str(getattr(self, "_preset_bulk_action_kind", "") or "")
-        if self.__dict__.get("_preset_bulk_action_worker") is worker:
-            self._preset_bulk_action_worker = None
-            self._preset_bulk_action_kind = ""
-        worker.deleteLater()
+        self._preset_bulk_action_kind = ""
         if action == "reset_all":
             self._bulk_reset_running = False
             if self._runtime_service.is_ui_dirty() and self.isVisible():
@@ -1056,39 +1061,41 @@ class UserPresetsPageBase(BasePage):
         collapsed: bool = False,
         context_extra: dict | None = None,
     ) -> None:
-        worker = self.__dict__.get("_preset_folder_action_worker")
-        if worker is not None:
-            try:
-                if worker.isRunning():
-                    self._preset_folder_action_pending.append(
-                        {
-                            "action": str(action or ""),
-                            "folder_key": str(folder_key or ""),
-                            "name": str(name or ""),
-                            "direction": int(direction or 0),
-                            "collapsed": bool(collapsed),
-                            "context_extra": dict(context_extra or {}),
-                        }
-                    )
-                    return
-            except Exception:
-                return
-        self._preset_folder_action_request_id = int(getattr(self, "_preset_folder_action_request_id", 0) or 0) + 1
+        runtime = self._worker_runtime("_preset_folder_action_runtime")
+        if runtime.is_running():
+            self._preset_folder_action_pending.append(
+                {
+                    "action": str(action or ""),
+                    "folder_key": str(folder_key or ""),
+                    "name": str(name or ""),
+                    "direction": int(direction or 0),
+                    "collapsed": bool(collapsed),
+                    "context_extra": dict(context_extra or {}),
+                }
+            )
+            return
+        self._preset_folder_action_request_id = int(
+            self.__dict__.get("_preset_folder_action_request_id", 0) or 0
+        ) + 1
         request_id = self._preset_folder_action_request_id
-        worker = self.create_preset_folder_action_worker(
-            request_id,
-            action=str(action or ""),
-            folder_key=str(folder_key or ""),
-            name=str(name or ""),
-            direction=int(direction or 0),
-            collapsed=bool(collapsed),
-            context_extra=dict(context_extra or {}),
+
+        def _bind_worker(worker) -> None:
+            worker.completed.connect(self._on_preset_folder_action_finished)
+            worker.failed.connect(self._on_preset_folder_action_failed)
+
+        runtime.start_qthread_worker(
+            worker_factory=lambda _runtime_request_id: self.create_preset_folder_action_worker(
+                request_id,
+                action=str(action or ""),
+                folder_key=str(folder_key or ""),
+                name=str(name or ""),
+                direction=int(direction or 0),
+                collapsed=bool(collapsed),
+                context_extra=dict(context_extra or {}),
+            ),
+            bind_worker=_bind_worker,
+            on_finished=self._on_preset_folder_action_worker_finished,
         )
-        self._preset_folder_action_worker = worker
-        worker.completed.connect(self._on_preset_folder_action_finished)
-        worker.failed.connect(self._on_preset_folder_action_failed)
-        worker.finished.connect(lambda w=worker: self._on_preset_folder_action_worker_finished(w))
-        worker.start()
 
     def _on_preset_folder_action_finished(self, request_id: int, action: str, result, context) -> None:
         if request_id != int(getattr(self, "_preset_folder_action_request_id", 0) or 0):
@@ -1114,9 +1121,6 @@ class UserPresetsPageBase(BasePage):
         log(f"{self.__class__.__name__}: не удалось выполнить действие папки preset ({action}): {error}", "ERROR")
 
     def _on_preset_folder_action_worker_finished(self, worker) -> None:
-        if self.__dict__.get("_preset_folder_action_worker") is worker:
-            self._preset_folder_action_worker = None
-        worker.deleteLater()
         if self._preset_folder_action_pending:
             pending = self._preset_folder_action_pending.pop(0)
             self._request_preset_folder_action(
@@ -1212,47 +1216,49 @@ class UserPresetsPageBase(BasePage):
         destination_id: str = "",
         destination_folder_key: str = "",
     ) -> None:
-        worker = self.__dict__.get("_preset_storage_action_worker")
-        if worker is not None:
-            try:
-                if worker.isRunning():
-                    self._pending_preset_storage_action = {
-                        "action": str(action or ""),
-                        "name": str(name or ""),
-                        "display_name": str(display_name or ""),
-                        "rating": int(rating or 0),
-                        "direction": int(direction or 0),
-                        "cached_metadata": cached_metadata,
-                        "source_kind": str(source_kind or ""),
-                        "source_id": str(source_id or ""),
-                        "destination_kind": str(destination_kind or ""),
-                        "destination_id": str(destination_id or ""),
-                        "destination_folder_key": str(destination_folder_key or ""),
-                    }
-                    return
-            except Exception:
-                return
-        self._preset_storage_action_request_id = int(getattr(self, "_preset_storage_action_request_id", 0) or 0) + 1
+        runtime = self._worker_runtime("_preset_storage_action_runtime")
+        if runtime.is_running():
+            self._pending_preset_storage_action = {
+                "action": str(action or ""),
+                "name": str(name or ""),
+                "display_name": str(display_name or ""),
+                "rating": int(rating or 0),
+                "direction": int(direction or 0),
+                "cached_metadata": cached_metadata,
+                "source_kind": str(source_kind or ""),
+                "source_id": str(source_id or ""),
+                "destination_kind": str(destination_kind or ""),
+                "destination_id": str(destination_id or ""),
+                "destination_folder_key": str(destination_folder_key or ""),
+            }
+            return
+        self._preset_storage_action_request_id = int(
+            self.__dict__.get("_preset_storage_action_request_id", 0) or 0
+        ) + 1
         request_id = self._preset_storage_action_request_id
-        worker = self.create_preset_storage_action_worker(
-            request_id,
-            action=str(action or ""),
-            name=str(name or ""),
-            display_name=str(display_name or ""),
-            rating=int(rating or 0),
-            direction=int(direction or 0),
-            cached_metadata=cached_metadata,
-            source_kind=str(source_kind or ""),
-            source_id=str(source_id or ""),
-            destination_kind=str(destination_kind or ""),
-            destination_id=str(destination_id or ""),
-            destination_folder_key=str(destination_folder_key or ""),
+
+        def _bind_worker(worker) -> None:
+            worker.completed.connect(self._on_preset_storage_action_finished)
+            worker.failed.connect(self._on_preset_storage_action_failed)
+
+        runtime.start_qthread_worker(
+            worker_factory=lambda _runtime_request_id: self.create_preset_storage_action_worker(
+                request_id,
+                action=str(action or ""),
+                name=str(name or ""),
+                display_name=str(display_name or ""),
+                rating=int(rating or 0),
+                direction=int(direction or 0),
+                cached_metadata=cached_metadata,
+                source_kind=str(source_kind or ""),
+                source_id=str(source_id or ""),
+                destination_kind=str(destination_kind or ""),
+                destination_id=str(destination_id or ""),
+                destination_folder_key=str(destination_folder_key or ""),
+            ),
+            bind_worker=_bind_worker,
+            on_finished=self._on_preset_storage_action_worker_finished,
         )
-        self._preset_storage_action_worker = worker
-        worker.completed.connect(self._on_preset_storage_action_finished)
-        worker.failed.connect(self._on_preset_storage_action_failed)
-        worker.finished.connect(lambda w=worker: self._on_preset_storage_action_worker_finished(w))
-        worker.start()
 
     def _on_preset_storage_action_finished(self, request_id: int, action: str, result, context) -> None:
         if request_id != int(getattr(self, "_preset_storage_action_request_id", 0) or 0):
@@ -1300,9 +1306,6 @@ class UserPresetsPageBase(BasePage):
             log(f"Ошибка перетаскивания элемента: {error}", "ERROR")
 
     def _on_preset_storage_action_worker_finished(self, worker) -> None:
-        if self.__dict__.get("_preset_storage_action_worker") is worker:
-            self._preset_storage_action_worker = None
-        worker.deleteLater()
         pending = self.__dict__.get("_pending_preset_storage_action")
         self._pending_preset_storage_action = None
         if pending:
@@ -1334,13 +1337,7 @@ class UserPresetsPageBase(BasePage):
         return True
 
     def _preset_activation_worker_running(self) -> bool:
-        worker = self.__dict__.get("_preset_activate_worker")
-        if worker is None:
-            return False
-        try:
-            return bool(worker.isRunning())
-        except Exception:
-            return False
+        return self._worker_runtime_is_running("_preset_activate_runtime")
 
     def create_preset_activate_worker(self, request_id: int, *, file_name: str, display_name: str):
         return self._create_preset_activate_worker_fn(
@@ -1354,27 +1351,27 @@ class UserPresetsPageBase(BasePage):
         )
 
     def _request_preset_activation(self, file_name: str, display_name: str) -> None:
-        worker = self.__dict__.get("_preset_activate_worker")
-        if worker is not None:
-            try:
-                if worker.isRunning():
-                    self._pending_preset_activation = (str(file_name or "").strip(), str(display_name or "").strip())
-                    return
-            except Exception:
-                return
-        self._preset_activate_request_id = int(getattr(self, "_preset_activate_request_id", 0) or 0) + 1
+        runtime = self._worker_runtime("_preset_activate_runtime")
+        if runtime.is_running():
+            self._pending_preset_activation = (str(file_name or "").strip(), str(display_name or "").strip())
+            return
+        self._preset_activate_request_id = int(self.__dict__.get("_preset_activate_request_id", 0) or 0) + 1
         request_id = self._preset_activate_request_id
-        worker = self.create_preset_activate_worker(
-            request_id,
-            file_name=file_name,
-            display_name=display_name,
-        )
         self._runtime_service.apply_active_preset_marker_for_file(str(file_name or "").strip())
-        self._preset_activate_worker = worker
-        worker.activated.connect(self._on_preset_activation_finished)
-        worker.failed.connect(self._on_preset_activation_failed)
-        worker.finished.connect(lambda w=worker: self._on_preset_activate_worker_finished(w))
-        worker.start()
+
+        def _bind_worker(worker) -> None:
+            worker.activated.connect(self._on_preset_activation_finished)
+            worker.failed.connect(self._on_preset_activation_failed)
+
+        runtime.start_qthread_worker(
+            worker_factory=lambda _runtime_request_id: self.create_preset_activate_worker(
+                request_id,
+                file_name=file_name,
+                display_name=display_name,
+            ),
+            bind_worker=_bind_worker,
+            on_finished=self._on_preset_activate_worker_finished,
+        )
 
     def _on_preset_activation_finished(self, request_id: int, result) -> None:
         if request_id != int(getattr(self, "_preset_activate_request_id", 0) or 0):
@@ -1415,9 +1412,6 @@ class UserPresetsPageBase(BasePage):
         self._runtime_service.apply_active_preset_marker_for_file("")
 
     def _on_preset_activate_worker_finished(self, worker) -> None:
-        if self.__dict__.get("_preset_activate_worker") is worker:
-            self._preset_activate_worker = None
-        worker.deleteLater()
         pending = self.__dict__.get("_pending_preset_activation")
         self._pending_preset_activation = None
         if pending:
@@ -1597,27 +1591,27 @@ class UserPresetsPageBase(BasePage):
         display_name: str,
         file_path: str = "",
     ) -> None:
-        worker = self.__dict__.get("_preset_item_action_worker")
-        if worker is not None:
-            try:
-                if worker.isRunning():
-                    return
-            except Exception:
-                return
-        self._preset_item_action_request_id = int(getattr(self, "_preset_item_action_request_id", 0) or 0) + 1
+        runtime = self._worker_runtime("_preset_item_action_runtime")
+        if runtime.is_running():
+            return
+        self._preset_item_action_request_id = int(self.__dict__.get("_preset_item_action_request_id", 0) or 0) + 1
         request_id = self._preset_item_action_request_id
-        worker = self.create_preset_item_action_worker(
-            request_id,
-            action=str(action or ""),
-            file_name=str(file_name or ""),
-            display_name=str(display_name or ""),
-            file_path=str(file_path or ""),
+
+        def _bind_worker(worker) -> None:
+            worker.completed.connect(self._on_preset_item_action_finished)
+            worker.failed.connect(self._on_preset_item_action_failed)
+
+        runtime.start_qthread_worker(
+            worker_factory=lambda _runtime_request_id: self.create_preset_item_action_worker(
+                request_id,
+                action=str(action or ""),
+                file_name=str(file_name or ""),
+                display_name=str(display_name or ""),
+                file_path=str(file_path or ""),
+            ),
+            bind_worker=_bind_worker,
+            on_finished=self._on_preset_item_action_worker_finished,
         )
-        self._preset_item_action_worker = worker
-        worker.completed.connect(self._on_preset_item_action_finished)
-        worker.failed.connect(self._on_preset_item_action_failed)
-        worker.finished.connect(lambda w=worker: self._on_preset_item_action_worker_finished(w))
-        worker.start()
 
     def _on_preset_item_action_finished(self, request_id: int, action: str, result, context) -> None:
         if request_id != int(getattr(self, "_preset_item_action_request_id", 0) or 0):
@@ -1661,9 +1655,7 @@ class UserPresetsPageBase(BasePage):
         )
 
     def _on_preset_item_action_worker_finished(self, worker) -> None:
-        if self.__dict__.get("_preset_item_action_worker") is worker:
-            self._preset_item_action_worker = None
-        worker.deleteLater()
+        return
 
     def create_preset_link_action_worker(self, request_id: int, *, action: str):
         return self._create_preset_link_action_worker_fn(
@@ -1677,22 +1669,22 @@ class UserPresetsPageBase(BasePage):
         action = str(action or "").strip()
         if not action:
             return
-        worker = self.__dict__.get("_preset_link_action_worker")
-        if worker is not None:
-            try:
-                if worker.isRunning():
-                    self._preset_link_action_pending = action
-                    return
-            except Exception:
-                return
-        self._preset_link_action_request_id = int(getattr(self, "_preset_link_action_request_id", 0) or 0) + 1
+        runtime = self._worker_runtime("_preset_link_action_runtime")
+        if runtime.is_running():
+            self._preset_link_action_pending = action
+            return
+        self._preset_link_action_request_id = int(self.__dict__.get("_preset_link_action_request_id", 0) or 0) + 1
         request_id = self._preset_link_action_request_id
-        worker = self.create_preset_link_action_worker(request_id, action=action)
-        self._preset_link_action_worker = worker
-        worker.completed.connect(self._on_preset_link_action_finished)
-        worker.failed.connect(self._on_preset_link_action_failed)
-        worker.finished.connect(lambda w=worker: self._on_preset_link_action_worker_finished(w))
-        worker.start()
+
+        def _bind_worker(worker) -> None:
+            worker.completed.connect(self._on_preset_link_action_finished)
+            worker.failed.connect(self._on_preset_link_action_failed)
+
+        runtime.start_qthread_worker(
+            worker_factory=lambda _runtime_request_id: self.create_preset_link_action_worker(request_id, action=action),
+            bind_worker=_bind_worker,
+            on_finished=self._on_preset_link_action_worker_finished,
+        )
 
     def _on_preset_link_action_finished(self, request_id: int, _action: str, result, _context) -> None:
         if request_id != int(getattr(self, "_preset_link_action_request_id", 0) or 0):
@@ -1716,9 +1708,6 @@ class UserPresetsPageBase(BasePage):
         )
 
     def _on_preset_link_action_worker_finished(self, worker) -> None:
-        if self.__dict__.get("_preset_link_action_worker") is worker:
-            self._preset_link_action_worker = None
-        worker.deleteLater()
         pending = str(self.__dict__.get("_preset_link_action_pending") or "").strip()
         self._preset_link_action_pending = ""
         if pending and not self._cleanup_in_progress:
@@ -1752,24 +1741,25 @@ class UserPresetsPageBase(BasePage):
         ):
             setattr(self, attr, int(getattr(self, attr, 0) or 0) + 1)
 
-        for attr in (
-            "_preset_activate_worker",
-            "_preset_item_action_worker",
-            "_preset_bulk_action_worker",
-            "_preset_edit_action_worker",
-            "_preset_storage_action_worker",
-            "_preset_folder_action_worker",
-            "_preset_open_folder_worker",
-            "_preset_link_action_worker",
+        for attr, label in (
+            ("_preset_activate_runtime", "preset activate worker"),
+            ("_preset_item_action_runtime", "preset item action worker"),
+            ("_preset_bulk_action_runtime", "preset bulk action worker"),
+            ("_preset_edit_action_runtime", "preset edit action worker"),
+            ("_preset_storage_action_runtime", "preset storage action worker"),
+            ("_preset_folder_action_runtime", "preset folder action worker"),
+            ("_preset_open_folder_runtime", "preset open folder worker"),
+            ("_preset_link_action_runtime", "preset link action worker"),
         ):
-            worker = self.__dict__.get(attr)
-            if worker is None:
+            runtime = self.__dict__.get(attr)
+            if runtime is None:
                 continue
-            try:
-                worker.quit()
-            except Exception:
-                pass
-            setattr(self, attr, None)
+            runtime.stop(
+                blocking=False,
+                log_fn=log,
+                warning_prefix=label,
+            )
+            runtime.cancel()
 
     def cleanup(self) -> None:
         self._stop_action_workers_for_cleanup()

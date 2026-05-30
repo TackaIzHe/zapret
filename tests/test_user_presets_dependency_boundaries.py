@@ -110,6 +110,51 @@ class UserPresetsDependencyBoundaryTests(unittest.TestCase):
         self.assertIs(kwargs["load_preset_folder_state"], presets.load_preset_folder_state)
         self.assertIs(kwargs["delete_preset_item_meta"], presets.delete_preset_item_meta)
 
+    def test_user_presets_page_uses_worker_runtime_instead_of_manual_worker_fields(self) -> None:
+        from presets.ui.common.user_presets_page import UserPresetsPageBase
+
+        init_source = inspect.getsource(UserPresetsPageBase.__init__)
+        page_source = inspect.getsource(UserPresetsPageBase)
+        request_sources = (
+            inspect.getsource(UserPresetsPageBase._start_preset_open_folder_worker),
+            inspect.getsource(UserPresetsPageBase._request_preset_edit_action),
+            inspect.getsource(UserPresetsPageBase._request_preset_bulk_action),
+            inspect.getsource(UserPresetsPageBase._request_preset_folder_action),
+            inspect.getsource(UserPresetsPageBase._request_preset_storage_action),
+            inspect.getsource(UserPresetsPageBase._request_preset_activation),
+            inspect.getsource(UserPresetsPageBase._request_preset_item_action),
+            inspect.getsource(UserPresetsPageBase._request_preset_link_action),
+        )
+
+        self.assertIn("OneShotWorkerRuntime", init_source)
+        for attr in (
+            "_preset_activate_runtime",
+            "_preset_item_action_runtime",
+            "_preset_bulk_action_runtime",
+            "_preset_edit_action_runtime",
+            "_preset_storage_action_runtime",
+            "_preset_folder_action_runtime",
+            "_preset_open_folder_runtime",
+            "_preset_link_action_runtime",
+        ):
+            self.assertIn(attr, init_source)
+
+        for source in request_sources:
+            self.assertIn("start_qthread_worker", source)
+            self.assertNotIn("worker.start()", source)
+
+        for attr in (
+            "_preset_activate_worker =",
+            "_preset_item_action_worker =",
+            "_preset_bulk_action_worker =",
+            "_preset_edit_action_worker =",
+            "_preset_storage_action_worker =",
+            "_preset_folder_action_worker =",
+            "_preset_open_folder_worker =",
+            "_preset_link_action_worker =",
+        ):
+            self.assertNotIn(attr, page_source)
+
     def test_user_presets_runtime_actions_do_not_expose_mutating_preset_commands(self) -> None:
         from dataclasses import fields
 
