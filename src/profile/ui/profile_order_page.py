@@ -39,6 +39,7 @@ class ProfileOrderPageBase(BasePage):
         self._order_load_runtime = OneShotWorkerRuntime()
         self._order_load_dirty = False
         self._order_move_runtime = OneShotWorkerRuntime()
+        self._pending_profile_order_move: dict[str, str] | None = None
         self._breadcrumb = None
         self._cleanup_in_progress = False
         self._build_content()
@@ -150,7 +151,25 @@ class ProfileOrderPageBase(BasePage):
         if not source_profile_key:
             return
         if self._order_move_runtime.is_running():
+            self._pending_profile_order_move = {
+                "action": str(action or ""),
+                "source_profile_key": source_profile_key,
+                "destination_profile_key": str(destination_profile_key or ""),
+            }
             return
+        self._start_profile_order_move_worker(
+            action,
+            source_profile_key,
+            destination_profile_key=destination_profile_key,
+        )
+
+    def _start_profile_order_move_worker(
+        self,
+        action: str,
+        source_profile_key: str,
+        *,
+        destination_profile_key: str = "",
+    ) -> None:
         self._order_move_runtime.start_qthread_worker(
             worker_factory=lambda request_id: self._create_profile_order_move_worker(
                 request_id,
@@ -217,7 +236,14 @@ class ProfileOrderPageBase(BasePage):
         InfoBar.error(title="Ошибка", content=str(error), parent=self.window())
 
     def _on_profile_order_move_worker_finished(self, _worker) -> None:
-        return
+        pending = self.__dict__.get("_pending_profile_order_move")
+        self._pending_profile_order_move = None
+        if pending and not bool(self.__dict__.get("_cleanup_in_progress", False)):
+            self._start_profile_order_move_worker(
+                str(pending.get("action") or ""),
+                str(pending.get("source_profile_key") or ""),
+                destination_profile_key=str(pending.get("destination_profile_key") or ""),
+            )
 
     def _apply_profile_order_move_locally(
         self,
@@ -238,6 +264,7 @@ class ProfileOrderPageBase(BasePage):
     def cleanup(self) -> None:
         self._cleanup_in_progress = True
         self._order_load_dirty = False
+        self._pending_profile_order_move = None
         self._order_load_runtime.stop(warning_prefix="Profile order load worker")
         self._order_load_runtime.cancel()
         self._order_move_runtime.stop(warning_prefix="Profile order move worker")
