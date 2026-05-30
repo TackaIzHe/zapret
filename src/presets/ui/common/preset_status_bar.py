@@ -109,6 +109,17 @@ def set_text_if_changed(widget, text: str) -> bool:
     return True
 
 
+def set_tool_tip_if_changed(widget, text: str) -> bool:
+    value = str(text or "")
+    try:
+        if str(widget.toolTip()) == value:
+            return False
+    except Exception:
+        pass
+    widget.setToolTip(value)
+    return True
+
+
 class PresetStatusBar(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -226,7 +237,7 @@ class PresetStatusIcon(QWidget):
                 self.spinner.stop()
                 self.check_label.setVisible(indicator == "check")
 
-        self.setToolTip(normalized_plan.text)
+        set_tool_tip_if_changed(self, normalized_plan.text)
         if indicator_changed:
             self.setVisible(indicator in {"spinner", "check"})
         self._apply_mode_style(mode)

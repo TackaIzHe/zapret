@@ -452,6 +452,21 @@ class PresetStatusBarPlanTests(unittest.TestCase):
         icon.setToolTip.assert_not_called()
         icon.setVisible.assert_not_called()
 
+    def test_title_status_icon_theme_refresh_skips_duplicate_tooltip(self) -> None:
+        from unittest.mock import patch
+
+        from presets.ui.common.preset_status_bar import PresetStatusIcon, build_preset_status_plan
+
+        icon = PresetStatusIcon(size=24)
+        plan = build_preset_status_plan("applied", launch_method=ZAPRET2_MODE)
+        icon.set_plan(plan)
+        icon.setToolTip = Mock(side_effect=AssertionError("same tooltip must not rewrite on theme refresh"))
+
+        with patch("presets.ui.common.preset_status_bar._status_theme_key", return_value=("#8cc63f", False)):
+            icon.set_plan(plan)
+
+        icon.setToolTip.assert_not_called()
+
     def test_title_status_icon_text_change_keeps_same_indicator_render(self) -> None:
         from presets.ui.common.preset_status_bar import PresetStatusIcon, build_preset_status_plan
 
