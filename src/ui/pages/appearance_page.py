@@ -28,6 +28,7 @@ from ui.fluent_widgets import (
     enable_setting_card_group_auto_height,
     insert_widget_into_setting_card_group,
 )
+from ui.one_shot_worker_runtime import OneShotWorkerRuntime
 from app.state_store import AppUiState, MainWindowStateStore
 from ui.theme import get_cached_qta_pixmap, get_theme_tokens
 from app.ui_texts import tr as tr_catalog
@@ -130,16 +131,12 @@ class AppearancePage(BasePage):
         self._ui_sync_depth = 0
         self._background_refresh_queued = False
         self._cleanup_in_progress = False
-        self._appearance_save_worker = None
-        self._appearance_save_request_id = 0
+        self._appearance_save_runtime = OneShotWorkerRuntime()
         self._appearance_save_pending: list[dict[str, object]] = []
-        self._initial_state_load_worker = None
-        self._initial_state_load_request_id = 0
-        self._rkn_background_options_worker = None
-        self._rkn_background_options_request_id = 0
+        self._initial_state_load_runtime = OneShotWorkerRuntime()
+        self._rkn_background_options_runtime = OneShotWorkerRuntime()
         self._rkn_background_options_pending = False
-        self._windows_accent_load_worker = None
-        self._windows_accent_load_request_id = 0
+        self._windows_accent_load_runtime = OneShotWorkerRuntime()
         self._build_ui()
         self.bind_ui_state_store(ui_state_store)
 
@@ -627,27 +624,23 @@ class AppearancePage(BasePage):
             return
         if not force and self._initial_state_plan is not None:
             return
-        worker = self.__dict__.get("_initial_state_load_worker")
-        if worker is not None:
-            try:
-                if worker.isRunning():
-                    return
-            except Exception:
-                return
+        if self._initial_state_load_runtime.is_running():
+            return
         self._start_initial_state_load_worker()
 
     def _start_initial_state_load_worker(self) -> None:
-        self._initial_state_load_request_id += 1
-        request_id = self._initial_state_load_request_id
-        worker = self.create_initial_state_load_worker(request_id)
-        self._initial_state_load_worker = worker
-        worker.loaded.connect(self._on_initial_state_loaded)
-        worker.failed.connect(self._on_initial_state_failed)
-        worker.finished.connect(lambda w=worker: self._on_initial_state_worker_finished(w))
-        worker.start()
+        self._initial_state_load_runtime.start_qthread_worker(
+            worker_factory=self.create_initial_state_load_worker,
+            on_loaded=self._on_initial_state_loaded,
+            on_failed=self._on_initial_state_failed,
+            on_finished=self._on_initial_state_worker_finished,
+        )
 
     def _on_initial_state_loaded(self, request_id: int, plan) -> None:
-        if request_id != self._initial_state_load_request_id or self._cleanup_in_progress:
+        if not self._initial_state_load_runtime.is_current(
+            request_id,
+            cleanup_in_progress=self._cleanup_in_progress,
+        ):
             return
         self._initial_state_plan = plan
         self._ui_language = plan.ui_language
@@ -656,7 +649,10 @@ class AppearancePage(BasePage):
             self._schedule_lower_sections_build()
 
     def _on_initial_state_failed(self, request_id: int, error: str) -> None:
-        if request_id != self._initial_state_load_request_id or self._cleanup_in_progress:
+        if not self._initial_state_load_runtime.is_current(
+            request_id,
+            cleanup_in_progress=self._cleanup_in_progress,
+        ):
             return
         log(f"Ошибка загрузки настроек оформления: {error}", "WARNING")
         if self._initial_state_plan is None:
@@ -664,10 +660,8 @@ class AppearancePage(BasePage):
         if self._lower_sections_build_scheduled or self.isVisible():
             self._schedule_lower_sections_build()
 
-    def _on_initial_state_worker_finished(self, worker) -> None:
-        if self.__dict__.get("_initial_state_load_worker") is worker:
-            self._initial_state_load_worker = None
-        worker.deleteLater()
+    def _on_initial_state_worker_finished(self, _worker) -> None:
+        return
 
     def _request_appearance_save(self, action: str, value=None, **context_extra) -> None:
         payload = {
@@ -675,17 +669,10 @@ class AppearancePage(BasePage):
             "value": value,
             "context_extra": dict(context_extra or {}),
         }
-        worker = self.__dict__.get("_appearance_save_worker")
-        if worker is not None:
-            try:
-                if worker.isRunning():
-                    self._queue_appearance_save_payload(payload)
-                    self._coalesce_appearance_save_pending()
-                    return
-            except Exception:
-                self._queue_appearance_save_payload(payload)
-                self._coalesce_appearance_save_pending()
-                return
+        if self._appearance_save_runtime.is_running():
+            self._queue_appearance_save_payload(payload)
+            self._coalesce_appearance_save_pending()
+            return
         self._start_appearance_save_worker(payload)
 
     def _queue_appearance_save_payload(self, payload: dict[str, object]) -> None:
@@ -702,19 +689,18 @@ class AppearancePage(BasePage):
         self._appearance_save_pending = [latest_by_action[action] for action in order]
 
     def _start_appearance_save_worker(self, payload: dict[str, object]) -> None:
-        self._appearance_save_request_id += 1
-        request_id = self._appearance_save_request_id
-        worker = self.create_appearance_save_worker(
-            request_id,
-            action=str(payload.get("action") or ""),
-            value=payload.get("value"),
-            context_extra=dict(payload.get("context_extra") or {}),
+        self._appearance_save_runtime.start_qthread_worker(
+            worker_factory=lambda request_id: self.create_appearance_save_worker(
+                request_id,
+                action=str(payload.get("action") or ""),
+                value=payload.get("value"),
+                context_extra=dict(payload.get("context_extra") or {}),
+            ),
+            on_loaded=self._on_appearance_save_finished,
+            on_failed=self._on_appearance_save_failed,
+            on_finished=self._on_appearance_save_worker_finished,
+            loaded_signal_name="completed",
         )
-        self._appearance_save_worker = worker
-        worker.completed.connect(self._on_appearance_save_finished)
-        worker.failed.connect(self._on_appearance_save_failed)
-        worker.finished.connect(lambda w=worker: self._on_appearance_save_worker_finished(w))
-        worker.start()
 
     def _apply_display_mode_runtime(self, mode: str) -> None:
         try:
@@ -736,7 +722,10 @@ class AppearancePage(BasePage):
             pass
 
     def _on_appearance_save_finished(self, request_id: int, action: str, result, context) -> None:
-        if request_id != self._appearance_save_request_id or self._cleanup_in_progress:
+        if not self._appearance_save_runtime.is_current(
+            request_id,
+            cleanup_in_progress=self._cleanup_in_progress,
+        ):
             return
         context = dict(context or {})
         if action == "display_mode":
@@ -758,14 +747,14 @@ class AppearancePage(BasePage):
             self._on_editor_smooth_scroll_changed_callback(bool(getattr(editor_plan, "enabled", False)))
 
     def _on_appearance_save_failed(self, request_id: int, action: str, error: str, _context) -> None:
-        if request_id != self._appearance_save_request_id or self._cleanup_in_progress:
+        if not self._appearance_save_runtime.is_current(
+            request_id,
+            cleanup_in_progress=self._cleanup_in_progress,
+        ):
             return
         log(f"Ошибка сохранения настройки внешнего вида ({action}): {error}", "WARNING")
 
-    def _on_appearance_save_worker_finished(self, worker) -> None:
-        if self.__dict__.get("_appearance_save_worker") is worker:
-            self._appearance_save_worker = None
-        worker.deleteLater()
+    def _on_appearance_save_worker_finished(self, _worker) -> None:
         if self._appearance_save_pending and not self._cleanup_in_progress:
             pending = self._appearance_save_pending.pop(0)
             self._start_appearance_save_worker(dict(pending or {}))
@@ -868,30 +857,25 @@ class AppearancePage(BasePage):
     def _request_rkn_background_options_load(self) -> None:
         if self._cleanup_in_progress:
             return
-        worker = self.__dict__.get("_rkn_background_options_worker")
-        if worker is not None:
-            try:
-                if worker.isRunning():
-                    self._rkn_background_options_pending = True
-                    return
-            except Exception:
-                self._rkn_background_options_pending = True
-                return
+        if self._rkn_background_options_runtime.is_running():
+            self._rkn_background_options_pending = True
+            return
         self._start_rkn_background_options_load_worker()
 
     def _start_rkn_background_options_load_worker(self) -> None:
         self._rkn_background_options_pending = False
-        self._rkn_background_options_request_id += 1
-        request_id = self._rkn_background_options_request_id
-        worker = self.create_rkn_background_options_load_worker(request_id)
-        self._rkn_background_options_worker = worker
-        worker.loaded.connect(self._on_rkn_background_options_loaded)
-        worker.failed.connect(self._on_rkn_background_options_failed)
-        worker.finished.connect(lambda w=worker: self._on_rkn_background_options_worker_finished(w))
-        worker.start()
+        self._rkn_background_options_runtime.start_qthread_worker(
+            worker_factory=self.create_rkn_background_options_load_worker,
+            on_loaded=self._on_rkn_background_options_loaded,
+            on_failed=self._on_rkn_background_options_failed,
+            on_finished=self._on_rkn_background_options_worker_finished,
+        )
 
     def _on_rkn_background_options_loaded(self, request_id: int, result) -> None:
-        if request_id != self._rkn_background_options_request_id or self._cleanup_in_progress:
+        if not self._rkn_background_options_runtime.is_current(
+            request_id,
+            cleanup_in_progress=self._cleanup_in_progress,
+        ):
             return
         data = result if isinstance(result, dict) else {}
         self._apply_rkn_background_options(
@@ -900,15 +884,15 @@ class AppearancePage(BasePage):
         )
 
     def _on_rkn_background_options_failed(self, request_id: int, error: str) -> None:
-        if request_id != self._rkn_background_options_request_id or self._cleanup_in_progress:
+        if not self._rkn_background_options_runtime.is_current(
+            request_id,
+            cleanup_in_progress=self._cleanup_in_progress,
+        ):
             return
         log(f"Ошибка загрузки RKN-фонов: {error}", "WARNING")
         self._apply_rkn_background_options(saved_value=None, options=())
 
-    def _on_rkn_background_options_worker_finished(self, worker) -> None:
-        if self.__dict__.get("_rkn_background_options_worker") is worker:
-            self._rkn_background_options_worker = None
-        worker.deleteLater()
+    def _on_rkn_background_options_worker_finished(self, _worker) -> None:
         if self._rkn_background_options_pending and not self._cleanup_in_progress:
             self._start_rkn_background_options_load_worker()
 
@@ -1135,39 +1119,36 @@ class AppearancePage(BasePage):
     def _request_windows_accent_load(self) -> None:
         if self._cleanup_in_progress:
             return
-        worker = self.__dict__.get("_windows_accent_load_worker")
-        if worker is not None:
-            try:
-                if worker.isRunning():
-                    return
-            except Exception:
-                return
+        if self._windows_accent_load_runtime.is_running():
+            return
         self._start_windows_accent_load_worker()
 
     def _start_windows_accent_load_worker(self) -> None:
-        self._windows_accent_load_request_id += 1
-        request_id = self._windows_accent_load_request_id
-        worker = self.create_windows_accent_load_worker(request_id)
-        self._windows_accent_load_worker = worker
-        worker.loaded.connect(self._on_windows_accent_loaded)
-        worker.failed.connect(self._on_windows_accent_failed)
-        worker.finished.connect(lambda w=worker: self._on_windows_accent_worker_finished(w))
-        worker.start()
+        self._windows_accent_load_runtime.start_qthread_worker(
+            worker_factory=self.create_windows_accent_load_worker,
+            on_loaded=self._on_windows_accent_loaded,
+            on_failed=self._on_windows_accent_failed,
+            on_finished=self._on_windows_accent_worker_finished,
+        )
 
     def _on_windows_accent_loaded(self, request_id: int, plan) -> None:
-        if request_id != self._windows_accent_load_request_id or self._cleanup_in_progress:
+        if not self._windows_accent_load_runtime.is_current(
+            request_id,
+            cleanup_in_progress=self._cleanup_in_progress,
+        ):
             return
         self._apply_windows_accent(plan)
 
     def _on_windows_accent_failed(self, request_id: int, error: str) -> None:
-        if request_id != self._windows_accent_load_request_id or self._cleanup_in_progress:
+        if not self._windows_accent_load_runtime.is_current(
+            request_id,
+            cleanup_in_progress=self._cleanup_in_progress,
+        ):
             return
         log(f"Ошибка загрузки системного акцента Windows: {error}", "WARNING")
 
-    def _on_windows_accent_worker_finished(self, worker) -> None:
-        if self.__dict__.get("_windows_accent_load_worker") is worker:
-            self._windows_accent_load_worker = None
-        worker.deleteLater()
+    def _on_windows_accent_worker_finished(self, _worker) -> None:
+        return
 
     def _apply_windows_accent(self, plan):
         """Применяет уже загруженный системный акцент Windows."""
@@ -1340,33 +1321,13 @@ class AppearancePage(BasePage):
                 pass
 
         self._appearance_save_pending.clear()
-        initial_worker = self.__dict__.get("_initial_state_load_worker")
-        if initial_worker is not None:
-            try:
-                initial_worker.quit()
-            except Exception:
-                pass
-            self._initial_state_load_worker = None
-        worker = self.__dict__.get("_appearance_save_worker")
-        if worker is not None:
-            try:
-                worker.quit()
-            except Exception:
-                pass
-            self._appearance_save_worker = None
-        rkn_worker = self.__dict__.get("_rkn_background_options_worker")
-        if rkn_worker is not None:
-            try:
-                rkn_worker.quit()
-            except Exception:
-                pass
-            self._rkn_background_options_worker = None
-        windows_accent_worker = self.__dict__.get("_windows_accent_load_worker")
-        if windows_accent_worker is not None:
-            try:
-                windows_accent_worker.quit()
-            except Exception:
-                pass
-            self._windows_accent_load_worker = None
+        for runtime, name in (
+            (self._initial_state_load_runtime, "загрузка оформления"),
+            (self._appearance_save_runtime, "сохранение оформления"),
+            (self._rkn_background_options_runtime, "RKN-фоны"),
+            (self._windows_accent_load_runtime, "акцент Windows"),
+        ):
+            runtime.stop(log_fn=log, warning_prefix=name)
+            runtime.cancel()
         self._ui_state_unsubscribe = None
         self._ui_state_store = None
