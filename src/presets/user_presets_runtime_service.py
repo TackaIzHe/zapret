@@ -137,6 +137,7 @@ class UserPresetsRuntimeService:
         self._attached_adapter: UserPresetsRuntimeAdapter | None = None
         self._metadata_load_request_id = 0
         self._metadata_load_worker: UserPresetsMetadataLoadWorker | None = None
+        self._metadata_load_pending_page = None
         self._single_metadata_request_id = 0
         self._single_metadata_worker: UserPresetsSingleMetadataWorker | None = None
         self._single_metadata_pending: list[str] = []
@@ -552,6 +553,7 @@ class UserPresetsRuntimeService:
         self._metadata_load_request_id += 1
         self._single_metadata_request_id += 1
         self._rows_plan_request_id += 1
+        self._metadata_load_pending_page = None
         self._single_metadata_pending.clear()
         self._rows_plan_pending = None
         for attr in ("_metadata_load_worker", "_single_metadata_worker", "_rows_plan_worker"):
@@ -642,11 +644,13 @@ class UserPresetsRuntimeService:
     def load_presets(self, page=None) -> None:
         page = self._resolve_page(page)
         adapter = self._resolve_adapter()
-        self._ui_dirty = False
         worker = self._metadata_load_worker
         if worker is not None and worker.isRunning():
+            self._metadata_load_pending_page = page
+            self._ui_dirty = True
             return
 
+        self._ui_dirty = False
         self._metadata_load_request_id += 1
         request_id = self._metadata_load_request_id
         worker = UserPresetsMetadataLoadWorker(request_id, adapter.load_all_metadata, adapter.load_folder_state, page)
@@ -696,6 +700,10 @@ class UserPresetsRuntimeService:
         if self._metadata_load_worker is worker:
             self._metadata_load_worker = None
         worker.deleteLater()
+        pending_page = self._metadata_load_pending_page
+        self._metadata_load_pending_page = None
+        if pending_page is not None:
+            self.load_presets(pending_page)
 
     def refresh_presets_view_if_possible(self, page=None) -> None:
         page = self._resolve_page(page)
