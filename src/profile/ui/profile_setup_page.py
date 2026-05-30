@@ -2252,11 +2252,14 @@ class ProfileSetupPageBase(BasePage):
         if self._pending_settings_save:
             return
         new_key = str(profile_key or "").strip()
+        old_key = str(self._profile_key or "").strip()
         if new_key:
             self._profile_key = new_key
         if payload is None:
             self.reload_current_profile()
             self._on_profile_changed_callback(self._profile_key, "settings")
+            return
+        if self.__dict__.get("_payload") is payload and (not new_key or new_key == old_key):
             return
         self._payload = payload
         self._apply_payload(payload)
