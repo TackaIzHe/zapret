@@ -7,8 +7,8 @@ class SidebarStartupDelayTests(unittest.TestCase):
     def test_sidebar_secondary_groups_are_not_delayed_for_multiple_seconds(self) -> None:
         import ui.navigation.sidebar_builder as sidebar_builder
 
-        self.assertLessEqual(sidebar_builder.SIDEBAR_SECONDARY_GROUPS_AFTER_INTERACTIVE_MS, 1_000)
-        self.assertLessEqual(sidebar_builder.SIDEBAR_SECONDARY_GROUP_STEP_MS, 10)
+        self.assertLessEqual(sidebar_builder.SIDEBAR_SECONDARY_GROUPS_AFTER_INTERACTIVE_MS, 300)
+        self.assertLessEqual(sidebar_builder.SIDEBAR_SECONDARY_GROUP_STEP_MS, 6)
 
     def test_sidebar_search_and_hidden_mode_items_stay_after_initial_paint_but_not_late(self) -> None:
         import ui.navigation.sidebar_builder as sidebar_builder
