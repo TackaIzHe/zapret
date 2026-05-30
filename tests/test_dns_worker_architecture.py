@@ -4,7 +4,7 @@ import inspect
 import unittest
 
 from app.feature_facades.dns import build_dns_feature
-from dns import page_workers
+from dns import dns_check_worker, page_workers
 
 
 class DnsWorkerArchitectureTests(unittest.TestCase):
@@ -54,6 +54,34 @@ class DnsWorkerArchitectureTests(unittest.TestCase):
             "_normalize_adapter_alias",
         ):
             self.assertIn(expected, worker_source)
+
+    def test_dns_check_workers_receive_feature_action_callables(self) -> None:
+        feature_source = inspect.getsource(build_dns_feature)
+        worker_source = "\n".join(
+            (
+                inspect.getsource(dns_check_worker.DNSCheckWorker),
+                inspect.getsource(dns_check_worker.DNSCheckSaveWorker),
+                inspect.getsource(dns_check_worker.DNSQuickCheckWorker),
+            )
+        )
+
+        for expected in (
+            "run_dns_poisoning_check=feature.run_dns_poisoning_check",
+            "save_dns_check_results=feature.save_dns_check_results",
+            "run_quick_dns_check=feature.run_quick_dns_check",
+        ):
+            self.assertIn(expected, feature_source)
+
+        for expected in (
+            "_run_dns_poisoning_check",
+            "_save_dns_check_results",
+            "_run_quick_dns_check",
+        ):
+            self.assertIn(expected, worker_source)
+
+        self.assertNotIn("from dns import commands", worker_source)
+        self.assertNotIn("from dns.commands import", worker_source)
+        self.assertNotIn("dns_commands.", worker_source)
 
 
 if __name__ == "__main__":

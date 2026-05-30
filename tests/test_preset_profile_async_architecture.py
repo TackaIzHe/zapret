@@ -2142,11 +2142,14 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertTrue(hasattr(dns_commands, "save_dns_check_results"))
         worker_source = inspect.getsource(dns_check_worker.DNSCheckSaveWorker.run)
         commands_source = inspect.getsource(dns_commands.save_dns_check_results)
+        feature_source = inspect.getsource(__import__("app.feature_facades.dns", fromlist=["build_dns_feature"]).build_dns_feature)
 
         self.assertIn("create_dns_check_save_worker", page_source)
         self.assertIn("_start_save_results_worker", save_source)
         self.assertNotIn("save_results_text(", save_source)
-        self.assertIn("dns_commands.save_dns_check_results", worker_source)
+        self.assertIn("save_dns_check_results=feature.save_dns_check_results", feature_source)
+        self.assertIn("_save_dns_check_results", worker_source)
+        self.assertNotIn("dns_commands", worker_source)
         self.assertNotIn("dns.dns_check_plans", worker_source)
         self.assertIn("save_results_text", commands_source)
 
@@ -2156,16 +2159,19 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertTrue(hasattr(dns_commands, "run_dns_poisoning_check"))
         worker_source = inspect.getsource(dns_check_worker.DNSCheckWorker.run)
         commands_source = inspect.getsource(dns_commands.run_dns_poisoning_check)
+        feature_source = inspect.getsource(__import__("app.feature_facades.dns", fromlist=["build_dns_feature"]).build_dns_feature)
 
         self.assertIn("create_dns_check_worker", page_source)
-        self.assertIn("dns_commands.run_dns_poisoning_check", worker_source)
+        self.assertIn("run_dns_poisoning_check=feature.run_dns_poisoning_check", feature_source)
+        self.assertIn("_run_dns_poisoning_check", worker_source)
+        self.assertNotIn("dns_commands", worker_source)
         self.assertNotIn("dns_checker", worker_source)
         self.assertIn("DNSChecker", commands_source)
 
     def test_dns_quick_check_runs_through_worker(self) -> None:
         page_source = inspect.getsource(dns_check_page.DNSCheckPage)
         quick_source = inspect.getsource(dns_check_page.DNSCheckPage.quick_dns_check)
-        feature_source = inspect.getsource(__import__("app.feature_facades.dns", fromlist=["DnsFeature"]).DnsFeature)
+        feature_source = inspect.getsource(__import__("app.feature_facades.dns", fromlist=["build_dns_feature"]).build_dns_feature)
         plans_source = inspect.getsource(dns_check_page_plans)
         commands_source = inspect.getsource(__import__("dns.commands", fromlist=["run_quick_dns_check"]).run_quick_dns_check)
 
@@ -2176,7 +2182,9 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("_start_quick_dns_check_worker", quick_source)
         self.assertNotIn("run_quick_dns_check(", quick_source)
         self.assertIn("create_dns_quick_check_worker", feature_source)
-        self.assertIn("run_quick_dns_check", worker_source)
+        self.assertIn("run_quick_dns_check=feature.run_quick_dns_check", feature_source)
+        self.assertIn("_run_quick_dns_check", worker_source)
+        self.assertNotIn("dns.commands", worker_source)
         self.assertNotIn("socket.", plans_source)
         self.assertIn("socket.gethostbyname", commands_source)
 

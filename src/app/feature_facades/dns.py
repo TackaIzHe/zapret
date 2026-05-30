@@ -29,6 +29,9 @@ class DnsFeature:
     disable_force_dns: Callable
     flush_dns_cache: Callable
     run_connectivity_test: Callable
+    run_dns_poisoning_check: Callable
+    save_dns_check_results: Callable
+    run_quick_dns_check: Callable
 
 
 def build_dns_feature() -> DnsFeature:
@@ -134,6 +137,33 @@ def build_dns_feature() -> DnsFeature:
             parent=parent,
         )
 
+    def _create_dns_check_worker():
+        from dns.dns_check_worker import DNSCheckWorker
+
+        return DNSCheckWorker(
+            run_dns_poisoning_check=feature.run_dns_poisoning_check,
+        )
+
+    def _create_dns_check_save_worker(request_id: int, *, file_path: str, plain_text: str, parent=None):
+        from dns.dns_check_worker import DNSCheckSaveWorker
+
+        return DNSCheckSaveWorker(
+            request_id,
+            file_path=file_path,
+            plain_text=plain_text,
+            save_dns_check_results=feature.save_dns_check_results,
+            parent=parent,
+        )
+
+    def _create_dns_quick_check_worker(request_id: int, *, parent=None):
+        from dns.dns_check_worker import DNSQuickCheckWorker
+
+        return DNSQuickCheckWorker(
+            request_id,
+            run_quick_dns_check=feature.run_quick_dns_check,
+            parent=parent,
+        )
+
     feature = DnsFeature(
         apply_dns_on_startup_async=lambda *args, **kwargs: _public().apply_dns_on_startup_async(*args, **kwargs),
         load_page_data=lambda *args, **kwargs: _public().load_page_data(*args, **kwargs),
@@ -147,9 +177,9 @@ def build_dns_feature() -> DnsFeature:
         get_force_dns_status=lambda *args, **kwargs: _public().get_force_dns_status(*args, **kwargs),
         is_isp_dns_warning_shown=lambda *args, **kwargs: _public().is_isp_dns_warning_shown(*args, **kwargs),
         mark_isp_dns_warning_shown=lambda *args, **kwargs: _public().mark_isp_dns_warning_shown(*args, **kwargs),
-        create_dns_check_worker=lambda *args, **kwargs: _commands().create_dns_check_worker(*args, **kwargs),
-        create_dns_check_save_worker=lambda *args, **kwargs: _commands().create_dns_check_save_worker(*args, **kwargs),
-        create_dns_quick_check_worker=lambda *args, **kwargs: _commands().create_dns_quick_check_worker(*args, **kwargs),
+        create_dns_check_worker=_create_dns_check_worker,
+        create_dns_check_save_worker=_create_dns_check_save_worker,
+        create_dns_quick_check_worker=_create_dns_quick_check_worker,
         create_force_dns_action_worker=_create_force_dns_action_worker,
         create_dns_flush_cache_worker=_create_dns_flush_cache_worker,
         create_isp_dns_warning_worker=_create_isp_dns_warning_worker,
@@ -158,5 +188,8 @@ def build_dns_feature() -> DnsFeature:
         disable_force_dns=lambda *args, **kwargs: _public().disable_force_dns(*args, **kwargs),
         flush_dns_cache=lambda *args, **kwargs: _public().flush_dns_cache(*args, **kwargs),
         run_connectivity_test=lambda *args, **kwargs: _public().run_connectivity_test(*args, **kwargs),
+        run_dns_poisoning_check=lambda *args, **kwargs: _commands().run_dns_poisoning_check(*args, **kwargs),
+        save_dns_check_results=lambda *args, **kwargs: _commands().save_dns_check_results(*args, **kwargs),
+        run_quick_dns_check=lambda *args, **kwargs: _commands().run_quick_dns_check(*args, **kwargs),
     )
     return feature

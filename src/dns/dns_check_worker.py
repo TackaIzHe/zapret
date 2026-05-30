@@ -9,8 +9,9 @@ class DNSCheckWorker(QObject):
     update_signal = pyqtSignal(str)
     finished_signal = pyqtSignal(dict)
 
-    def __init__(self):
+    def __init__(self, *, run_dns_poisoning_check):
         super().__init__()
+        self._run_dns_poisoning_check = run_dns_poisoning_check
         self._stop_requested = False
 
     def stop(self) -> None:
@@ -21,9 +22,7 @@ class DNSCheckWorker(QObject):
 
     def run(self):
         try:
-            from dns import commands as dns_commands
-
-            results = dns_commands.run_dns_poisoning_check(
+            results = self._run_dns_poisoning_check(
                 log_callback=self.update_signal.emit,
                 should_stop=self.is_stop_requested,
             )
@@ -39,16 +38,15 @@ class DNSCheckSaveWorker(QThread):
 
     saved = pyqtSignal(int, object)
 
-    def __init__(self, request_id: int, *, file_path: str, plain_text: str, parent=None):
+    def __init__(self, request_id: int, *, file_path: str, plain_text: str, save_dns_check_results, parent=None):
         super().__init__(parent)
         self._request_id = int(request_id)
         self._file_path = str(file_path or "")
         self._plain_text = str(plain_text or "")
+        self._save_dns_check_results = save_dns_check_results
 
     def run(self) -> None:
-        from dns import commands as dns_commands
-
-        plan = dns_commands.save_dns_check_results(
+        plan = self._save_dns_check_results(
             file_path=self._file_path,
             plain_text=self._plain_text,
         )
@@ -60,16 +58,16 @@ class DNSQuickCheckWorker(QThread):
 
     completed = pyqtSignal(int, object)
 
-    def __init__(self, request_id: int, parent=None):
+    def __init__(self, request_id: int, *, run_quick_dns_check, parent=None):
         super().__init__(parent)
         self._request_id = int(request_id)
+        self._run_quick_dns_check = run_quick_dns_check
 
     def run(self) -> None:
-        from dns.commands import run_quick_dns_check
         from dns.dns_check_plans import DNSQuickCheckPlan
 
         try:
-            plan = run_quick_dns_check()
+            plan = self._run_quick_dns_check()
         except Exception as exc:
             plan = DNSQuickCheckPlan(
                 lines=(f"❌ Ошибка быстрой проверки DNS: {exc}",),
