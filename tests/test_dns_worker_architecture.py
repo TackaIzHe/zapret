@@ -216,6 +216,53 @@ class DnsWorkerArchitectureTests(unittest.TestCase):
             self.assertNotIn("worker.start()", source)
         self.assertNotIn("self.thread = QThread", start_source)
 
+    def test_dns_check_save_queues_while_worker_runs(self) -> None:
+        page = DNSCheckPage.__new__(DNSCheckPage)
+        page._save_runtime = SimpleNamespace(is_running=Mock(return_value=True), start_qthread_worker=Mock())
+        page._save_results_pending = None
+
+        DNSCheckPage._start_save_results_worker(page, file_path="first.txt", plain_text="latest")
+
+        page._save_runtime.start_qthread_worker.assert_not_called()
+        self.assertEqual(page._save_results_pending, {"file_path": "first.txt", "plain_text": "latest"})
+
+    def test_dns_check_pending_save_restarts_after_event_loop_turn(self) -> None:
+        import dns.ui.dns_check_page as dns_check_page
+
+        page = DNSCheckPage.__new__(DNSCheckPage)
+        page._cleanup_in_progress = False
+        page._save_results_pending = {"file_path": "first.txt", "plain_text": "latest"}
+        page._start_save_results_worker = Mock()
+        single_shot = Mock(side_effect=lambda _delay, _callback: None)
+
+        with patch.object(dns_check_page, "QTimer", SimpleNamespace(singleShot=single_shot), create=True):
+            DNSCheckPage._on_save_results_worker_finished(page, object())
+
+        single_shot.assert_called_once()
+        self.assertEqual(single_shot.call_args.args[0], 0)
+        page._start_save_results_worker.assert_not_called()
+
+        single_shot.call_args.args[1]()
+
+        page._start_save_results_worker.assert_called_once_with(
+            file_path="first.txt",
+            plain_text="latest",
+        )
+
+    def test_dns_check_scheduled_save_uses_latest_pending_payload(self) -> None:
+        page = DNSCheckPage.__new__(DNSCheckPage)
+        page._cleanup_in_progress = False
+        page._save_results_pending = {"file_path": "second.txt", "plain_text": "newer"}
+        page._save_results_start_scheduled = True
+        page._start_save_results_worker = Mock()
+
+        DNSCheckPage._run_scheduled_save_results_worker_start(page)
+
+        page._start_save_results_worker.assert_called_once_with(
+            file_path="second.txt",
+            plain_text="newer",
+        )
+
     def test_startup_dns_apply_uses_one_shot_runtime(self) -> None:
         module_source = inspect.getsource(dns_worker)
         async_source = inspect.getsource(dns_worker.apply_dns_on_startup_async)

@@ -3,6 +3,7 @@
 
 import html
 
+from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel,
 )
@@ -42,6 +43,8 @@ class DNSCheckPage(BasePage):
         self._cleanup_in_progress = False
         self._check_runtime = OneShotWorkerRuntime()
         self._save_runtime = OneShotWorkerRuntime()
+        self._save_results_pending: dict[str, str] | None = None
+        self._save_results_start_scheduled = False
         self._quick_runtime = OneShotWorkerRuntime()
         self._status_tone = "muted"
         self._status_bold = False
@@ -421,7 +424,11 @@ class DNSCheckPage(BasePage):
         )
 
     def _start_save_results_worker(self, *, file_path: str, plain_text: str) -> None:
-        if self._save_runtime.is_running():
+        if self._save_runtime.is_running() or self.__dict__.get("_save_results_start_scheduled", False):
+            self._save_results_pending = {
+                "file_path": str(file_path or ""),
+                "plain_text": str(plain_text or ""),
+            }
             return
         self._save_runtime.start_qthread_worker(
             worker_factory=lambda request_id: self.create_dns_check_save_worker(
@@ -449,7 +456,30 @@ class DNSCheckPage(BasePage):
                 InfoBar.error(title=plan.title, content=plan.content, parent=self.window())
 
     def _on_save_results_worker_finished(self, _worker) -> None:
-        pass
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        pending = self.__dict__.get("_save_results_pending")
+        self._save_results_pending = None
+        if pending:
+            self._schedule_save_results_worker_start(pending)
+
+    def _schedule_save_results_worker_start(self, pending: dict[str, str]) -> None:
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        if self.__dict__.get("_save_results_start_scheduled", False):
+            self._save_results_pending = dict(pending or {})
+            return
+        self._save_results_start_scheduled = True
+        QTimer.singleShot(0, lambda value=dict(pending or {}): self._run_scheduled_save_results_worker_start(value))
+
+    def _run_scheduled_save_results_worker_start(self, pending: dict[str, str]) -> None:
+        self._save_results_start_scheduled = False
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        self._start_save_results_worker(
+            file_path=str(pending.get("file_path") or ""),
+            plain_text=str(pending.get("plain_text") or ""),
+        )
     
     def cleanup(self):
         """Очистка потоков при закрытии"""
@@ -457,6 +487,8 @@ class DNSCheckPage(BasePage):
 
         try:
             self._cleanup_in_progress = True
+            self._save_results_pending = None
+            self._save_results_start_scheduled = False
             self._check_runtime.stop(
                 blocking=True,
                 log_fn=log,
