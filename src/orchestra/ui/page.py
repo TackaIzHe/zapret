@@ -42,11 +42,6 @@ from orchestra.ui.page_log_context_workflow import (
     show_log_context_menu,
     unblock_strategy_from_log,
 )
-from orchestra.ui.page_log_history_workflow import (
-    clear_log_history_entries,
-    delete_log_history_entry,
-    view_log_history_entry,
-)
 from ui.one_shot_worker_runtime import OneShotWorkerRuntime
 from ui.theme import get_cached_qta_pixmap, get_theme_tokens
 from app.ui_texts import tr as tr_catalog
@@ -104,6 +99,8 @@ class OrchestraPage(BasePage):
         self._clear_learned_runtime = OneShotWorkerRuntime()
         self._log_history_runtime = OneShotWorkerRuntime()
         self._log_history_pending = False
+        self._log_history_action_runtime = OneShotWorkerRuntime()
+        self._log_history_action_pending = []
         self._clear_learned_reset_timer = QTimer(self)
         self._clear_learned_reset_timer.setSingleShot(True)
         self._clear_learned_reset_timer.timeout.connect(self._reset_clear_learned_button)
@@ -659,42 +656,95 @@ class OrchestraPage(BasePage):
         if pending and not self._cleanup_in_progress:
             self._start_log_history_load_worker()
 
-    def _view_log_history(self):
-        """Просматривает выбранный лог из истории"""
+    def create_log_history_action_worker(self, request_id: int, *, action: str, log_id: str):
+        return self._controller.create_log_history_action_worker(
+            request_id,
+            action=action,
+            log_id=log_id,
+            parent=self,
+        )
+
+    def _current_log_history_id(self) -> str:
+        current_item = self.log_history_list.currentItem()
+        if current_item is None:
+            return ""
+        return str(current_item.data(Qt.ItemDataRole.UserRole) or "").strip()
+
+    def _request_log_history_action(self, action: str, log_id: str = "") -> None:
         if self._cleanup_in_progress:
             return
-        view_log_history_entry(
-            runner=self._get_runner(),
-            current_item=self.log_history_list.currentItem(),
-            user_role=Qt.ItemDataRole.UserRole,
-            log_text=self.log_text,
-            append_log=self.append_log,
-            log_debug=lambda message: log(message, "DEBUG"),
+        runner = self._get_runner()
+        if runner is None:
+            return
+        normalized_action = str(action or "").strip()
+        normalized_log_id = str(log_id or "").strip()
+        if normalized_action in {"view", "delete"} and not normalized_log_id:
+            return
+        payload = (normalized_action, normalized_log_id)
+        if self._log_history_action_runtime.is_running():
+            self._log_history_action_pending.append(payload)
+            return
+        self._start_log_history_action_worker(payload)
+
+    def _start_log_history_action_worker(self, payload) -> None:
+        action, log_id = payload
+        self._log_history_action_runtime.start_qthread_worker(
+            worker_factory=lambda request_id: self.create_log_history_action_worker(
+                request_id,
+                action=str(action),
+                log_id=str(log_id),
+            ),
+            on_loaded=self._on_log_history_action_finished,
+            on_failed=self._on_log_history_action_failed,
+            on_finished=self._on_log_history_action_worker_finished,
         )
+
+    def _on_log_history_action_finished(self, request_id: int, action: str, result) -> None:
+        if not self._log_history_action_runtime.is_current(
+            request_id,
+            cleanup_in_progress=self._cleanup_in_progress,
+        ):
+            return
+        normalized_action = str(action or "").strip()
+        if normalized_action == "view":
+            content = str(getattr(result, "content", "") or "")
+            if content:
+                self.log_text.clear()
+                self.log_text.setPlainText(content)
+        elif normalized_action == "delete":
+            if bool(getattr(result, "deleted", False)):
+                self._update_log_history()
+        elif normalized_action == "clear":
+            self._update_log_history()
+
+        message = str(getattr(result, "message_text", "") or "")
+        if message:
+            self.append_log(message)
+
+    def _on_log_history_action_failed(self, request_id: int, action: str, error: str) -> None:
+        if not self._log_history_action_runtime.is_current(
+            request_id,
+            cleanup_in_progress=self._cleanup_in_progress,
+        ):
+            return
+        log(f"Ошибка действия истории логов {action}: {error}", "DEBUG")
+
+    def _on_log_history_action_worker_finished(self, _worker) -> None:
+        if self._log_history_action_pending and not self._cleanup_in_progress:
+            pending = self._log_history_action_pending.pop(0)
+            self._start_log_history_action_worker(pending)
+
+    def _view_log_history(self):
+        """Просматривает выбранный лог из истории"""
+        self._request_log_history_action("view", self._current_log_history_id())
 
     def _delete_log_history(self):
         """Удаляет выбранный лог из истории"""
-        if self._cleanup_in_progress:
-            return
-        delete_log_history_entry(
-            runner=self._get_runner(),
-            current_item=self.log_history_list.currentItem(),
-            user_role=Qt.ItemDataRole.UserRole,
-            update_log_history=self._update_log_history,
-            append_log=self.append_log,
-            log_debug=lambda message: log(message, "DEBUG"),
-        )
+        self._request_log_history_action("delete", self._current_log_history_id())
 
     def _clear_all_log_history(self):
         """Удаляет все логи из истории"""
-        if self._cleanup_in_progress:
-            return
-        clear_log_history_entries(
-            runner=self._get_runner(),
-            update_log_history=self._update_log_history,
-            append_log=self.append_log,
-            log_debug=lambda message: log(message, "DEBUG"),
-        )
+        self._request_log_history_action("clear")
 
     def _get_runner(self):
         return self._controller.runner()
@@ -714,6 +764,12 @@ class OrchestraPage(BasePage):
             blocking=False,
             log_fn=log,
             warning_prefix="Orchestra log history worker",
+        )
+        self._log_history_action_pending.clear()
+        self._log_history_action_runtime.stop(
+            blocking=False,
+            log_fn=log,
+            warning_prefix="Orchestra log history action worker",
         )
 
         try:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import orchestra.log_history_workflow as orchestra_log_history_workflow
 import orchestra.page_runtime as orchestra_page_runtime
 
 
@@ -30,6 +31,28 @@ class OrchestraPageController:
             return []
         return list(runner.get_log_history() or [])
 
+    def run_log_history_action(self, *, action: str, log_id: str):
+        runner = self.runner()
+        if runner is None:
+            raise RuntimeError("Orchestra runner is not ready")
+
+        normalized_action = str(action or "").strip()
+        if normalized_action == "view":
+            return orchestra_log_history_workflow.view_log_history_entry(
+                runner=runner,
+                log_id=str(log_id or ""),
+            )
+        if normalized_action == "delete":
+            return orchestra_log_history_workflow.delete_log_history_entry(
+                runner=runner,
+                log_id=str(log_id or ""),
+            )
+        if normalized_action == "clear":
+            return orchestra_log_history_workflow.clear_log_history_entries(
+                runner=runner,
+            )
+        raise ValueError(f"Неизвестное действие истории логов: {normalized_action}")
+
     def create_clear_learned_worker(self, request_id: int, parent=None):
         from orchestra.page_workers import OrchestraClearLearnedWorker
 
@@ -39,3 +62,14 @@ class OrchestraPageController:
         from orchestra.page_workers import OrchestraLogHistoryLoadWorker
 
         return OrchestraLogHistoryLoadWorker(request_id, self.load_log_history, parent)
+
+    def create_log_history_action_worker(self, request_id: int, *, action: str, log_id: str, parent=None):
+        from orchestra.page_workers import OrchestraLogHistoryActionWorker
+
+        return OrchestraLogHistoryActionWorker(
+            request_id,
+            action=action,
+            log_id=log_id,
+            run_action=self.run_log_history_action,
+            parent=parent,
+        )

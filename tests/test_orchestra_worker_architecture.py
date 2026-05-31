@@ -6,12 +6,18 @@ import unittest
 
 class OrchestraWorkerArchitectureTests(unittest.TestCase):
     def test_page_workers_receive_action_functions(self) -> None:
-        from orchestra.page_workers import OrchestraClearLearnedWorker, OrchestraLogHistoryLoadWorker
+        from orchestra.page_workers import (
+            OrchestraClearLearnedWorker,
+            OrchestraLogHistoryActionWorker,
+            OrchestraLogHistoryLoadWorker,
+        )
 
         clear_init = inspect.getsource(OrchestraClearLearnedWorker.__init__)
         clear_run = inspect.getsource(OrchestraClearLearnedWorker.run)
         history_init = inspect.getsource(OrchestraLogHistoryLoadWorker.__init__)
         history_run = inspect.getsource(OrchestraLogHistoryLoadWorker.run)
+        history_action_init = inspect.getsource(OrchestraLogHistoryActionWorker.__init__)
+        history_action_run = inspect.getsource(OrchestraLogHistoryActionWorker.run)
 
         self.assertIn("clear_learned_data", clear_init)
         self.assertIn("self._clear_learned_data", clear_init)
@@ -24,6 +30,36 @@ class OrchestraWorkerArchitectureTests(unittest.TestCase):
         self.assertNotIn("self._controller", history_init)
         self.assertIn("self._load_log_history()", history_run)
         self.assertNotIn("self._controller.load_log_history", history_run)
+
+        self.assertIn("run_action", history_action_init)
+        self.assertIn("self._run_action", history_action_init)
+        self.assertNotIn("self._controller", history_action_init)
+        self.assertIn("self._run_action(action=self._action, log_id=self._log_id)", history_action_run)
+        self.assertNotIn("self._controller.", history_action_run)
+
+    def test_orchestra_log_history_actions_run_through_worker(self) -> None:
+        from orchestra.page_controller import OrchestraPageController
+        from orchestra.ui.page import OrchestraPage
+
+        view_source = inspect.getsource(OrchestraPage._view_log_history)
+        delete_source = inspect.getsource(OrchestraPage._delete_log_history)
+        clear_source = inspect.getsource(OrchestraPage._clear_all_log_history)
+        request_source = inspect.getsource(OrchestraPage._request_log_history_action)
+        start_source = inspect.getsource(OrchestraPage._start_log_history_action_worker)
+        page_source = inspect.getsource(OrchestraPage)
+        controller_source = inspect.getsource(OrchestraPageController)
+
+        for source in (view_source, delete_source, clear_source):
+            self.assertIn("_request_log_history_action", source)
+            self.assertNotIn("runner=", source)
+            self.assertNotIn("log_history_workflow", source)
+
+        self.assertIn("_log_history_action_runtime", page_source)
+        self.assertIn("create_log_history_action_worker", page_source)
+        self.assertIn("start_qthread_worker", start_source)
+        self.assertIn("_log_history_action_pending", request_source)
+        self.assertIn("create_log_history_action_worker", controller_source)
+        self.assertIn("run_log_history_action", controller_source)
 
     def test_ratings_worker_receives_loader_function(self) -> None:
         from orchestra.ratings_worker import OrchestraRatingsStateLoadWorker

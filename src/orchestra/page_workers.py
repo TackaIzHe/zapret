@@ -43,4 +43,29 @@ class OrchestraLogHistoryLoadWorker(QThread):
         self.loaded.emit(self._request_id, logs)
 
 
-__all__ = ["OrchestraClearLearnedWorker", "OrchestraLogHistoryLoadWorker"]
+class OrchestraLogHistoryActionWorker(QThread):
+    loaded = pyqtSignal(int, str, object)
+    failed = pyqtSignal(int, str, str)
+
+    def __init__(self, request_id: int, *, action: str, log_id: str, run_action, parent=None):
+        super().__init__(parent)
+        self._request_id = int(request_id)
+        self._action = str(action or "").strip()
+        self._log_id = str(log_id or "").strip()
+        self._run_action = run_action
+
+    def run(self) -> None:
+        try:
+            result = self._run_action(action=self._action, log_id=self._log_id)
+        except Exception as exc:
+            log(f"Orchestra log history action worker: ошибка действия {self._action}: {exc}", "ERROR")
+            self.failed.emit(self._request_id, self._action, str(exc))
+            return
+        self.loaded.emit(self._request_id, self._action, result)
+
+
+__all__ = [
+    "OrchestraClearLearnedWorker",
+    "OrchestraLogHistoryActionWorker",
+    "OrchestraLogHistoryLoadWorker",
+]
