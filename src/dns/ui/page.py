@@ -128,6 +128,7 @@ class NetworkPage(BasePage):
         self._dns_flush_cache_start_scheduled = False
         self._dns_apply_runtime = OneShotWorkerRuntime()
         self._dns_apply_pending: list[dict[str, object]] = []
+        self._scheduled_dns_apply_request = None
         self._dns_apply_start_scheduled = False
         self._isp_warning_runtime = OneShotWorkerRuntime()
         
@@ -683,6 +684,9 @@ class NetworkPage(BasePage):
             "action": str(action or "").strip(),
             **payload,
         }
+        if self.__dict__.get("_dns_apply_start_scheduled", False):
+            self._scheduled_dns_apply_request = dict(request)
+            return
         if self._dns_apply_runtime.is_running() or self.__dict__.get("_dns_apply_start_scheduled", False):
             self._dns_apply_pending.append(request)
             return
@@ -738,12 +742,17 @@ class NetworkPage(BasePage):
     def _schedule_dns_apply_worker_start(self, payload: dict[str, object]) -> None:
         if self.__dict__.get("_cleanup_in_progress", False):
             return
-        queued = dict(payload or {})
+        self._scheduled_dns_apply_request = dict(payload or {})
+        if self.__dict__.get("_dns_apply_start_scheduled", False):
+            return
         self._dns_apply_start_scheduled = True
-        QTimer.singleShot(0, lambda value=queued: self._run_scheduled_dns_apply_worker_start(value))
+        QTimer.singleShot(0, self._run_scheduled_dns_apply_worker_start)
 
-    def _run_scheduled_dns_apply_worker_start(self, payload: dict[str, object]) -> None:
+    def _run_scheduled_dns_apply_worker_start(self, payload: dict[str, object] | None = None) -> None:
         self._dns_apply_start_scheduled = False
+        if payload is None:
+            payload = self.__dict__.get("_scheduled_dns_apply_request")
+        self._scheduled_dns_apply_request = None
         if self.__dict__.get("_cleanup_in_progress", False):
             return
         self._start_dns_apply_worker(dict(payload or {}))
@@ -1355,6 +1364,7 @@ class NetworkPage(BasePage):
         self._dns_flush_cache_pending = False
         self._dns_flush_cache_start_scheduled = False
         self._dns_apply_pending.clear()
+        self._scheduled_dns_apply_request = None
         self._dns_apply_start_scheduled = False
         self._page_load_runtime.stop(
             blocking=False,

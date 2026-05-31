@@ -133,6 +133,43 @@ class DnsWorkerArchitectureTests(unittest.TestCase):
 
         page._start_dns_apply_worker.assert_called_once_with({"action": "auto", "adapters": ["Ethernet"]})
 
+    def test_dns_apply_scheduled_start_uses_latest_pending_request(self) -> None:
+        class _Runtime:
+            def is_running(self) -> bool:
+                return False
+
+        page = NetworkPage.__new__(NetworkPage)
+        page._cleanup_in_progress = False
+        page._dns_apply_runtime = _Runtime()
+        page._dns_apply_pending = [{"action": "auto", "adapters": ["Ethernet"]}]
+        page._dns_apply_start_scheduled = False
+        page._start_dns_apply_worker = Mock()
+        single_shot = Mock(side_effect=lambda _delay, _callback: None)
+
+        with patch.object(network_page, "QTimer", SimpleNamespace(singleShot=single_shot)):
+            NetworkPage._on_dns_apply_worker_finished(page, object())
+            NetworkPage._request_dns_apply(
+                page,
+                "provider",
+                adapters=["Ethernet"],
+                name="cloudflare",
+                data={"primary": "1.1.1.1"},
+            )
+
+        page._start_dns_apply_worker.assert_not_called()
+
+        single_shot.call_args.args[1]()
+
+        page._start_dns_apply_worker.assert_called_once_with(
+            {
+                "action": "provider",
+                "adapters": ["Ethernet"],
+                "name": "cloudflare",
+                "data": {"primary": "1.1.1.1"},
+            }
+        )
+        self.assertEqual(page._dns_apply_pending, [])
+
     def test_force_dns_pending_restarts_after_event_loop_turn(self) -> None:
         page = NetworkPage.__new__(NetworkPage)
         page._cleanup_in_progress = False
