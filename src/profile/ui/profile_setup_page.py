@@ -2807,7 +2807,9 @@ class ProfileSetupPageBase(BasePage):
         pending = self._pending_settings_save
         self._pending_settings_save = None
         if pending:
-            self._start_settings_save_worker(pending)
+            self._schedule_profile_setup_write_operation_start(
+                {"kind": "settings_save", "request": dict(pending)}
+            )
 
     def _on_raw_profile_save_clicked(self) -> None:
         if self._loading or not self._profile_key or self._raw_profile_text is None:
@@ -2887,7 +2889,13 @@ class ProfileSetupPageBase(BasePage):
         self._pending_raw_profile_save = None
         if pending:
             profile_key, raw_text = pending
-            self._start_raw_profile_save_worker(profile_key, raw_text)
+            self._schedule_profile_setup_write_operation_start(
+                {
+                    "kind": "raw_profile_save",
+                    "profile_key": str(profile_key or ""),
+                    "text": str(raw_text or ""),
+                }
+            )
 
     def _on_enabled_changed(self, state: int) -> None:
         if self._loading or not self._profile_key:
@@ -3132,9 +3140,21 @@ class ProfileSetupPageBase(BasePage):
         self._pending_strategy_apply = None
         if pending:
             if isinstance(pending, tuple):
-                self._start_strategy_apply_worker(str(pending[0] or ""), strategy_branch_id=str(pending[1] or ""))
+                self._schedule_profile_setup_write_operation_start(
+                    {
+                        "kind": "strategy_apply",
+                        "strategy_id": str(pending[0] or ""),
+                        "branch_id": str(pending[1] or ""),
+                    }
+                )
             else:
-                self._start_strategy_apply_worker(str(pending or ""))
+                self._schedule_profile_setup_write_operation_start(
+                    {
+                        "kind": "strategy_apply",
+                        "strategy_id": str(pending or ""),
+                        "branch_id": "",
+                    }
+                )
 
     def _apply_strategy_locally(self, strategy_id: str) -> bool:
         payload = self._payload
@@ -3304,7 +3324,19 @@ class ProfileSetupPageBase(BasePage):
         pending = self.__dict__.get("_pending_strategy_feedback_save")
         self._pending_strategy_feedback_save = None
         if pending:
-            self._start_strategy_feedback_save_worker(pending)
+            self._schedule_strategy_feedback_save_worker_start(dict(pending))
+
+    def _schedule_strategy_feedback_save_worker_start(self, request: dict) -> None:
+        queued = dict(request or {})
+        try:
+            QTimer.singleShot(0, lambda: self._run_scheduled_strategy_feedback_save_worker_start(queued))
+        except Exception:
+            self._run_scheduled_strategy_feedback_save_worker_start(queued)
+
+    def _run_scheduled_strategy_feedback_save_worker_start(self, request: dict) -> None:
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        self._start_strategy_feedback_save_worker(dict(request or {}))
 
     def cleanup(self) -> None:
         self._cleanup_in_progress = True
