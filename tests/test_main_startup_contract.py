@@ -3039,6 +3039,20 @@ class WindowLifecycleEarlyEventTests(unittest.TestCase):
 
 
 class WindowsSessionShutdownTests(unittest.TestCase):
+    def test_close_flow_receives_launch_state_snapshot_instead_of_full_runtime_feature(self) -> None:
+        from main import window_lifecycle_setup
+        from ui.window_close_flow import WindowCloseFlow
+
+        init_signature = inspect.signature(WindowCloseFlow.__init__)
+        flow_source = inspect.getsource(WindowCloseFlow)
+        setup_source = inspect.getsource(window_lifecycle_setup.attach_window_lifecycle)
+
+        self.assertNotIn("runtime_feature", init_signature.parameters)
+        self.assertNotIn("self._runtime =", flow_source)
+        self.assertIn("get_launch_state_snapshot", init_signature.parameters)
+        self.assertIn("self._get_launch_state_snapshot", flow_source)
+        self.assertIn("get_launch_state_snapshot=features.runtime.snapshot", setup_source)
+
     def test_close_flow_skips_dialog_when_windows_session_is_ending(self) -> None:
         from ui.window_close_flow import WindowCloseFlow
 
@@ -3056,7 +3070,7 @@ class WindowsSessionShutdownTests(unittest.TestCase):
             flow = WindowCloseFlow(
                 parent=object(),
                 close_state=close_state,
-                runtime_feature=runtime,
+                get_launch_state_snapshot=runtime.snapshot,
                 close_to_tray=Mock(),
                 exit_stop_dpi=Mock(),
                 exit_keep_dpi=Mock(),
@@ -3091,7 +3105,7 @@ class WindowsSessionShutdownTests(unittest.TestCase):
             flow = WindowCloseFlow(
                 parent=object(),
                 close_state=close_state,
-                runtime_feature=runtime,
+                get_launch_state_snapshot=runtime.snapshot,
                 close_to_tray=close_to_tray,
                 exit_stop_dpi=Mock(),
                 exit_keep_dpi=Mock(),
@@ -3133,7 +3147,7 @@ class WindowsSessionShutdownTests(unittest.TestCase):
             flow = WindowCloseFlow(
                 parent=object(),
                 close_state=close_state,
-                runtime_feature=runtime,
+                get_launch_state_snapshot=runtime.snapshot,
                 close_to_tray=close_to_tray,
                 exit_stop_dpi=Mock(),
                 exit_keep_dpi=Mock(),
@@ -3177,7 +3191,7 @@ class WindowsSessionShutdownTests(unittest.TestCase):
             flow = WindowCloseFlow(
                 parent=object(),
                 close_state=close_state,
-                runtime_feature=runtime,
+                get_launch_state_snapshot=runtime.snapshot,
                 close_to_tray=Mock(),
                 exit_stop_dpi=Mock(),
                 exit_keep_dpi=Mock(),

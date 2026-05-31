@@ -32,7 +32,7 @@ def attach_window_lifecycle(window, features) -> None:
     window.window_close_flow = WindowCloseFlow(
         parent=window,
         close_state=window.close_state,
-        runtime_feature=features.runtime,
+        get_launch_state_snapshot=features.runtime.snapshot,
         close_to_tray=window.close_to_tray,
         exit_stop_dpi=window.exit_stop_dpi,
         exit_keep_dpi=window.exit_keep_dpi,

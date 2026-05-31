@@ -17,7 +17,7 @@ class WindowCloseFlow:
         *,
         parent,
         close_state,
-        runtime_feature,
+        get_launch_state_snapshot,
         close_to_tray,
         exit_stop_dpi,
         exit_keep_dpi,
@@ -25,7 +25,7 @@ class WindowCloseFlow:
     ) -> None:
         self._parent = parent
         self._close_state = close_state
-        self._runtime = runtime_feature
+        self._get_launch_state_snapshot = get_launch_state_snapshot
         self._close_to_tray = close_to_tray
         self._exit_stop_dpi = exit_stop_dpi
         self._exit_keep_dpi = exit_keep_dpi
@@ -65,7 +65,8 @@ class WindowCloseFlow:
 
             launch_running = False
             try:
-                launch_running = bool(self._runtime.snapshot().launch_running)
+                snapshot = self._get_launch_state_snapshot()
+                launch_running = bool(getattr(snapshot, "launch_running", False))
             except Exception as snapshot_error:
                 log(f"Не удалось прочитать состояние запуска перед диалогом закрытия: {snapshot_error}", "DEBUG")
 
