@@ -33,11 +33,11 @@ class ControlPageDependencyBoundaryTests(unittest.TestCase):
             self.assertNotIn("self._program_settings.", page_source)
             self.assertNotIn("self._external_actions =", page_source)
             self.assertNotIn("self._external_actions.", page_source)
-            self.assertIn("get_selected_source_preset_display", init_source)
-            self.assertIn("get_enabled_profile_count_snapshot", init_source)
+            self.assertNotIn("get_selected_source_preset_display", init_source)
+            self.assertNotIn("get_enabled_profile_count_snapshot", init_source)
             self.assertIn("create_additional_settings_load_worker", init_source)
-            self.assertIn("set_wssize_enabled", init_source)
-            self.assertIn("set_debug_log_enabled", init_source)
+            self.assertNotIn("set_wssize_enabled", init_source)
+            self.assertNotIn("set_debug_log_enabled", init_source)
             self.assertIn("create_program_settings_save_worker", init_source)
             self.assertIn("create_program_settings_load_worker", init_source)
             self.assertIn("create_program_settings_admin_check_worker", init_source)
@@ -73,14 +73,15 @@ class ControlPageDependencyBoundaryTests(unittest.TestCase):
             ui_state_store=Mock(),
         )
 
-        self.assertIs(kwargs["get_selected_source_preset_display"], presets.get_selected_source_preset_display)
-        self.assertIs(kwargs["get_enabled_profile_count_snapshot"], profile.get_enabled_profile_count_snapshot)
+        self.assertIn("create_top_summary_worker", kwargs)
+        self.assertNotIn("get_selected_source_preset_display", kwargs)
+        self.assertNotIn("get_enabled_profile_count_snapshot", kwargs)
         self.assertIs(
             kwargs["create_additional_settings_load_worker"],
             profile.create_additional_settings_load_worker,
         )
-        self.assertIs(kwargs["set_wssize_enabled"], profile.set_wssize_enabled)
-        self.assertIs(kwargs["set_debug_log_enabled"], profile.set_debug_log_enabled)
+        self.assertNotIn("set_wssize_enabled", kwargs)
+        self.assertNotIn("set_debug_log_enabled", kwargs)
         self.assertIs(kwargs["runtime_actions"].start, runtime.start)
         self.assertIs(kwargs["runtime_actions"].stop, runtime.stop)
         self.assertIs(kwargs["runtime_actions"].stop_and_exit, runtime.stop_and_exit)
