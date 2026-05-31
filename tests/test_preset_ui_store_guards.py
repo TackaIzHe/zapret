@@ -16,7 +16,7 @@ class PresetUiStoreGuardTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls._app = QApplication.instance() or QApplication([])
 
-    def test_duplicate_content_change_signal_is_not_emitted_for_same_file_state(self) -> None:
+    def test_content_change_signal_emits_without_filesystem_deduplication(self) -> None:
         with TemporaryDirectory() as temp_dir:
             preset_path = Path(temp_dir) / "Default v5.txt"
             preset_path.write_text("--new\n--filter-tcp=443\n", encoding="utf-8")
@@ -41,7 +41,7 @@ class PresetUiStoreGuardTests(unittest.TestCase):
             preset_path.write_text("--new\n--filter-tcp=80\n", encoding="utf-8")
             store.notify_preset_content_changed("Default v5.txt")
 
-        self.assertEqual(emitted, ["Default v5.txt", "Default v5.txt"])
+        self.assertEqual(emitted, ["Default v5.txt", "Default v5.txt", "Default v5.txt"])
 
     def test_duplicate_preset_switch_signal_is_not_emitted_for_same_file_name(self) -> None:
         store = PresetUiStore(
@@ -58,7 +58,7 @@ class PresetUiStoreGuardTests(unittest.TestCase):
 
         self.assertEqual(emitted, ["Default v5.txt", "Other.txt"])
 
-    def test_duplicate_identity_change_signal_is_not_emitted_for_same_file_state(self) -> None:
+    def test_identity_change_signal_emits_without_filesystem_deduplication(self) -> None:
         with TemporaryDirectory() as temp_dir:
             preset_path = Path(temp_dir) / "Default v5.txt"
             preset_path.write_text("# Preset: Default v5\n--new\n", encoding="utf-8")
@@ -83,7 +83,36 @@ class PresetUiStoreGuardTests(unittest.TestCase):
             preset_path.write_text("# Preset: Renamed\n--new\n", encoding="utf-8")
             store.notify_preset_identity_changed("Default v5.txt")
 
-        self.assertEqual(emitted, ["Default v5.txt", "Default v5.txt"])
+        self.assertEqual(emitted, ["Default v5.txt", "default V5.TXT", "Default v5.txt"])
+
+    def test_content_and_identity_notifications_do_not_stat_source_file(self) -> None:
+        class _PresetFileStore:
+            source_path_calls = 0
+
+            def get_source_path(self, _engine, _file_name):
+                self.source_path_calls += 1
+                raise AssertionError("preset notify signal must not touch source file path")
+
+            def list_manifests(self, _engine):
+                return []
+
+        preset_file_store = _PresetFileStore()
+        store = PresetUiStore(
+            ENGINE_WINWS2,
+            preset_file_store,
+            selection_service=object(),
+        )
+        content_emitted: list[str] = []
+        identity_emitted: list[str] = []
+        store.preset_content_changed.connect(lambda file_name: content_emitted.append(file_name))
+        store.preset_identity_changed.connect(lambda file_name: identity_emitted.append(file_name))
+
+        store.notify_preset_content_changed("Default v5.txt")
+        store.notify_preset_identity_changed("Default v5.txt")
+
+        self.assertEqual(content_emitted, ["Default v5.txt"])
+        self.assertEqual(identity_emitted, ["Default v5.txt"])
+        self.assertEqual(preset_file_store.source_path_calls, 0)
 
     def test_refresh_does_not_emit_presets_changed_when_metadata_is_unchanged(self) -> None:
         manifests = [
