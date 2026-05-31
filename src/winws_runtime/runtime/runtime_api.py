@@ -12,6 +12,7 @@ from .process_probe import (
 from .system_ops import (
     cleanup_windivert_services_runtime,
     has_any_winws_process,
+    restore_known_windivert_services_demand_start_runtime,
     stop_known_windivert_services_runtime,
     stop_all_winws_processes,
     wait_for_windivert_cleanup_settle_runtime,
@@ -122,6 +123,7 @@ class PresetLaunchRuntimeApi:
         начинает сам себе создавать плавающие 1060/1058 гонки.
         """
         try:
+            restored = bool(restore_known_windivert_services_demand_start_runtime())
             stopped = bool(stop_known_windivert_services_runtime())
             unloaded = bool(unload_known_windivert_drivers_runtime())
             settled = bool(
@@ -131,7 +133,7 @@ class PresetLaunchRuntimeApi:
                     retry_cleanup=False,
                 )
             )
-            return bool(stopped and unloaded and settled)
+            return bool(restored and stopped and unloaded and settled)
         except Exception as e:
             log(f"Ошибка очистки службы: {e}", "⚠ WARNING")
             return False

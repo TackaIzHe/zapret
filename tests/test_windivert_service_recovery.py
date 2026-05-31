@@ -137,6 +137,39 @@ class WinDivertServiceRecoveryTests(unittest.TestCase):
         self.assertTrue(result.ready)
         restore_start.assert_called_once_with()
 
+    def test_runtime_cleanup_restores_windivert_start_type_before_stop(self) -> None:
+        from winws_runtime.runtime import runtime_api
+
+        api = runtime_api.PresetLaunchRuntimeApi(r"C:\Zapret\Dev\exe\winws2.exe")
+        calls: list[str] = []
+
+        with (
+            patch.object(
+                runtime_api,
+                "restore_known_windivert_services_demand_start_runtime",
+                side_effect=lambda: calls.append("restore") or True,
+            ),
+            patch.object(
+                runtime_api,
+                "stop_known_windivert_services_runtime",
+                side_effect=lambda: calls.append("stop") or True,
+            ),
+            patch.object(
+                runtime_api,
+                "unload_known_windivert_drivers_runtime",
+                side_effect=lambda: calls.append("unload") or True,
+            ),
+            patch.object(
+                runtime_api,
+                "wait_for_windivert_cleanup_settle_runtime",
+                side_effect=lambda **_kwargs: calls.append("settle") or True,
+            ),
+        ):
+            cleaned = api.cleanup_windivert_service()
+
+        self.assertTrue(cleaned)
+        self.assertEqual(calls, ["restore", "stop", "unload", "settle"])
+
 
 if __name__ == "__main__":
     unittest.main()
