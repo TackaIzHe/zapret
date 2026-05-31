@@ -240,11 +240,13 @@ class ProfileSetupWorkerArchitectureTests(unittest.TestCase):
         page_source = inspect.getsource(PresetSetupPageBase)
         worker_start_sources = (
             inspect.getsource(PresetSetupPageBase._request_profiles_payload),
-            inspect.getsource(PresetSetupPageBase._request_profile_context_action),
+            inspect.getsource(PresetSetupPageBase._request_profile_context_action)
+            + inspect.getsource(PresetSetupPageBase._start_profile_context_action_worker),
             inspect.getsource(PresetSetupPageBase._request_user_profile_create),
             inspect.getsource(PresetSetupPageBase._request_user_profile_update),
             inspect.getsource(PresetSetupPageBase._request_user_profile_delete),
-            inspect.getsource(PresetSetupPageBase._request_profile_move),
+            inspect.getsource(PresetSetupPageBase._request_profile_move)
+            + inspect.getsource(PresetSetupPageBase._start_profile_move_worker),
             inspect.getsource(PresetSetupPageBase._request_profile_folder_action),
         )
 
