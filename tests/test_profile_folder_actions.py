@@ -14,6 +14,7 @@ from profile.folders import (
     move_profile_after_in_folder_state,
     move_profile_folder_by_step,
     move_profile_to_end_in_folder_state,
+    move_profile_to_folder_in_folder_state,
     rename_profile_folder,
     reset_profile_folders,
     set_profile_folder,
@@ -174,6 +175,20 @@ class ProfileFolderActionTests(unittest.TestCase):
                     side_effect=AssertionError("unchanged profile move-to-end must not be saved"),
                 ):
                     self.assertFalse(move_profile_to_end_in_folder_state("a", ["b", "c", "a"]))
+
+    def test_duplicate_profile_move_to_folder_skips_folder_state_save(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            with patch("settings.store.MAIN_DIRECTORY", str(Path(temp_dir))):
+                state = load_profile_folder_state()
+                state["items"]["a"] = {"folder_key": "youtube", "order": 0, "rating": 0}
+                state["items"]["b"] = {"folder_key": "youtube", "order": 1, "rating": 0}
+                save_profile_folder_state(state)
+
+                with patch(
+                    "profile.folders.save_profile_folder_state",
+                    side_effect=AssertionError("unchanged profile move-to-folder must not be saved"),
+                ):
+                    self.assertFalse(move_profile_to_folder_in_folder_state("b", "youtube", ["a", "b"]))
 
 
 if __name__ == "__main__":
