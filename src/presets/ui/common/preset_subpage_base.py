@@ -250,6 +250,7 @@ class PresetRawEditorPage(BasePage):
         self._raw_action_runtime = OneShotWorkerRuntime()
         self._raw_action_request_id = 0
         self._pending_raw_preset_actions: list[dict[str, object]] = []
+        self._pending_raw_preset_write_operations: list[dict[str, object]] = []
         self._cleanup_in_progress = False
         self._ui_state_store = None
         self._ui_state_unsubscribe = None
@@ -295,6 +296,51 @@ class PresetRawEditorPage(BasePage):
         if runtime is None:
             return False
         return bool(runtime.is_running())
+
+    def _raw_preset_write_is_running(self) -> bool:
+        for attr in ("_raw_activate_runtime", "_raw_action_runtime"):
+            runtime = self.__dict__.get(attr)
+            if runtime is not None and runtime.is_running():
+                return True
+        return False
+
+    def _queue_raw_preset_write_operation(self, operation: dict[str, object]) -> None:
+        pending = self.__dict__.setdefault("_pending_raw_preset_write_operations", [])
+        queued = dict(operation)
+        if pending and pending[-1] == queued:
+            return
+        if (
+            pending
+            and queued.get("kind") != "action"
+            and pending[-1].get("kind") == queued.get("kind")
+        ):
+            pending[-1] = queued
+            return
+        pending.append(queued)
+
+    def _start_next_raw_preset_write_operation(self) -> bool:
+        if self.__dict__.get("_cleanup_in_progress"):
+            return False
+        if self._raw_preset_write_is_running():
+            return False
+        pending = self.__dict__.setdefault("_pending_raw_preset_write_operations", [])
+        if not pending:
+            return False
+        operation = dict(pending.pop(0))
+        kind = str(operation.get("kind") or "")
+        if kind == "activate":
+            self._pending_raw_preset_activation = ""
+            self._start_preset_activation_worker(str(operation.get("file_name") or ""))
+            return True
+        if kind == "action":
+            action = str(operation.get("action") or "")
+            payload = operation.get("payload")
+            self._start_raw_preset_action_worker(
+                action,
+                **(dict(payload) if isinstance(payload, dict) else {}),
+            )
+            return True
+        return bool(self._start_next_raw_preset_write_operation())
 
     def _default_title(self) -> str:
         return self._title
@@ -985,9 +1031,9 @@ class PresetRawEditorPage(BasePage):
         file_name = str(self._preset_file_name or "").strip()
         if not file_name:
             return
-        runtime = self._raw_worker_runtime("_raw_activate_runtime")
-        if runtime.is_running():
+        if self._raw_preset_write_is_running():
             self._pending_raw_preset_activation = file_name
+            self._queue_raw_preset_write_operation({"kind": "activate", "file_name": file_name})
             return
         self._start_preset_activation_worker(file_name)
 
@@ -1025,6 +1071,8 @@ class PresetRawEditorPage(BasePage):
         self._show_error(str(error))
 
     def _on_preset_activation_worker_finished(self, _worker) -> None:
+        if self._start_next_raw_preset_write_operation():
+            return
         pending = str(self.__dict__.get("_pending_raw_preset_activation") or "").strip()
         self._pending_raw_preset_activation = ""
         if pending and not bool(self.__dict__.get("_cleanup_in_progress", False)):
@@ -1034,15 +1082,19 @@ class PresetRawEditorPage(BasePage):
             set_enabled_if_changed(self.activateButton, True)
 
     def _request_raw_preset_action(self, action: str, **payload) -> None:
-        runtime = self._raw_worker_runtime("_raw_action_runtime")
-        if runtime.is_running():
-            self._pending_raw_preset_actions.append(
+        if self._raw_preset_write_is_running():
+            self._queue_raw_preset_write_operation(
                 {
+                    "kind": "action",
                     "action": str(action or ""),
                     "payload": dict(payload or {}),
                 }
             )
             return
+        self._start_raw_preset_action_worker(action, **payload)
+
+    def _start_raw_preset_action_worker(self, action: str, **payload) -> None:
+        runtime = self._raw_worker_runtime("_raw_action_runtime")
         self._raw_action_request_id += 1
         request_id = self._raw_action_request_id
         runtime.start_qthread_worker(
@@ -1104,14 +1156,8 @@ class PresetRawEditorPage(BasePage):
         self._show_error(str(error))
 
     def _on_raw_preset_action_worker_finished(self, _worker) -> None:
-        pending = self.__dict__.get("_pending_raw_preset_actions") or []
-        if pending and not self._cleanup_in_progress:
-            next_action = pending.pop(0)
-            payload = next_action.get("payload")
-            self._request_raw_preset_action(
-                str(next_action.get("action") or ""),
-                **(dict(payload) if isinstance(payload, dict) else {}),
-            )
+        if self._start_next_raw_preset_write_operation():
+            return
 
     def _activation_footer_text(self) -> str:
         try:
@@ -1293,6 +1339,9 @@ class PresetRawEditorPage(BasePage):
         except Exception:
             pass
         self._cleanup_in_progress = True
+        self.__dict__.setdefault("_pending_raw_preset_write_operations", []).clear()
+        self.__dict__.setdefault("_pending_raw_preset_actions", []).clear()
+        self._pending_raw_preset_activation = ""
         self._stop_raw_worker_runtimes()
         unsubscribe = self._ui_state_unsubscribe
         if callable(unsubscribe):

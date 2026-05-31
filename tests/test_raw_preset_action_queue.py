@@ -26,6 +26,7 @@ class RawPresetActionQueueTests(unittest.TestCase):
         page._raw_action_runtime = _Runtime(running=True)
         page._raw_action_request_id = 1
         page._pending_raw_preset_actions = []
+        page._pending_raw_preset_write_operations = []
         page.create_raw_preset_action_worker = Mock()
 
         PresetRawEditorPage._request_raw_preset_action(
@@ -37,9 +38,10 @@ class RawPresetActionQueueTests(unittest.TestCase):
 
         page.create_raw_preset_action_worker.assert_not_called()
         self.assertEqual(
-            page._pending_raw_preset_actions,
+            page._pending_raw_preset_write_operations,
             [
                 {
+                    "kind": "action",
                     "action": "duplicate",
                     "payload": {
                         "file_name": "Default.txt",
@@ -57,8 +59,10 @@ class RawPresetActionQueueTests(unittest.TestCase):
         page = PresetRawEditorPage.__new__(PresetRawEditorPage)
         page._raw_action_runtime = runtime
         page._raw_action_request_id = 1
-        page._pending_raw_preset_actions = [
+        page._pending_raw_preset_actions = []
+        page._pending_raw_preset_write_operations = [
             {
+                "kind": "action",
                 "action": "reset",
                 "payload": {"file_name": "Default.txt"},
             }
@@ -75,7 +79,7 @@ class RawPresetActionQueueTests(unittest.TestCase):
             parent=page,
         )
         self.assertEqual(runtime.started, [worker])
-        self.assertEqual(page._pending_raw_preset_actions, [])
+        self.assertEqual(page._pending_raw_preset_write_operations, [])
 
 
 if __name__ == "__main__":

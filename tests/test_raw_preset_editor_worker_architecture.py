@@ -14,11 +14,14 @@ class RawPresetEditorWorkerArchitectureTests(unittest.TestCase):
             PresetRawEditorPage._start_raw_preset_save_worker,
             PresetRawEditorPage._start_preset_activation_worker,
             PresetRawEditorPage._request_raw_preset_action,
+            PresetRawEditorPage._start_raw_preset_action_worker,
         )
         page_source = inspect.getsource(PresetRawEditorPage)
 
         for method in request_methods:
             source = inspect.getsource(method)
+            if method is PresetRawEditorPage._request_raw_preset_action:
+                source += inspect.getsource(PresetRawEditorPage._start_raw_preset_action_worker)
             self.assertIn("start_qthread_worker", source)
             self.assertNotIn("worker.start()", source)
 

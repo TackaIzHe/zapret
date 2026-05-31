@@ -1183,6 +1183,7 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
     def test_user_presets_item_file_actions_run_through_worker(self) -> None:
         worker_source = inspect.getsource(UserPresetItemActionWorker.run)
         request_source = inspect.getsource(UserPresetsPageBase._request_preset_item_action)
+        start_source = inspect.getsource(UserPresetsPageBase._start_preset_item_action_worker)
         create_worker_source = inspect.getsource(UserPresetsPageBase.create_preset_item_action_worker)
 
         for method in (
@@ -1205,7 +1206,8 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         delete_source = inspect.getsource(UserPresetsPageBase._on_delete_preset)
         self.assertIn("_is_builtin_preset_file", delete_source)
         self.assertNotIn("_storage_api().is_builtin_preset_file", delete_source)
-        self.assertIn("create_preset_item_action_worker", request_source)
+        self.assertIn("_start_preset_item_action_worker", request_source)
+        self.assertIn("create_preset_item_action_worker", start_source)
         self.assertNotIn("UserPresetItemActionWorker", create_worker_source)
         self.assertIn("_create_preset_item_action_worker_fn", create_worker_source)
         self.assertIn("self._duplicate_preset", worker_source)
@@ -1299,6 +1301,7 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertTrue(hasattr(user_presets_action_workers, "UserPresetStorageActionWorker"))
         worker_source = inspect.getsource(user_presets_action_workers.UserPresetStorageActionWorker.run)
         request_source = inspect.getsource(UserPresetsPageBase._request_preset_storage_action)
+        start_source = inspect.getsource(UserPresetsPageBase._start_preset_storage_action_worker)
         create_source = inspect.getsource(UserPresetsPageBase.create_preset_storage_action_worker)
         runtime_source = inspect.getsource(user_presets_page_runtime.UserPresetsPageRuntime)
 
@@ -1318,7 +1321,8 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("current_rating=", rating_source)
         self.assertIn("cached_presets_metadata", rating_source)
         self.assertIn("_update_cached_preset_rating", finished_source)
-        self.assertIn("create_preset_storage_action_worker", request_source)
+        self.assertIn("_start_preset_storage_action_worker", request_source)
+        self.assertIn("create_preset_storage_action_worker", start_source)
         self.assertNotIn("UserPresetStorageActionWorker", create_source)
         self.assertIn("_create_preset_storage_action_worker_fn", create_source)
         self.assertNotIn("from presets.folders import toggle_preset_pin", runtime_source)
@@ -2517,7 +2521,7 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertNotIn("manager.stop_proxy()", stop_source)
         self.assertNotIn("manager.stop_proxy()", runtime_source)
         self.assertIn("create_stop_runtime_worker", runtime_source)
-        self.assertIn("_proxy_stop_worker", page_source)
+        self.assertIn("_proxy_stop_runtime", page_source)
         self.assertIn("_finish_stop_proxy", runtime_source)
         self.assertIn("QMetaObject.invokeMethod", runtime_source)
         self.assertIn('_request_settings_save("proxy_enabled", enabled=False)', page_source)
@@ -3384,13 +3388,14 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
     def test_raw_preset_editor_activation_runs_through_worker(self) -> None:
         source = inspect.getsource(PresetRawEditorPage._activate_preset)
         request_source = inspect.getsource(PresetRawEditorPage._request_preset_activation)
+        start_source = inspect.getsource(PresetRawEditorPage._start_preset_activation_worker)
         worker_init_source = inspect.getsource(RawPresetActivateWorker.__init__)
         worker_source = inspect.getsource(RawPresetActivateWorker.run)
 
         self.assertNotIn("_activate_selected_preset()", source)
         self.assertNotIn("self._controller.activate(", source)
         self.assertIn("_request_preset_activation", source)
-        self.assertIn("create_raw_preset_activate_worker", request_source)
+        self.assertIn("create_raw_preset_activate_worker", request_source + start_source)
         self.assertIn("activate", worker_init_source)
         self.assertIn("self._activate", worker_init_source)
         self.assertNotIn("controller", worker_init_source)
@@ -4030,7 +4035,7 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertTrue(hasattr(autostart_workers, "AutostartModeLoadWorker"))
         worker_source = inspect.getsource(autostart_workers.AutostartModeLoadWorker.run)
 
-        self.assertIn("_mode_load_worker", init_source)
+        self.assertIn("_mode_load_runtime", init_source)
         self.assertIn("_request_mode_load", update_mode_source)
         self.assertNotIn("get_current_launch_method()", update_mode_source)
         self.assertIn("create_autostart_mode_load_worker", page_source)
