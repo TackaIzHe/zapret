@@ -5,7 +5,7 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
-from folders.defaults import COMMON_FOLDER_KEY
+from folders.defaults import COMMON_FOLDER_KEY, PINNED_FOLDER_KEY
 from presets.folders import (
     copy_preset_item_meta,
     create_preset_folder,
@@ -19,6 +19,7 @@ from presets.folders import (
     move_preset_before,
     rename_preset_folder,
     rename_preset_item_meta,
+    set_preset_folder_collapsed,
     set_preset_rating,
     toggle_preset_pin,
 )
@@ -90,6 +91,16 @@ class PresetFolderActionTests(unittest.TestCase):
                 ):
                     self.assertFalse(set_preset_rating(PRESETS_SCOPE_WINWS2, "ALL TCP & UDP v3.txt", 8))
                     self.assertFalse(set_preset_pin(PRESETS_SCOPE_WINWS2, "ALL TCP & UDP v3.txt", True))
+
+    def test_duplicate_pinned_folder_collapsed_skips_folder_state_save(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            with patch("settings.store.MAIN_DIRECTORY", str(Path(temp_dir))):
+                self.assertTrue(set_preset_folder_collapsed(PRESETS_SCOPE_WINWS2, PINNED_FOLDER_KEY, True))
+                with patch(
+                    "presets.folders.save_preset_folder_state",
+                    side_effect=AssertionError("unchanged pinned folder collapsed state must not be saved"),
+                ):
+                    self.assertFalse(set_preset_folder_collapsed(PRESETS_SCOPE_WINWS2, PINNED_FOLDER_KEY, True))
 
     def test_rating_action_preserves_display_default_folder(self) -> None:
         with TemporaryDirectory() as temp_dir:

@@ -70,10 +70,14 @@ def move_preset_folder_by_step(scope_key: str, folder_key: str, direction: int) 
 def set_preset_folder_collapsed(scope_key: str, folder_key: str, collapsed: bool) -> bool:
     state = load_preset_folder_state(scope_key)
     if str(folder_key or "").strip() == PINNED_FOLDER_KEY:
+        next_collapsed = bool(collapsed)
+        folder = state.setdefault("folders", {}).get(PINNED_FOLDER_KEY)
+        if isinstance(folder, dict) and bool(folder.get("collapsed", False)) == next_collapsed:
+            return False
         state.setdefault("folders", {})[PINNED_FOLDER_KEY] = {
             "name": "Закрепленные",
             "order": -1,
-            "collapsed": bool(collapsed),
+            "collapsed": next_collapsed,
             "system": True,
         }
         save_preset_folder_state(scope_key, state)
