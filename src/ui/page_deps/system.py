@@ -194,9 +194,13 @@ def build_logs_page_kwargs(*, page_name: PageName, logs_feature, orchestra_featu
 
 def build_telegram_proxy_page_kwargs(*, page_name: PageName, runtime_feature, telegram_proxy_feature) -> dict:
     _ = page_name
+
+    def _get_zapret_running() -> bool:
+        return bool(runtime_feature.is_any_running(silent=True))
+
     return {
-        "runtime_feature": runtime_feature,
         "telegram_proxy_feature": telegram_proxy_feature,
+        "get_zapret_running": _get_zapret_running,
     }
 
 

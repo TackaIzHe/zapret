@@ -51,6 +51,33 @@ class TelegramProxyWorkerArchitectureTests(unittest.TestCase):
         self.assertNotIn("_restart_stop_worker =", page_source)
         self.assertNotIn("_relay_check_worker =", page_source)
 
+    def test_page_receives_zapret_running_callable_not_runtime_feature(self) -> None:
+        from app.page_names import PageName
+        from telegram_proxy.ui.page import TelegramProxyPage
+        from ui.page_deps.system import build_telegram_proxy_page_kwargs
+
+        init_source = inspect.getsource(TelegramProxyPage.__init__)
+        relay_source = inspect.getsource(TelegramProxyPage._check_relay_after_start)
+        page_source = inspect.getsource(TelegramProxyPage)
+
+        self.assertNotIn("runtime_feature", init_source)
+        self.assertNotIn("self._runtime_feature", page_source)
+        self.assertIn("get_zapret_running", init_source)
+        self.assertIn("self._get_zapret_running", relay_source)
+
+        runtime_feature = Mock()
+        runtime_feature.is_any_running.return_value = True
+        kwargs = build_telegram_proxy_page_kwargs(
+            page_name=PageName.TELEGRAM_PROXY,
+            runtime_feature=runtime_feature,
+            telegram_proxy_feature=Mock(),
+        )
+
+        self.assertNotIn("runtime_feature", kwargs)
+        self.assertIn("get_zapret_running", kwargs)
+        self.assertTrue(kwargs["get_zapret_running"]())
+        runtime_feature.is_any_running.assert_called_once_with(silent=True)
+
     def test_relay_reachability_probe_is_owned_by_commands(self) -> None:
         feature_source = inspect.getsource(TelegramProxyFeature)
         worker_source = inspect.getsource(telegram_proxy_workers.TelegramProxyRelayCheckWorker.run)

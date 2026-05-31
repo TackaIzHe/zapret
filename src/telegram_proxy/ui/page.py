@@ -106,14 +106,14 @@ class _StatusDot(QWidget):
 class TelegramProxyPage(BasePage):
     """Telegram WebSocket Proxy settings page."""
 
-    def __init__(self, parent=None, *, runtime_feature, telegram_proxy_feature):
+    def __init__(self, parent=None, *, telegram_proxy_feature, get_zapret_running):
         super().__init__(
             "Telegram Proxy",
             "Маршрутизация трафика Telegram через WebSocket для обхода ЗАМЕДЛЕНИЯ (не поддерживает полный блок) по IP",
             parent,
         )
-        self._runtime_feature = runtime_feature
         self._telegram_proxy = telegram_proxy_feature
+        self._get_zapret_running = get_zapret_running
         self._log_timer = None
         self._stats_timer = None
         self._diag_poll_timer = None
@@ -952,7 +952,7 @@ class TelegramProxyPage(BasePage):
             set_generation=lambda value: setattr(self, "_relay_check_gen", value),
             status_label=self._status_label,
             set_relay_diag=lambda value: setattr(self, "_relay_diag", value),
-            get_zapret_running=lambda: telegram_proxy_page_runtime.is_zapret_runtime_running(self._runtime_feature),
+            get_zapret_running=self._get_zapret_running,
             log_warning=lambda text: log(text, "WARNING"),
             create_relay_check_worker=self._telegram_proxy.create_relay_check_worker,
         )
