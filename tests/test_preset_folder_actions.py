@@ -114,6 +114,16 @@ class PresetFolderActionTests(unittest.TestCase):
                 ):
                     self.assertFalse(set_preset_folder_collapsed(PRESETS_SCOPE_WINWS2, PINNED_FOLDER_KEY, True))
 
+    def test_default_pinned_folder_expanded_state_skips_folder_state_save(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            with patch("settings.store.MAIN_DIRECTORY", str(Path(temp_dir))):
+                load_preset_folder_state(PRESETS_SCOPE_WINWS2)
+                with patch(
+                    "presets.folders.save_preset_folder_state",
+                    side_effect=AssertionError("default pinned folder expanded state must not be saved"),
+                ):
+                    self.assertFalse(set_preset_folder_collapsed(PRESETS_SCOPE_WINWS2, PINNED_FOLDER_KEY, False))
+
     def test_duplicate_preset_folder_reset_skips_folder_state_save(self) -> None:
         with TemporaryDirectory() as temp_dir:
             with patch("settings.store.MAIN_DIRECTORY", str(Path(temp_dir))):

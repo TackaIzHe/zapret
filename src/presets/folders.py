@@ -72,6 +72,8 @@ def set_preset_folder_collapsed(scope_key: str, folder_key: str, collapsed: bool
     if str(folder_key or "").strip() == PINNED_FOLDER_KEY:
         next_collapsed = bool(collapsed)
         folder = state.setdefault("folders", {}).get(PINNED_FOLDER_KEY)
+        if not isinstance(folder, dict) and not next_collapsed:
+            return False
         if isinstance(folder, dict) and bool(folder.get("collapsed", False)) == next_collapsed:
             return False
         state.setdefault("folders", {})[PINNED_FOLDER_KEY] = {
