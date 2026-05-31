@@ -39,7 +39,7 @@ class ProfileOrderPageBase(BasePage):
         self._order_load_runtime = OneShotWorkerRuntime()
         self._order_load_dirty = False
         self._order_move_runtime = OneShotWorkerRuntime()
-        self._pending_profile_order_move: dict[str, str] | None = None
+        self._pending_profile_order_moves: list[dict[str, str]] = []
         self._breadcrumb = None
         self._cleanup_in_progress = False
         self._build_content()
@@ -151,11 +151,13 @@ class ProfileOrderPageBase(BasePage):
         if not source_profile_key:
             return
         if self._order_move_runtime.is_running():
-            self._pending_profile_order_move = {
-                "action": str(action or ""),
-                "source_profile_key": source_profile_key,
-                "destination_profile_key": str(destination_profile_key or ""),
-            }
+            self.__dict__.setdefault("_pending_profile_order_moves", []).append(
+                {
+                    "action": str(action or ""),
+                    "source_profile_key": source_profile_key,
+                    "destination_profile_key": str(destination_profile_key or ""),
+                }
+            )
             return
         self._start_profile_order_move_worker(
             action,
@@ -236,8 +238,8 @@ class ProfileOrderPageBase(BasePage):
         InfoBar.error(title="Ошибка", content=str(error), parent=self.window())
 
     def _on_profile_order_move_worker_finished(self, _worker) -> None:
-        pending = self.__dict__.get("_pending_profile_order_move")
-        self._pending_profile_order_move = None
+        pending_moves = self.__dict__.setdefault("_pending_profile_order_moves", [])
+        pending = pending_moves.pop(0) if pending_moves else None
         if pending and not bool(self.__dict__.get("_cleanup_in_progress", False)):
             self._start_profile_order_move_worker(
                 str(pending.get("action") or ""),
@@ -264,7 +266,7 @@ class ProfileOrderPageBase(BasePage):
     def cleanup(self) -> None:
         self._cleanup_in_progress = True
         self._order_load_dirty = False
-        self._pending_profile_order_move = None
+        self.__dict__.setdefault("_pending_profile_order_moves", []).clear()
         self._order_load_runtime.stop(warning_prefix="Profile order load worker")
         self._order_load_runtime.cancel()
         self._order_move_runtime.stop(warning_prefix="Profile order move worker")

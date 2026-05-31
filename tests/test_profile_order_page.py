@@ -280,7 +280,7 @@ class ProfileOrderPageTests(unittest.TestCase):
         page._create_profile_order_load_worker.assert_not_called()
         self.assertEqual(page._payload, "current")
 
-    def test_order_page_replays_latest_move_after_running_move_worker_finishes(self) -> None:
+    def test_order_page_replays_queued_moves_after_running_move_worker_finishes(self) -> None:
         from profile.ui.profile_order_page import ProfileOrderPageBase
         from ui.one_shot_worker_runtime import OneShotWorkerRuntime
 
@@ -316,7 +316,7 @@ class ProfileOrderPageTests(unittest.TestCase):
         running_worker = _RunningWorker()
         page._order_move_runtime.worker = running_worker
         page._order_move_runtime.request_id = 4
-        page._pending_profile_order_move = None
+        page._pending_profile_order_moves = []
         next_worker = _Worker()
         page._create_profile_order_move_worker = Mock(return_value=next_worker)
 
@@ -326,15 +326,27 @@ class ProfileOrderPageTests(unittest.TestCase):
             "profile-a",
             destination_profile_key="profile-b",
         )
+        ProfileOrderPageBase._request_profile_order_move(
+            page,
+            "end",
+            "profile-c",
+        )
 
         page._create_profile_order_move_worker.assert_not_called()
         self.assertEqual(
-            page._pending_profile_order_move,
-            {
-                "action": "after",
-                "source_profile_key": "profile-a",
-                "destination_profile_key": "profile-b",
-            },
+            page._pending_profile_order_moves,
+            [
+                {
+                    "action": "after",
+                    "source_profile_key": "profile-a",
+                    "destination_profile_key": "profile-b",
+                },
+                {
+                    "action": "end",
+                    "source_profile_key": "profile-c",
+                    "destination_profile_key": "",
+                },
+            ],
         )
 
         page._order_move_runtime.worker = None
@@ -349,7 +361,16 @@ class ProfileOrderPageTests(unittest.TestCase):
             parent=page,
         )
         next_worker.start.assert_called_once()
-        self.assertIsNone(page._pending_profile_order_move)
+        self.assertEqual(
+            page._pending_profile_order_moves,
+            [
+                {
+                    "action": "end",
+                    "source_profile_key": "profile-c",
+                    "destination_profile_key": "",
+                }
+            ],
+        )
 
     def test_order_page_cleanup_stops_order_workers(self) -> None:
         from profile.ui.profile_order_page import ProfileOrderPageBase
