@@ -31,6 +31,18 @@ class _MoveWorker:
         self.deleteLater = Mock()
 
 
+class _UserProfileWorker:
+    created = _Signal()
+    updated = _Signal()
+    deleted = _Signal()
+    failed = _Signal()
+    finished = _Signal()
+
+    def __init__(self) -> None:
+        self.start = Mock()
+        self.deleteLater = Mock()
+
+
 class _Runtime:
     def __init__(self, *, running: bool = False) -> None:
         self._running = running
@@ -84,6 +96,97 @@ class ProfilePresetWriteSerializationTests(unittest.TestCase):
         page.launch_method = "zapret2_mode"
         page._profile_context_action_runtime = _Runtime(running=False)
         page._profile_move_runtime = _Runtime(running=True)
+        page._pending_profile_preset_write_operations = []
+        page._pending_profile_context_actions = []
+        page._profile_context_action_request_id = 0
+        page._profile_context_action_enabled_by_request = {}
+        page._create_profile_context_action_worker = Mock(return_value=_ContextWorker())
+
+        PresetSetupPageBase._request_profile_context_action(
+            page,
+            "set_enabled",
+            "profile-a",
+            enabled=False,
+        )
+
+        page._create_profile_context_action_worker.assert_not_called()
+        self.assertEqual(
+            page._pending_profile_preset_write_operations,
+            [
+                {
+                    "kind": "context",
+                    "action": "set_enabled",
+                    "profile_key": "profile-a",
+                    "enabled": False,
+                    "source_profile_key": "",
+                    "destination_profile_key": "",
+                    "destination_group_key": "",
+                }
+            ],
+        )
+
+    def test_user_profile_update_waits_while_move_worker_runs(self) -> None:
+        page = PresetSetupPageBase.__new__(PresetSetupPageBase)
+        page.launch_method = "zapret2_mode"
+        page._profile_context_action_runtime = _Runtime(running=False)
+        page._profile_move_runtime = _Runtime(running=True)
+        page._user_profile_create_runtime = _Runtime(running=False)
+        page._user_profile_update_runtime = _Runtime(running=False)
+        page._user_profile_delete_runtime = _Runtime(running=False)
+        page._pending_profile_preset_write_operations = []
+        page._pending_user_profile_operations = []
+        page._user_profile_update_request_id = 0
+        page._set_user_profile_actions_enabled = Mock()
+        page._create_user_profile_update_worker = Mock(return_value=_UserProfileWorker())
+
+        PresetSetupPageBase._request_user_profile_update(
+            page,
+            "user-profile-1",
+            name="Game UDP",
+            protocol="udp",
+            ports="443",
+        )
+
+        page._create_user_profile_update_worker.assert_not_called()
+        self.assertEqual(
+            page._pending_profile_preset_write_operations,
+            [
+                {
+                    "kind": "user_profile",
+                    "action": "update",
+                    "profile_key": "user-profile-1",
+                    "enabled": None,
+                    "source_profile_key": "",
+                    "destination_profile_key": "",
+                    "destination_group_key": "",
+                    "profile_id": "user-profile-1",
+                    "name": "Game UDP",
+                    "protocol": "udp",
+                    "ports": "443",
+                }
+            ],
+        )
+        self.assertEqual(
+            page._pending_user_profile_operations,
+            [
+                {
+                    "action": "update",
+                    "profile_id": "user-profile-1",
+                    "name": "Game UDP",
+                    "protocol": "udp",
+                    "ports": "443",
+                }
+            ],
+        )
+
+    def test_profile_context_action_waits_while_user_profile_worker_runs(self) -> None:
+        page = PresetSetupPageBase.__new__(PresetSetupPageBase)
+        page.launch_method = "zapret2_mode"
+        page._profile_context_action_runtime = _Runtime(running=False)
+        page._profile_move_runtime = _Runtime(running=False)
+        page._user_profile_create_runtime = _Runtime(running=True)
+        page._user_profile_update_runtime = _Runtime(running=False)
+        page._user_profile_delete_runtime = _Runtime(running=False)
         page._pending_profile_preset_write_operations = []
         page._pending_profile_context_actions = []
         page._profile_context_action_request_id = 0

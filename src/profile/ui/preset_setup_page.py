@@ -508,9 +508,11 @@ class PresetSetupPageBase(BasePage):
         self._start_profile_context_action_worker(str(action or ""), profile_key, enabled=enabled)
 
     def _profile_preset_write_operation_running(self) -> bool:
-        return self._worker_runtime("_profile_context_action_runtime").is_running() or self._worker_runtime(
-            "_profile_move_runtime"
-        ).is_running()
+        return (
+            self._worker_runtime("_profile_context_action_runtime").is_running()
+            or self._worker_runtime("_profile_move_runtime").is_running()
+            or self._user_profile_operation_running()
+        )
 
     def _queue_profile_preset_write_operation(
         self,
@@ -522,16 +524,29 @@ class PresetSetupPageBase(BasePage):
         source_profile_key: str = "",
         destination_profile_key: str = "",
         destination_group_key: str = "",
+        profile_id: str = "",
+        name: str = "",
+        protocol: str = "",
+        ports: str = "",
     ) -> None:
         operation = {
             "kind": str(kind or ""),
             "action": str(action or ""),
-            "profile_key": str(profile_key or source_profile_key or ""),
+            "profile_key": str(profile_key or source_profile_key or profile_id or ""),
             "enabled": enabled,
             "source_profile_key": str(source_profile_key or ""),
             "destination_profile_key": str(destination_profile_key or ""),
             "destination_group_key": str(destination_group_key or ""),
         }
+        if operation["kind"] == "user_profile":
+            operation.update(
+                {
+                    "profile_id": str(profile_id or ""),
+                    "name": str(name or ""),
+                    "protocol": str(protocol or ""),
+                    "ports": str(ports or ""),
+                }
+            )
         self.__dict__.setdefault("_pending_profile_preset_write_operations", []).append(operation)
         if operation["kind"] == "context":
             self.__dict__.setdefault("_pending_profile_context_actions", []).append(
@@ -550,6 +565,16 @@ class PresetSetupPageBase(BasePage):
                     "destination_group_key": operation["destination_group_key"],
                 }
             )
+        elif operation["kind"] == "user_profile":
+            self.__dict__.setdefault("_pending_user_profile_operations", []).append(
+                {
+                    "action": operation["action"],
+                    "profile_id": str(operation.get("profile_id") or ""),
+                    "name": str(operation.get("name") or ""),
+                    "protocol": str(operation.get("protocol") or ""),
+                    "ports": str(operation.get("ports") or ""),
+                }
+            )
 
     def _pop_next_profile_preset_write_operation(self) -> dict[str, object] | None:
         pending_operations = self.__dict__.setdefault("_pending_profile_preset_write_operations", [])
@@ -563,6 +588,10 @@ class PresetSetupPageBase(BasePage):
                 pending_moves = self.__dict__.setdefault("_pending_profile_moves", [])
                 if pending_moves:
                     pending_moves.pop(0)
+            elif operation.get("kind") == "user_profile":
+                pending_user_profiles = self.__dict__.setdefault("_pending_user_profile_operations", [])
+                if pending_user_profiles:
+                    pending_user_profiles.pop(0)
             return operation
         pending_context = self.__dict__.setdefault("_pending_profile_context_actions", [])
         if pending_context:
@@ -588,6 +617,22 @@ class PresetSetupPageBase(BasePage):
                 "destination_profile_key": str(pending.get("destination_profile_key") or ""),
                 "destination_group_key": str(pending.get("destination_group_key") or ""),
             }
+        pending_user_profiles = self.__dict__.setdefault("_pending_user_profile_operations", [])
+        if pending_user_profiles:
+            pending = dict(pending_user_profiles.pop(0))
+            return {
+                "kind": "user_profile",
+                "action": str(pending.get("action") or ""),
+                "profile_key": str(pending.get("profile_id") or ""),
+                "enabled": None,
+                "source_profile_key": "",
+                "destination_profile_key": "",
+                "destination_group_key": "",
+                "profile_id": str(pending.get("profile_id") or ""),
+                "name": str(pending.get("name") or ""),
+                "protocol": str(pending.get("protocol") or ""),
+                "ports": str(pending.get("ports") or ""),
+            }
         return None
 
     def _start_next_profile_preset_write_operation(self) -> bool:
@@ -611,6 +656,26 @@ class PresetSetupPageBase(BasePage):
                 destination_group_key=str(pending.get("destination_group_key") or ""),
             )
             return True
+        if pending.get("kind") == "user_profile":
+            action = str(pending.get("action") or "")
+            if action == "create":
+                self._request_user_profile_create(
+                    name=str(pending.get("name") or ""),
+                    protocol=str(pending.get("protocol") or ""),
+                    ports=str(pending.get("ports") or ""),
+                )
+                return True
+            if action == "update":
+                self._request_user_profile_update(
+                    str(pending.get("profile_id") or ""),
+                    name=str(pending.get("name") or ""),
+                    protocol=str(pending.get("protocol") or ""),
+                    ports=str(pending.get("ports") or ""),
+                )
+                return True
+            if action == "delete":
+                self._request_user_profile_delete(str(pending.get("profile_id") or ""))
+                return True
         return self._start_next_profile_preset_write_operation()
 
     def _start_profile_context_action_worker(
@@ -822,53 +887,6 @@ class PresetSetupPageBase(BasePage):
                 return True
         return False
 
-    def _queue_user_profile_operation(
-        self,
-        action: str,
-        *,
-        profile_id: str = "",
-        name: str = "",
-        protocol: str = "",
-        ports: str = "",
-    ) -> None:
-        self.__dict__.setdefault("_pending_user_profile_operations", []).append(
-            {
-                "action": str(action or ""),
-                "profile_id": str(profile_id or ""),
-                "name": str(name or ""),
-                "protocol": str(protocol or ""),
-                "ports": str(ports or ""),
-            }
-        )
-
-    def _start_next_pending_user_profile_operation(self) -> bool:
-        if self._user_profile_operation_running():
-            return True
-        pending_operations = self.__dict__.setdefault("_pending_user_profile_operations", [])
-        pending = pending_operations.pop(0) if pending_operations else None
-        if not pending:
-            return False
-        action = str(pending.get("action") or "")
-        if action == "create":
-            self._request_user_profile_create(
-                name=str(pending.get("name") or ""),
-                protocol=str(pending.get("protocol") or ""),
-                ports=str(pending.get("ports") or ""),
-            )
-            return True
-        if action == "update":
-            self._request_user_profile_update(
-                str(pending.get("profile_id") or ""),
-                name=str(pending.get("name") or ""),
-                protocol=str(pending.get("protocol") or ""),
-                ports=str(pending.get("ports") or ""),
-            )
-            return True
-        if action == "delete":
-            self._request_user_profile_delete(str(pending.get("profile_id") or ""))
-            return True
-        return self._start_next_pending_user_profile_operation()
-
     def _create_user_profile_create_worker(self, request_id: int, *, name: str, protocol: str, ports: str):
         return self._create_user_profile_create_worker_fn(
             request_id,
@@ -907,9 +925,10 @@ class PresetSetupPageBase(BasePage):
         )
 
     def _request_user_profile_create(self, *, name: str, protocol: str, ports: str) -> None:
-        if self._user_profile_operation_running():
-            self._queue_user_profile_operation(
-                "create",
+        if self._profile_preset_write_operation_running():
+            self._queue_profile_preset_write_operation(
+                "user_profile",
+                action="create",
                 name=name,
                 protocol=protocol,
                 ports=ports,
@@ -963,7 +982,7 @@ class PresetSetupPageBase(BasePage):
         InfoBar.error(title="Ошибка", content=str(error), parent=self.window())
 
     def _on_user_profile_create_worker_finished(self, worker) -> None:
-        if self._start_next_pending_user_profile_operation():
+        if self._start_next_profile_preset_write_operation():
             return
         if not self._user_profile_operation_running():
             self._set_user_profile_actions_enabled(True)
@@ -972,9 +991,10 @@ class PresetSetupPageBase(BasePage):
         profile_id = str(profile_id or "").strip()
         if not profile_id:
             return
-        if self._user_profile_operation_running():
-            self._queue_user_profile_operation(
-                "update",
+        if self._profile_preset_write_operation_running():
+            self._queue_profile_preset_write_operation(
+                "user_profile",
+                action="update",
                 profile_id=profile_id,
                 name=name,
                 protocol=protocol,
@@ -1036,7 +1056,7 @@ class PresetSetupPageBase(BasePage):
         InfoBar.error(title="Ошибка", content=str(error), parent=self.window())
 
     def _on_user_profile_update_worker_finished(self, worker) -> None:
-        if self._start_next_pending_user_profile_operation():
+        if self._start_next_profile_preset_write_operation():
             return
         if not self._user_profile_operation_running():
             self._set_user_profile_actions_enabled(True)
@@ -1045,8 +1065,12 @@ class PresetSetupPageBase(BasePage):
         profile_id = str(profile_id or "").strip()
         if not profile_id:
             return
-        if self._user_profile_operation_running():
-            self._queue_user_profile_operation("delete", profile_id=profile_id)
+        if self._profile_preset_write_operation_running():
+            self._queue_profile_preset_write_operation(
+                "user_profile",
+                action="delete",
+                profile_id=profile_id,
+            )
             return
         self._user_profile_delete_request_id = int(self.__dict__.get("_user_profile_delete_request_id", 0) or 0) + 1
         request_id = self._user_profile_delete_request_id
@@ -1094,7 +1118,7 @@ class PresetSetupPageBase(BasePage):
         InfoBar.error(title="Ошибка", content=str(error), parent=self.window())
 
     def _on_user_profile_delete_worker_finished(self, worker) -> None:
-        if self._start_next_pending_user_profile_operation():
+        if self._start_next_profile_preset_write_operation():
             return
         if not self._user_profile_operation_running():
             self._set_user_profile_actions_enabled(True)
