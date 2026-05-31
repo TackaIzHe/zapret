@@ -39,10 +39,12 @@ class ProfileOrderPageBase(BasePage):
         self._order_list: ProfileOrderList | None = None
         self._order_load_runtime = OneShotWorkerRuntime()
         self._order_load_dirty = False
+        self._order_load_restart_scheduled = False
         self._order_payload_apply_scheduled = False
         self._pending_order_payload_apply = None
         self._order_move_runtime = OneShotWorkerRuntime()
         self._pending_profile_order_moves: list[dict[str, str]] = []
+        self._order_move_start_scheduled = False
         self._breadcrumb = None
         self._cleanup_in_progress = False
         self._build_content()
@@ -140,7 +142,22 @@ class ProfileOrderPageBase(BasePage):
     def _on_order_profiles_worker_finished(self, _worker) -> None:
         should_reload = bool(getattr(self, "_order_load_dirty", False))
         if should_reload and not bool(self.__dict__.get("_cleanup_in_progress", False)):
-            self._reload_order_profiles(force=True)
+            self._schedule_order_profiles_reload()
+
+    def _schedule_order_profiles_reload(self) -> None:
+        if self.__dict__.get("_order_load_restart_scheduled", False):
+            return
+        self._order_load_restart_scheduled = True
+        try:
+            QTimer.singleShot(0, self._run_scheduled_order_profiles_reload)
+        except Exception:
+            self._run_scheduled_order_profiles_reload()
+
+    def _run_scheduled_order_profiles_reload(self) -> None:
+        self._order_load_restart_scheduled = False
+        if bool(self.__dict__.get("_cleanup_in_progress", False)):
+            return
+        self._reload_order_profiles(force=True)
 
     def _on_profile_move_requested(self, source_profile_key: str, destination_profile_key: str) -> None:
         self._request_profile_order_move(
@@ -259,14 +276,31 @@ class ProfileOrderPageBase(BasePage):
         InfoBar.error(title="Ошибка", content=str(error), parent=self.window())
 
     def _on_profile_order_move_worker_finished(self, _worker) -> None:
+        if self.__dict__.get("_pending_profile_order_moves") and not bool(
+            self.__dict__.get("_cleanup_in_progress", False)
+        ):
+            self._schedule_next_profile_order_move_start()
+
+    def _schedule_next_profile_order_move_start(self) -> None:
+        if self.__dict__.get("_order_move_start_scheduled", False):
+            return
+        self._order_move_start_scheduled = True
+        try:
+            QTimer.singleShot(0, self._run_scheduled_profile_order_move_start)
+        except Exception:
+            self._run_scheduled_profile_order_move_start()
+
+    def _run_scheduled_profile_order_move_start(self) -> None:
+        self._order_move_start_scheduled = False
         pending_moves = self.__dict__.setdefault("_pending_profile_order_moves", [])
         pending = pending_moves.pop(0) if pending_moves else None
-        if pending and not bool(self.__dict__.get("_cleanup_in_progress", False)):
-            self._start_profile_order_move_worker(
-                str(pending.get("action") or ""),
-                str(pending.get("source_profile_key") or ""),
-                destination_profile_key=str(pending.get("destination_profile_key") or ""),
-            )
+        if pending is None or bool(self.__dict__.get("_cleanup_in_progress", False)):
+            return
+        self._start_profile_order_move_worker(
+            str(pending.get("action") or ""),
+            str(pending.get("source_profile_key") or ""),
+            destination_profile_key=str(pending.get("destination_profile_key") or ""),
+        )
 
     def _apply_profile_order_move_locally(
         self,
@@ -287,8 +321,10 @@ class ProfileOrderPageBase(BasePage):
     def cleanup(self) -> None:
         self._cleanup_in_progress = True
         self._order_load_dirty = False
+        self._order_load_restart_scheduled = False
         self._pending_order_payload_apply = None
         self._order_payload_apply_scheduled = False
+        self._order_move_start_scheduled = False
         self.__dict__.setdefault("_pending_profile_order_moves", []).clear()
         self._order_load_runtime.stop(warning_prefix="Profile order load worker")
         self._order_load_runtime.cancel()

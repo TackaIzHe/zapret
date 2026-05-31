@@ -271,6 +271,7 @@ class ProfileOrderPageTests(unittest.TestCase):
         page._create_profile_order_load_worker = Mock()
         page._payload = "current"
         page._cleanup_in_progress = False
+        callbacks = []
 
         ProfileOrderPageBase._reload_order_profiles(page, force=True)
         ProfileOrderPageBase._on_order_profiles_loaded(page, 7, "stale")
@@ -279,6 +280,20 @@ class ProfileOrderPageTests(unittest.TestCase):
         self.assertTrue(page._order_load_dirty)
         page._create_profile_order_load_worker.assert_not_called()
         self.assertEqual(page._payload, "current")
+
+        page._order_load_runtime.worker = None
+        with patch(
+            "profile.ui.profile_order_page.QTimer.singleShot",
+            side_effect=lambda _delay, callback: callbacks.append(callback),
+        ):
+            ProfileOrderPageBase._on_order_profiles_worker_finished(page, object())
+
+        page._create_profile_order_load_worker.assert_not_called()
+        self.assertEqual(len(callbacks), 1)
+
+        callbacks[0]()
+
+        page._create_profile_order_load_worker.assert_called_once_with(9, "zapret2_mode", page)
 
     def test_order_page_defers_list_apply_after_load_worker_signal(self) -> None:
         from profile.ui.profile_order_page import ProfileOrderPageBase
@@ -381,7 +396,18 @@ class ProfileOrderPageTests(unittest.TestCase):
         )
 
         page._order_move_runtime.worker = None
-        ProfileOrderPageBase._on_profile_order_move_worker_finished(page, running_worker)
+        callbacks = []
+        with patch(
+            "profile.ui.profile_order_page.QTimer.singleShot",
+            side_effect=lambda _delay, callback: callbacks.append(callback),
+        ):
+            ProfileOrderPageBase._on_profile_order_move_worker_finished(page, running_worker)
+
+        page._create_profile_order_move_worker.assert_not_called()
+        next_worker.start.assert_not_called()
+        self.assertEqual(len(callbacks), 1)
+
+        callbacks[0]()
 
         page._create_profile_order_move_worker.assert_called_once_with(
             5,
