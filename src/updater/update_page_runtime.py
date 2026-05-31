@@ -464,20 +464,24 @@ class UpdatePageRuntime:
         if self._cleanup_in_progress:
             return
         pending = self._cache_invalidate_pending_context
-        self._cache_invalidate_pending_context = None
         if pending:
-            self._schedule_update_cache_invalidate_start(pending)
+            self._schedule_update_cache_invalidate_start()
 
-    def _schedule_update_cache_invalidate_start(self, context: str) -> None:
-        clean_context = str(context or "")
-        if not clean_context or self.__dict__.get("_cleanup_in_progress", False):
+    def _schedule_update_cache_invalidate_start(self) -> None:
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        if self.__dict__.get("_cache_invalidate_start_scheduled", False):
             return
         self._cache_invalidate_start_scheduled = True
-        QTimer.singleShot(0, lambda value=clean_context: self._run_scheduled_update_cache_invalidate_start(value))
+        QTimer.singleShot(0, self._run_scheduled_update_cache_invalidate_start)
 
-    def _run_scheduled_update_cache_invalidate_start(self, context: str) -> None:
+    def _run_scheduled_update_cache_invalidate_start(self) -> None:
         self._cache_invalidate_start_scheduled = False
         if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        context = str(self.__dict__.get("_cache_invalidate_pending_context") or "")
+        self._cache_invalidate_pending_context = None
+        if not context:
             return
         self._request_update_cache_invalidate(context)
 
@@ -530,21 +534,29 @@ class UpdatePageRuntime:
         if pending is None:
             return
         if bool(pending) == bool(self._auto_check_enabled):
-            self._auto_check_save_pending = None
-            self._schedule_auto_check_save_start(bool(pending))
+            self._schedule_auto_check_save_start()
         else:
             self._auto_check_save_pending = None
 
-    def _schedule_auto_check_save_start(self, enabled: bool) -> None:
+    def _schedule_auto_check_save_start(self) -> None:
         if self.__dict__.get("_cleanup_in_progress", False):
             return
+        if self.__dict__.get("_auto_check_save_start_scheduled", False):
+            return
         self._auto_check_save_start_scheduled = True
-        QTimer.singleShot(0, lambda value=bool(enabled): self._run_scheduled_auto_check_save_start(value))
+        QTimer.singleShot(0, self._run_scheduled_auto_check_save_start)
 
-    def _run_scheduled_auto_check_save_start(self, enabled: bool) -> None:
+    def _run_scheduled_auto_check_save_start(self) -> None:
         self._auto_check_save_start_scheduled = False
         if self.__dict__.get("_cleanup_in_progress", False):
             return
+        pending = self.__dict__.get("_auto_check_save_pending")
+        self._auto_check_save_pending = None
+        if pending is None:
+            return
+        if bool(pending) != bool(self._auto_check_enabled):
+            return
+        enabled = bool(pending)
         self._start_auto_check_save_worker(bool(enabled))
 
     def request_open_update_channel(self, channel: str) -> None:

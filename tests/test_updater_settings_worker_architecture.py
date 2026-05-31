@@ -87,6 +87,23 @@ class UpdaterSettingsWorkerArchitectureTests(unittest.TestCase):
 
         runtime._request_update_cache_invalidate.assert_called_once_with("manual_check")
 
+    def test_cache_invalidate_scheduled_start_uses_latest_pending_context(self) -> None:
+        runtime = update_page_runtime.UpdatePageRuntime.__new__(update_page_runtime.UpdatePageRuntime)
+        runtime._cleanup_in_progress = False
+        runtime._cache_invalidate_pending_context = "manual_check"
+        runtime._cache_invalidate_start_scheduled = False
+        runtime._cache_invalidate_runtime = SimpleNamespace(is_running=Mock(return_value=False))
+        runtime._request_update_cache_invalidate = Mock()
+        single_shot = Mock(side_effect=lambda _delay, _callback: None)
+
+        with patch.object(update_page_runtime, "QTimer", SimpleNamespace(singleShot=single_shot)):
+            update_page_runtime.UpdatePageRuntime._on_update_cache_invalidate_worker_finished(runtime, object())
+            update_page_runtime.UpdatePageRuntime._request_update_cache_invalidate(runtime, "install_update")
+
+        single_shot.call_args.args[1]()
+
+        runtime._request_update_cache_invalidate.assert_called_once_with("install_update")
+
     def test_auto_check_save_pending_restarts_after_event_loop_turn(self) -> None:
         runtime = update_page_runtime.UpdatePageRuntime.__new__(update_page_runtime.UpdatePageRuntime)
         runtime._cleanup_in_progress = False
@@ -105,6 +122,25 @@ class UpdaterSettingsWorkerArchitectureTests(unittest.TestCase):
         single_shot.call_args.args[1]()
 
         runtime._start_auto_check_save_worker.assert_called_once_with(True)
+
+    def test_auto_check_save_scheduled_start_uses_latest_pending_value(self) -> None:
+        runtime = update_page_runtime.UpdatePageRuntime.__new__(update_page_runtime.UpdatePageRuntime)
+        runtime._cleanup_in_progress = False
+        runtime._auto_check_enabled = True
+        runtime._auto_check_save_pending = True
+        runtime._auto_check_save_start_scheduled = False
+        runtime._auto_check_save_runtime = SimpleNamespace(is_running=Mock(return_value=False))
+        runtime._start_auto_check_save_worker = Mock()
+        single_shot = Mock(side_effect=lambda _delay, _callback: None)
+
+        with patch.object(update_page_runtime, "QTimer", SimpleNamespace(singleShot=single_shot)):
+            update_page_runtime.UpdatePageRuntime._on_auto_check_save_finished(runtime)
+            runtime._auto_check_enabled = False
+            update_page_runtime.UpdatePageRuntime._request_auto_check_save(runtime, False)
+
+        single_shot.call_args.args[1]()
+
+        runtime._start_auto_check_save_worker.assert_called_once_with(False)
 
 
 if __name__ == "__main__":
