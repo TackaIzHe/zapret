@@ -919,7 +919,7 @@ class ProfileSetupPageBase(BasePage):
         self._pending_enabled_save: bool | None = None
         self._user_profile_update_runtime = OneShotWorkerRuntime()
         self._user_profile_update_request_id = 0
-        self._pending_user_profile_update: dict[str, str] | None = None
+        self._pending_user_profile_updates: list[dict[str, str]] = []
         self._user_profile_delete_runtime = OneShotWorkerRuntime()
         self._user_profile_delete_request_id = 0
         self._strategy_apply_runtime = OneShotWorkerRuntime()
@@ -1484,12 +1484,14 @@ class ProfileSetupPageBase(BasePage):
             return
         runtime = self._worker_runtime("_user_profile_update_runtime")
         if runtime.is_running():
-            self._pending_user_profile_update = {
-                "profile_id": profile_id,
-                "name": str(name or ""),
-                "protocol": str(protocol or ""),
-                "ports": str(ports or ""),
-            }
+            self.__dict__.setdefault("_pending_user_profile_updates", []).append(
+                {
+                    "profile_id": profile_id,
+                    "name": str(name or ""),
+                    "protocol": str(protocol or ""),
+                    "ports": str(ports or ""),
+                }
+            )
             return
         self._start_user_profile_update_worker(
             profile_id,
@@ -1551,7 +1553,7 @@ class ProfileSetupPageBase(BasePage):
     def _on_user_profile_update_failed(self, request_id: int, error: str) -> None:
         if request_id != int(getattr(self, "_user_profile_update_request_id", 0) or 0):
             return
-        if not self.__dict__.get("_pending_user_profile_update"):
+        if not self.__dict__.get("_pending_user_profile_updates"):
             self._set_user_profile_buttons_enabled(True)
         log(f"{self.__class__.__name__}: не удалось изменить пользовательский profile: {error}", "ERROR")
         InfoBar.error(
@@ -1561,8 +1563,8 @@ class ProfileSetupPageBase(BasePage):
         )
 
     def _on_user_profile_update_worker_finished(self, _worker) -> None:
-        pending = self.__dict__.get("_pending_user_profile_update")
-        self._pending_user_profile_update = None
+        pending_updates = self.__dict__.setdefault("_pending_user_profile_updates", [])
+        pending = pending_updates.pop(0) if pending_updates else None
         if pending:
             self._start_user_profile_update_worker(
                 str(pending.get("profile_id") or ""),
@@ -2996,11 +2998,11 @@ class ProfileSetupPageBase(BasePage):
             "_pending_settings_save",
             "_pending_raw_profile_save",
             "_pending_enabled_save",
-            "_pending_user_profile_update",
             "_pending_strategy_apply",
             "_pending_strategy_feedback_save",
         ):
             setattr(self, attr, None)
+        self.__dict__.setdefault("_pending_user_profile_updates", []).clear()
         for attr in (
             "_setup_load_request_id",
             "_list_file_load_request_id",

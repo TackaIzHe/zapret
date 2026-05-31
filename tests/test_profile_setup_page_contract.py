@@ -2602,7 +2602,7 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         page._delete_user_profile_button.setEnabled.assert_called_once_with(False)
         worker.start.assert_called_once()
 
-    def test_user_profile_update_keeps_latest_pending_request_while_worker_runs(self) -> None:
+    def test_user_profile_update_queues_pending_requests_while_worker_runs(self) -> None:
         class _Signal:
             def __init__(self) -> None:
                 self.callbacks = []
@@ -2640,7 +2640,7 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
         page._user_profile_update_request_id = 1
         page._user_profile_update_runtime = runtime
-        page._pending_user_profile_update = None
+        page._pending_user_profile_updates = []
         page._update_user_profile_button = Mock()
         page._delete_user_profile_button = Mock()
         page.create_profile_user_update_worker = Mock(return_value=next_worker)
@@ -2652,16 +2652,31 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             protocol="TCP",
             ports="80,443",
         )
+        ProfileSetupPageBase._request_user_profile_update(
+            page,
+            "user-2",
+            name="Discord New",
+            protocol="UDP",
+            ports="50000-65535",
+        )
 
         page.create_profile_user_update_worker.assert_not_called()
         self.assertEqual(
-            page._pending_user_profile_update,
-            {
-                "profile_id": "user-1",
-                "name": "YouTube New",
-                "protocol": "TCP",
-                "ports": "80,443",
-            },
+            page._pending_user_profile_updates,
+            [
+                {
+                    "profile_id": "user-1",
+                    "name": "YouTube New",
+                    "protocol": "TCP",
+                    "ports": "80,443",
+                },
+                {
+                    "profile_id": "user-2",
+                    "name": "Discord New",
+                    "protocol": "UDP",
+                    "ports": "50000-65535",
+                },
+            ],
         )
 
         runtime.running = False
@@ -2676,7 +2691,17 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             parent=page,
         )
         next_worker.start.assert_called_once()
-        self.assertIsNone(page._pending_user_profile_update)
+        self.assertEqual(
+            page._pending_user_profile_updates,
+            [
+                {
+                    "profile_id": "user-2",
+                    "name": "Discord New",
+                    "protocol": "UDP",
+                    "ports": "50000-65535",
+                }
+            ],
+        )
 
     def test_user_profile_delete_starts_worker_without_deleting_in_gui_thread(self) -> None:
         class _Signal:
