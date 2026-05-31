@@ -49,6 +49,7 @@ from qfluentwidgets import (
 from settings.mode import ZAPRET1_MODE, ZAPRET2_MODE, is_preset_launch_method, is_zapret2_launch_method
 from ui.pages.base_page import BasePage
 from ui.fluent_widgets import set_tooltip
+from ui.one_shot_worker_runtime import OneShotWorkerRuntime
 from app.ui_texts import tr as tr_catalog
 from ui.theme import get_cached_qta_pixmap, get_theme_tokens, to_qcolor
 from ui.widgets.fluent_item_tooltip import FluentItemToolTipController
@@ -819,10 +820,10 @@ class ProfileSetupPageBase(BasePage):
         self._on_profile_changed_callback = on_profile_changed
         self._profile_key = ""
         self._loading = False
+        self._setup_load_runtime = OneShotWorkerRuntime()
         self._setup_load_request_id = 0
-        self._setup_load_worker = None
+        self._list_file_load_runtime = OneShotWorkerRuntime()
         self._list_file_load_request_id = 0
-        self._list_file_load_worker = None
         self._pending_list_file_load = False
         self._list_file_save_request_id = 0
         self._list_file_save_worker = None
@@ -896,6 +897,13 @@ class ProfileSetupPageBase(BasePage):
         self._settings_save_timer.setInterval(350)
         self._settings_save_timer.timeout.connect(self._autosave_editable_settings)
         self._build_content()
+
+    def _worker_runtime(self, attr: str) -> OneShotWorkerRuntime:
+        runtime = self.__dict__.get(attr)
+        if runtime is None:
+            runtime = OneShotWorkerRuntime()
+            setattr(self, attr, runtime)
+        return runtime
 
     def _build_content(self) -> None:
         if self.title_label is not None:
@@ -1165,30 +1173,26 @@ class ProfileSetupPageBase(BasePage):
     def _request_list_file_editor_state(self) -> None:
         if not self._editor_tab_built or not self._profile_key:
             return
-        worker = self._list_file_load_worker
-        if worker is not None:
-            try:
-                if worker.isRunning():
-                    self._pending_list_file_load = True
-                    return
-            except Exception:
-                return
+        runtime = self._worker_runtime("_list_file_load_runtime")
+        if runtime.is_running():
+            self._pending_list_file_load = True
+            return
         if self._list_file_status_label is not None:
             set_widget_text_if_changed(self._list_file_status_label, "Загрузка файла списка...")
         self._list_file_load_request_id += 1
         request_id = self._list_file_load_request_id
-        worker = self.create_profile_list_file_load_worker(
-            request_id,
-            self._profile_key,
-            filter_kind=self._current_filter_kind(),
-            filter_value=self._current_filter_value(),
-            parent=self,
+        runtime.start_qthread_worker(
+            worker_factory=lambda _runtime_request_id: self.create_profile_list_file_load_worker(
+                request_id,
+                self._profile_key,
+                filter_kind=self._current_filter_kind(),
+                filter_value=self._current_filter_value(),
+                parent=self,
+            ),
+            on_loaded=self._on_list_file_editor_state_loaded,
+            on_failed=self._on_list_file_editor_state_failed,
+            on_finished=self._on_list_file_worker_finished,
         )
-        self._list_file_load_worker = worker
-        worker.loaded.connect(self._on_list_file_editor_state_loaded)
-        worker.failed.connect(self._on_list_file_editor_state_failed)
-        worker.finished.connect(lambda w=worker: self._on_list_file_worker_finished(w))
-        worker.start()
 
     def _on_list_file_editor_state_loaded(self, request_id: int, state) -> None:
         if request_id != self._list_file_load_request_id:
@@ -1205,10 +1209,7 @@ class ProfileSetupPageBase(BasePage):
                 f"Ошибка загрузки файла списка: {error}",
             )
 
-    def _on_list_file_worker_finished(self, worker) -> None:
-        if self._list_file_load_worker is worker:
-            self._list_file_load_worker = None
-        worker.deleteLater()
+    def _on_list_file_worker_finished(self, _worker) -> None:
         if self.__dict__.get("_pending_list_file_load"):
             self._pending_list_file_load = False
             self._request_list_file_editor_state()
@@ -1727,12 +1728,17 @@ class ProfileSetupPageBase(BasePage):
         request_id = self._setup_load_request_id
         set_widget_text_if_changed(self._summary, "Загрузка profile...")
         set_widget_enabled_if_changed(self._enabled_checkbox, False)
-        worker = self.create_profile_setup_load_worker(request_id, self._profile_key, self)
-        self._setup_load_worker = worker
-        worker.loaded.connect(self._on_profile_setup_payload_loaded)
-        worker.failed.connect(self._on_profile_setup_payload_failed)
-        worker.finished.connect(lambda w=worker: self._on_profile_setup_worker_finished(w))
-        worker.start()
+        runtime = self._worker_runtime("_setup_load_runtime")
+        runtime.start_qthread_worker(
+            worker_factory=lambda _runtime_request_id: self.create_profile_setup_load_worker(
+                request_id,
+                self._profile_key,
+                self,
+            ),
+            on_loaded=self._on_profile_setup_payload_loaded,
+            on_failed=self._on_profile_setup_payload_failed,
+            on_finished=self._on_profile_setup_worker_finished,
+        )
 
     def _on_profile_setup_payload_loaded(self, request_id: int, payload) -> None:
         if request_id != self._setup_load_request_id:
@@ -1760,10 +1766,8 @@ class ProfileSetupPageBase(BasePage):
         )
         set_widget_enabled_if_changed(self._enabled_checkbox, False)
 
-    def _on_profile_setup_worker_finished(self, worker) -> None:
-        if self._setup_load_worker is worker:
-            self._setup_load_worker = None
-        worker.deleteLater()
+    def _on_profile_setup_worker_finished(self, _worker) -> None:
+        pass
 
     def _restore_loaded_payload_header(self, payload) -> None:
         item = getattr(payload, "item", None)
@@ -2845,9 +2849,16 @@ class ProfileSetupPageBase(BasePage):
             "_strategy_feedback_save_request_id",
         ):
             setattr(self, attr, int(getattr(self, attr, 0) or 0) + 1)
+        for attr, warning_prefix in (
+            ("_setup_load_runtime", "profile setup load worker"),
+            ("_list_file_load_runtime", "profile list file load worker"),
+        ):
+            runtime = self.__dict__.get(attr)
+            if runtime is None:
+                continue
+            runtime.stop(blocking=True, log_fn=log, warning_prefix=warning_prefix)
+            runtime.cancel()
         for attr in (
-            "_setup_load_worker",
-            "_list_file_load_worker",
             "_list_file_save_worker",
             "_list_file_validation_worker",
             "_settings_save_worker",

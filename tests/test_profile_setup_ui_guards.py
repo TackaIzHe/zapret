@@ -277,6 +277,9 @@ class _LoadWorker:
     def start(self) -> None:
         self.start_calls += 1
 
+    def deleteLater(self) -> None:  # noqa: N802
+        pass
+
 
 class _SaveWorker:
     def __init__(self) -> None:
@@ -287,6 +290,9 @@ class _SaveWorker:
 
     def start(self) -> None:
         self.start_calls += 1
+
+    def deleteLater(self) -> None:  # noqa: N802
+        pass
 
 
 class ProfileSetupUiGuardTests(unittest.TestCase):
