@@ -57,6 +57,10 @@ class StatusMessageContractTests(unittest.TestCase):
         worker_source = inspect.getsource(window_action_workers.WindowOpenFolderWorker.run)
 
         self.assertIn("create_open_folder_worker", open_source)
+        self.assertIn("OneShotWorkerRuntime", inspect.getsource(WindowActionsMixin._open_folder_runtime))
+        self.assertIn("start_qthread_worker", open_source)
+        self.assertNotIn("worker.start()", open_source)
+        self.assertNotIn("worker.deleteLater()", open_source)
         self.assertNotIn("run_hidden(", open_source)
         self.assertIn("run_hidden", worker_source)
 

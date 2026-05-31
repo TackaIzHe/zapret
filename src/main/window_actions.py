@@ -33,15 +33,20 @@ class WindowActionsMixin:
 
     def open_folder(self) -> None:
         """Opens the DPI folder."""
-        worker = getattr(self, "_open_folder_worker", None)
-        if worker is not None:
-            try:
-                if worker.isRunning():
-                    self._open_folder_pending = True
-                    return
-            except RuntimeError:
-                self._open_folder_worker = None
+        runtime = self._open_folder_runtime()
+        if runtime.is_running():
+            self._open_folder_pending = True
+            return
         self._start_open_folder_worker()
+
+    def _open_folder_runtime(self):
+        runtime = getattr(self, "_open_folder_runtime_instance", None)
+        if runtime is None:
+            from ui.one_shot_worker_runtime import OneShotWorkerRuntime
+
+            runtime = OneShotWorkerRuntime()
+            self._open_folder_runtime_instance = runtime
+        return runtime
 
     def create_open_folder_worker(self):
         from main.window_action_workers import WindowOpenFolderWorker
@@ -51,24 +56,19 @@ class WindowActionsMixin:
     def _start_open_folder_worker(self) -> None:
         try:
             self._open_folder_pending = False
-            worker = self.create_open_folder_worker()
-            self._open_folder_worker = worker
-            worker.failed.connect(self._on_open_folder_failed)
-            worker.finished.connect(lambda w=worker: self._on_open_folder_worker_finished(w))
-            worker.start()
+            self._open_folder_runtime().start_qthread_worker(
+                worker_factory=lambda _request_id: self.create_open_folder_worker(),
+                on_failed=lambda _request_id, error: self._on_open_folder_failed(error),
+                on_finished=self._on_open_folder_worker_finished,
+                signal_includes_request_id=False,
+            )
         except Exception as e:
             self.set_status(f"Ошибка при открытии папки: {str(e)}")
 
     def _on_open_folder_failed(self, error: str) -> None:
         self.set_status(f"Ошибка при открытии папки: {str(error)}")
 
-    def _on_open_folder_worker_finished(self, worker) -> None:
-        if getattr(self, "_open_folder_worker", None) is worker:
-            self._open_folder_worker = None
-        try:
-            worker.deleteLater()
-        except RuntimeError:
-            pass
+    def _on_open_folder_worker_finished(self, _worker) -> None:
         if getattr(self, "_open_folder_pending", False):
             self._start_open_folder_worker()
 
