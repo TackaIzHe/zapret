@@ -119,6 +119,7 @@ class LogsPage(BasePage):
         self._support_prepare_runtime = OneShotWorkerRuntime()
         self._open_folder_runtime = OneShotWorkerRuntime()
         self._open_folder_pending = False
+        self._open_folder_start_scheduled = False
 
         # Error panel height tuning (avoid large empty block when no errors).
         self._errors_text_min_height = 52
@@ -984,7 +985,7 @@ class LogsPage(BasePage):
         return self._logs.create_open_folder_worker(request_id, parent=self)
 
     def _request_open_logs_folder(self) -> None:
-        if self._open_folder_runtime.is_running():
+        if self._open_folder_runtime.is_running() or self.__dict__.get("_open_folder_start_scheduled", False):
             self._open_folder_pending = True
             return
         self._open_folder_pending = False
@@ -1002,7 +1003,19 @@ class LogsPage(BasePage):
     def _on_open_logs_folder_worker_finished(self, _worker) -> None:
         if self._open_folder_pending and not self._cleanup_in_progress:
             self._open_folder_pending = False
-            self._request_open_logs_folder()
+            self._schedule_open_logs_folder_start()
+
+    def _schedule_open_logs_folder_start(self) -> None:
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        self._open_folder_start_scheduled = True
+        QTimer.singleShot(0, self._run_scheduled_open_logs_folder_start)
+
+    def _run_scheduled_open_logs_folder_start(self) -> None:
+        self._open_folder_start_scheduled = False
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        self._request_open_logs_folder()
             
     def _update_stats(self):
         """Обновляет статистику"""
