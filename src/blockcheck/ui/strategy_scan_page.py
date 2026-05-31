@@ -66,7 +66,14 @@ logger = logging.getLogger(__name__)
 class StrategyScanPage(BasePage):
     """Strategy Scanner — brute-force DPI bypass strategy testing."""
 
-    def __init__(self, parent=None, *, embedded: bool = False, blockcheck_feature, runtime_feature):
+    def __init__(
+        self,
+        parent=None,
+        *,
+        embedded: bool = False,
+        blockcheck_feature,
+        create_strategy_scan_worker,
+    ):
         self._embedded = bool(embedded)
         super().__init__(
             title=tr_catalog("page.blockcheck_public.title", default="Подбор стратегии"),
@@ -79,7 +86,7 @@ class StrategyScanPage(BasePage):
         self.setObjectName("StrategyScanPage")
 
         self._blockcheck = blockcheck_feature
-        self._runtime_feature = runtime_feature
+        self._create_strategy_scan_worker = create_strategy_scan_worker
         self._worker = None
         self._result_rows: list[dict] = []
         self._scan_target: str = ""
@@ -468,7 +475,7 @@ class StrategyScanPage(BasePage):
 
         run_result = start_strategy_scan_run(
             blockcheck_feature=self._blockcheck,
-            runtime_feature=self._runtime_feature,
+            create_strategy_scan_worker=self._create_strategy_scan_worker,
             raw_target_input=self._target_input.text(),
             raw_protocol_value=self._protocol_combo.currentData(),
             raw_udp_scope_value=self._games_scope_combo.currentData() if self._games_scope_combo is not None else "all",

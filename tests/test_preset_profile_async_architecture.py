@@ -2738,6 +2738,44 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("_start_run_log_action", worker_source)
         self.assertIn("_append_run_log_action", worker_source)
 
+    def test_strategy_scan_page_receives_worker_factory_not_runtime_feature(self) -> None:
+        from app.page_names import PageName
+        from ui.page_deps.system import build_blockcheck_page_kwargs
+
+        blockcheck_page_init = inspect.getsource(BlockcheckPage.__init__)
+        blockcheck_page_source = inspect.getsource(BlockcheckPage)
+        strategy_page_init = inspect.getsource(StrategyScanPage.__init__)
+        strategy_start_source = inspect.getsource(StrategyScanPage._on_start)
+        workflow_start_source = inspect.getsource(blockcheck_page_run_workflow.start_blockcheck_page_run)
+        strategy_workflow = importlib.import_module("blockcheck.strategy_scan_run_workflow")
+        strategy_workflow_source = inspect.getsource(strategy_workflow.start_strategy_scan_run)
+
+        self.assertNotIn("runtime_feature", blockcheck_page_init)
+        self.assertNotIn("self._runtime_feature", blockcheck_page_source)
+        self.assertNotIn("runtime_feature", strategy_page_init)
+        self.assertNotIn("self._runtime_feature", strategy_start_source)
+        self.assertIn("create_strategy_scan_worker", strategy_page_init)
+        self.assertIn("create_strategy_scan_worker", strategy_workflow_source)
+        self.assertNotIn("runtime_feature=runtime_feature", strategy_workflow_source)
+        self.assertNotIn("runtime_feature", workflow_start_source)
+
+        blockcheck_feature = Mock()
+        runtime_feature = Mock()
+        kwargs = build_blockcheck_page_kwargs(
+            page_name=PageName.BLOCKCHECK,
+            blockcheck_feature=blockcheck_feature,
+            diagnostics_feature=Mock(),
+            dns_feature=Mock(),
+            runtime_feature=runtime_feature,
+        )
+
+        self.assertNotIn("runtime_feature", kwargs)
+        self.assertIn("create_strategy_scan_worker", kwargs)
+        kwargs["create_strategy_scan_worker"](target="example.org", mode="quick", parent=object())
+        blockcheck_feature.create_strategy_scan_worker.assert_called_once()
+        _, call_kwargs = blockcheck_feature.create_strategy_scan_worker.call_args
+        self.assertIs(call_kwargs["runtime_feature"], runtime_feature)
+
     def test_blockcheck_support_bundle_prepares_through_worker(self) -> None:
         blockcheck_workers = importlib.import_module("blockcheck.workers")
         page_source = inspect.getsource(BlockcheckPage)

@@ -21,7 +21,7 @@ class StrategyScanRunStartResult:
 def start_strategy_scan_run(
     *,
     blockcheck_feature,
-    runtime_feature,
+    create_strategy_scan_worker,
     raw_target_input: str,
     raw_protocol_value,
     raw_udp_scope_value,
@@ -59,13 +59,12 @@ def start_strategy_scan_run(
         starting_status_text=starting_status_text,
     )
 
-    worker = blockcheck_feature.create_strategy_scan_worker(
+    worker = create_strategy_scan_worker(
         target=start_plan.target,
         mode=start_plan.mode,
         start_index=start_plan.scan_cursor,
         scan_protocol=start_plan.scan_protocol,
         udp_games_scope=start_plan.udp_games_scope,
-        runtime_feature=runtime_feature,
         parent=parent,
     )
     worker.run_log_started.connect(on_run_log_started)

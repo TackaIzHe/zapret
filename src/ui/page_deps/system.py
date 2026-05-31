@@ -168,11 +168,18 @@ def build_blockcheck_page_kwargs(
     runtime_feature,
 ) -> dict:
     _ = page_name
+
+    def _create_strategy_scan_worker(**kwargs):
+        return blockcheck_feature.create_strategy_scan_worker(
+            **kwargs,
+            runtime_feature=runtime_feature,
+        )
+
     return {
         "blockcheck_feature": blockcheck_feature,
         "diagnostics_feature": diagnostics_feature,
         "dns_feature": dns_feature,
-        "runtime_feature": runtime_feature,
+        "create_strategy_scan_worker": _create_strategy_scan_worker,
     }
 
 

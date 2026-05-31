@@ -80,7 +80,15 @@ class BlockcheckPage(BasePage):
         "dns": TAB_DNS_SPOOFING,
     }
 
-    def __init__(self, parent=None, *, blockcheck_feature, diagnostics_feature, dns_feature, runtime_feature):
+    def __init__(
+        self,
+        parent=None,
+        *,
+        blockcheck_feature,
+        diagnostics_feature,
+        dns_feature,
+        create_strategy_scan_worker,
+    ):
         super().__init__(
             title=tr_catalog("page.blockcheck.title", default="BlockCheck"),
             subtitle=tr_catalog("page.blockcheck.subtitle",
@@ -94,7 +102,7 @@ class BlockcheckPage(BasePage):
         self._blockcheck = blockcheck_feature
         self._diagnostics = diagnostics_feature
         self._dns = dns_feature
-        self._runtime_feature = runtime_feature
+        self._create_strategy_scan_worker = create_strategy_scan_worker
         self._worker = None
         self._last_report = None
         self._run_log_file: str | None = None
@@ -438,7 +446,7 @@ class BlockcheckPage(BasePage):
                 parent=self,
                 embedded=True,
                 blockcheck_feature=self._blockcheck,
-                runtime_feature=self._runtime_feature,
+                create_strategy_scan_worker=self._create_strategy_scan_worker,
             )
             self._strategy_tab_page.setVisible(False)
             self.add_widget(self._strategy_tab_page)
