@@ -38,6 +38,7 @@ class PresetUiStore(QObject):
         self._selected_source_file_name: Optional[str] = None
         self._loaded = False
         self._last_content_change_key: tuple[object, ...] | None = None
+        self._last_identity_change_key: tuple[object, ...] | None = None
 
     def list_manifests(self) -> list[PresetManifest]:
         self._ensure_loaded()
@@ -60,6 +61,7 @@ class PresetUiStore(QObject):
 
     def refresh(self) -> None:
         self._last_content_change_key = None
+        self._last_identity_change_key = None
         self._reload_metadata()
         self.presets_changed.emit()
 
@@ -73,6 +75,7 @@ class PresetUiStore(QObject):
 
     def notify_presets_changed(self) -> None:
         self._last_content_change_key = None
+        self._last_identity_change_key = None
         self._invalidate_metadata_cache()
         self.presets_changed.emit()
 
@@ -86,6 +89,10 @@ class PresetUiStore(QObject):
 
     def notify_preset_identity_changed(self, file_name: str) -> None:
         selected = str(file_name or "").strip() or None
+        change_key = self._content_change_key(selected or "")
+        if change_key is not None and change_key == self._last_identity_change_key:
+            return
+        self._last_identity_change_key = change_key
         self._last_content_change_key = None
         self._invalidate_metadata_cache()
         self._selected_source_file_name = selected

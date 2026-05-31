@@ -57,6 +57,33 @@ class PresetUiStoreGuardTests(unittest.TestCase):
 
         self.assertEqual(emitted, ["Default v5.txt", "Other.txt"])
 
+    def test_duplicate_identity_change_signal_is_not_emitted_for_same_file_state(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            preset_path = Path(temp_dir) / "Default v5.txt"
+            preset_path.write_text("# Preset: Default v5\n--new\n", encoding="utf-8")
+
+            class _PresetFileStore:
+                def get_source_path(self, _engine, _file_name):
+                    return preset_path
+
+                def list_manifests(self, _engine):
+                    return []
+
+            store = PresetUiStore(
+                ENGINE_WINWS2,
+                _PresetFileStore(),
+                selection_service=object(),
+            )
+            emitted: list[str] = []
+            store.preset_identity_changed.connect(lambda file_name: emitted.append(file_name))
+
+            store.notify_preset_identity_changed("Default v5.txt")
+            store.notify_preset_identity_changed("default V5.TXT")
+            preset_path.write_text("# Preset: Renamed\n--new\n", encoding="utf-8")
+            store.notify_preset_identity_changed("Default v5.txt")
+
+        self.assertEqual(emitted, ["Default v5.txt", "Default v5.txt"])
+
 
 if __name__ == "__main__":
     unittest.main()
