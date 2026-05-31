@@ -143,11 +143,19 @@ def build_servers_page_kwargs(
     show_page,
 ) -> dict:
     _ = page_name
+
+    def _create_changelog_link_open_worker(request_id: int, *, url: str, parent=None):
+        return external_actions_feature.create_open_url_worker(
+            request_id,
+            url=url,
+            parent=parent,
+        )
+
     return {
         "runtime_feature": runtime_feature,
         "updater_feature": updater_feature,
         "open_about": lambda: show_page(PageName.ABOUT),
-        "external_actions_feature": external_actions_feature,
+        "create_changelog_link_open_worker": _create_changelog_link_open_worker,
     }
 
 

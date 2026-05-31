@@ -48,7 +48,15 @@ from updater.ui.changelog_card import ChangelogCard
 class ServersPage(BasePage):
     """Страница мониторинга серверов обновлений"""
 
-    def __init__(self, parent=None, *, runtime_feature, updater_feature, open_about, external_actions_feature):
+    def __init__(
+        self,
+        parent=None,
+        *,
+        runtime_feature,
+        updater_feature,
+        open_about,
+        create_changelog_link_open_worker,
+    ):
         super().__init__(
             "Серверы",
             "Мониторинг серверов обновлений",
@@ -64,7 +72,7 @@ class ServersPage(BasePage):
             runtime_feature=runtime_feature,
             updater_feature=updater_feature,
         )
-        self._external_actions = external_actions_feature
+        self._create_changelog_link_open_worker = create_changelog_link_open_worker
         self._open_about = open_about
         self._runtime_initialized = False
         self._cleanup_in_progress = False
@@ -339,7 +347,7 @@ class ServersPage(BasePage):
         self._update_runtime.dismiss_update()
 
     def create_changelog_link_open_worker(self, request_id: int, *, url: str):
-        return self._external_actions.create_open_url_worker(
+        return self._create_changelog_link_open_worker(
             request_id,
             url=url,
             parent=self,

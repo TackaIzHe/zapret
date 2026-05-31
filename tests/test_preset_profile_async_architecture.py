@@ -3063,9 +3063,14 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertNotIn("updater_commands", worker_source)
 
     def test_updater_changelog_links_open_through_worker(self) -> None:
+        from app.page_names import PageName
+        from ui.page_deps.system import build_servers_page_kwargs
+
         external_workers = importlib.import_module("app.external_workers")
         page_source = inspect.getsource(ServersPage)
+        init_source = inspect.getsource(ServersPage.__init__)
         build_source = inspect.getsource(ServersPage._build_ui)
+        create_source = inspect.getsource(ServersPage.create_changelog_link_open_worker)
 
         self.assertTrue(hasattr(external_workers, "ExternalOpenUrlWorker"))
         worker_source = inspect.getsource(external_workers.ExternalOpenUrlWorker.run)
@@ -3073,10 +3078,32 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("open_url=self._request_changelog_link_open", build_source)
         self.assertNotIn("open_url=self._external_actions.open_url", build_source)
         self.assertIn("create_changelog_link_open_worker", page_source)
+        self.assertNotIn("external_actions_feature", init_source)
+        self.assertNotIn("self._external_actions", page_source)
+        self.assertIn("self._create_changelog_link_open_worker", create_source)
         self.assertIn("_request_changelog_link_open", page_source)
         self.assertIn("_changelog_link_open_runtime", page_source)
         self.assertIn("_stop_changelog_link_open_worker", page_source)
         self.assertIn("open_url", worker_source)
+
+        external_actions = Mock()
+        kwargs = build_servers_page_kwargs(
+            page_name=PageName.SERVERS,
+            runtime_feature=Mock(),
+            updater_feature=Mock(),
+            external_actions_feature=external_actions,
+            show_page=Mock(),
+        )
+        self.assertNotIn("external_actions_feature", kwargs)
+        self.assertIn("create_changelog_link_open_worker", kwargs)
+
+        parent = object()
+        kwargs["create_changelog_link_open_worker"](8, url="https://example.org", parent=parent)
+        external_actions.create_open_url_worker.assert_called_once_with(
+            8,
+            url="https://example.org",
+            parent=parent,
+        )
 
     def test_updater_install_worker_is_created_through_feature(self) -> None:
         update_runtime_cls = __import__("updater.update_page_runtime", fromlist=["UpdatePageRuntime"]).UpdatePageRuntime
