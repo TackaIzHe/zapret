@@ -293,7 +293,11 @@ class UserPresetsRuntimeService:
             return
 
         normalized_file_name, metadata = refreshed
+        metadata = dict(metadata or {})
+        had_cached_metadata = normalized_file_name in self._cached_presets_metadata
         previous_metadata = dict(self._cached_presets_metadata.get(normalized_file_name) or {})
+        if had_cached_metadata and previous_metadata == metadata:
+            return
         self._cached_presets_metadata[normalized_file_name] = metadata
         self.sync_watched_preset_files(page)
         if page.isVisible():

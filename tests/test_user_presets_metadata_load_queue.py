@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 class _Signal:
@@ -78,6 +78,45 @@ class UserPresetsMetadataLoadQueueTests(unittest.TestCase):
         self.assertEqual(len(_MetadataWorker.instances), 2)
         self.assertEqual(_MetadataWorker.instances[1].request_id, 2)
         self.assertEqual(_MetadataWorker.instances[1].start_calls, 1)
+
+    def test_duplicate_single_metadata_update_skips_visible_refresh(self) -> None:
+        from presets.user_presets_runtime_service import UserPresetsRuntimeAdapter, UserPresetsRuntimeService
+
+        page = SimpleNamespace(isVisible=lambda: True)
+        adapter = UserPresetsRuntimeAdapter(
+            bulk_reset_running=lambda: False,
+            read_single_metadata=lambda _name: None,
+            selected_source_file_name=lambda: "",
+            presets_dir=lambda: None,
+            cached_metadata=lambda: {},
+            load_all_metadata=lambda: {},
+            load_folder_state=lambda: {},
+            build_rows_plan=lambda _metadata, _folder_state: object(),
+            apply_rows_plan=lambda _plan, _started_at: None,
+            delete_preset_item_meta=lambda _name: None,
+        )
+        service = UserPresetsRuntimeService()
+        service.attach_page(page, adapter)
+        metadata = {
+            "display_name": "Default",
+            "description": "",
+            "modified_display": "today",
+        }
+        service._single_metadata_request_id = 3
+        service._cached_presets_metadata = {"Default.txt": dict(metadata)}
+        service.sync_watched_preset_files = Mock(
+            side_effect=AssertionError("duplicate metadata must not resync watcher paths")
+        )
+        service.try_apply_single_preset_metadata_update = Mock(
+            side_effect=AssertionError("duplicate metadata must not repaint preset row")
+        )
+        service.refresh_presets_view_from_cache = Mock(
+            side_effect=AssertionError("duplicate metadata must not refresh preset list")
+        )
+
+        service._on_single_metadata_loaded(3, "Default.txt", ("Default.txt", dict(metadata)), page)
+
+        self.assertEqual(service._cached_presets_metadata, {"Default.txt": metadata})
 
 
 if __name__ == "__main__":
