@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 
 class _LoadRuntime:
@@ -72,9 +72,19 @@ class ControlAdditionalSettingsLoadQueueTests(unittest.TestCase):
         runtime.additional_settings_dirty = True
         page = _make_page(Zapret1ModeControlPage, runtime)
 
-        Zapret1ModeControlPage._on_additional_settings_load_worker_finished(page, object())
+        callbacks = []
+        with patch(
+            "presets.ui.control.zapret1.page.QTimer.singleShot",
+            side_effect=lambda _delay, callback: callbacks.append(callback),
+        ):
+            Zapret1ModeControlPage._on_additional_settings_load_worker_finished(page, object())
 
         self.assertFalse(runtime.additional_settings_load_pending)
+        self.assertEqual(load_runtime.started, 0)
+        self.assertEqual(len(callbacks), 1)
+
+        callbacks[0]()
+
         self.assertEqual(load_runtime.started, 1)
 
     def test_zapret2_additional_settings_finished_starts_pending_reload(self) -> None:
@@ -85,9 +95,19 @@ class ControlAdditionalSettingsLoadQueueTests(unittest.TestCase):
         runtime.additional_settings_dirty = True
         page = _make_page(Zapret2ModeControlPage, runtime)
 
-        Zapret2ModeControlPage._on_additional_settings_load_worker_finished(page, object())
+        callbacks = []
+        with patch(
+            "presets.ui.control.zapret2.page.QTimer.singleShot",
+            side_effect=lambda _delay, callback: callbacks.append(callback),
+        ):
+            Zapret2ModeControlPage._on_additional_settings_load_worker_finished(page, object())
 
         self.assertFalse(runtime.additional_settings_load_pending)
+        self.assertEqual(load_runtime.started, 0)
+        self.assertEqual(len(callbacks), 1)
+
+        callbacks[0]()
+
         self.assertEqual(load_runtime.started, 1)
 
 

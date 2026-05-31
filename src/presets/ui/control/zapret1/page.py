@@ -368,9 +368,20 @@ class Zapret1ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
         runtime = self._refresh_runtime
         if runtime.additional_settings_load_pending and not self._cleanup_in_progress:
             runtime.additional_settings_load_pending = False
-            self._schedule_additional_settings_reload(force=True)
+            self._schedule_additional_settings_reload_start()
             return
         runtime.additional_settings_load_pending = False
+
+    def _schedule_additional_settings_reload_start(self) -> None:
+        try:
+            QTimer.singleShot(0, self._run_scheduled_additional_settings_reload_start)
+        except Exception:
+            self._run_scheduled_additional_settings_reload_start()
+
+    def _run_scheduled_additional_settings_reload_start(self) -> None:
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        self._schedule_additional_settings_reload(force=True)
 
     def _refresh_preset_name(self) -> None:
         self._request_top_summary_worker()

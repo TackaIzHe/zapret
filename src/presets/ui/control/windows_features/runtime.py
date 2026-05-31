@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from PyQt6.QtCore import QTimer
+
 from presets.ui.control.control_page_runtime_shared import (
     run_confirmation_dialog,
     show_action_result_plan,
@@ -97,7 +99,18 @@ class ControlPageWindowsFeatureMixin:
         pending = self.__dict__.get("_defender_admin_check_pending")
         self._defender_admin_check_pending = None
         if pending is not None and not bool(getattr(self, "_cleanup_in_progress", False)):
-            self._start_defender_admin_check_worker(bool(pending))
+            self._schedule_defender_admin_check_worker_start(bool(pending))
+
+    def _schedule_defender_admin_check_worker_start(self, disable: bool) -> None:
+        try:
+            QTimer.singleShot(0, lambda: self._run_scheduled_defender_admin_check_worker_start(bool(disable)))
+        except Exception:
+            self._run_scheduled_defender_admin_check_worker_start(bool(disable))
+
+    def _run_scheduled_defender_admin_check_worker_start(self, disable: bool) -> None:
+        if bool(getattr(self, "_cleanup_in_progress", False)):
+            return
+        self._start_defender_admin_check_worker(bool(disable))
 
     def _continue_defender_toggle(self, disable: bool, *, is_admin: bool) -> None:
         from qfluentwidgets import InfoBar

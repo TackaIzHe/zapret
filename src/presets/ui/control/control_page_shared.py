@@ -191,7 +191,19 @@ class ControlPageActionMixin:
     def _on_external_open_url_worker_finished(self, _worker) -> None:
         pending = self.__dict__.get("_external_open_url_pending") or []
         if pending and not bool(getattr(self, "_cleanup_in_progress", False)):
-            self._start_external_open_url_worker(*pending.pop(0))
+            self._schedule_external_open_url_worker_start(pending.pop(0))
+
+    def _schedule_external_open_url_worker_start(self, request: tuple[str, str, str]) -> None:
+        pending = tuple(request)
+        try:
+            QTimer.singleShot(0, lambda: self._run_scheduled_external_open_url_worker_start(pending))
+        except Exception:
+            self._run_scheduled_external_open_url_worker_start(pending)
+
+    def _run_scheduled_external_open_url_worker_start(self, request: tuple[str, str, str]) -> None:
+        if bool(getattr(self, "_cleanup_in_progress", False)):
+            return
+        self._start_external_open_url_worker(*request)
 
     def _show_external_open_url_error(self, title: str, default: str, error: str) -> None:
         from qfluentwidgets import InfoBar
@@ -275,9 +287,20 @@ class ControlPageActionMixin:
         runtime = self._refresh_runtime
         if runtime.program_settings_load_pending and not bool(getattr(self, "_cleanup_in_progress", False)):
             runtime.program_settings_load_pending = False
-            self._request_program_settings_load()
+            self._schedule_program_settings_load_start()
             return
         runtime.program_settings_load_pending = False
+
+    def _schedule_program_settings_load_start(self) -> None:
+        try:
+            QTimer.singleShot(0, self._run_scheduled_program_settings_load_start)
+        except Exception:
+            self._run_scheduled_program_settings_load_start()
+
+    def _run_scheduled_program_settings_load_start(self) -> None:
+        if bool(getattr(self, "_cleanup_in_progress", False)):
+            return
+        self._request_program_settings_load()
 
     def _request_program_settings_save(self, action: str, enabled: bool) -> None:
         runtime = self._refresh_runtime

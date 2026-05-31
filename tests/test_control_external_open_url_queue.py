@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
+
+
+from presets.ui.control.control_page_shared import ControlPageActionMixin
 
 
 class _Runtime:
@@ -18,13 +21,7 @@ class _Runtime:
         return 0, worker
 
 
-class _Page:
-    from presets.ui.control.control_page_shared import ControlPageActionMixin
-
-    _request_external_open_url = ControlPageActionMixin._request_external_open_url
-    _start_external_open_url_worker = ControlPageActionMixin._start_external_open_url_worker
-    _on_external_open_url_worker_finished = ControlPageActionMixin._on_external_open_url_worker_finished
-    _ensure_external_open_url_runtime = ControlPageActionMixin._ensure_external_open_url_runtime
+class _Page(ControlPageActionMixin):
     create_external_open_url_worker = Mock()
     _on_external_open_url_finished = Mock()
     _on_external_open_url_failed = Mock()
@@ -69,7 +66,18 @@ class ControlExternalOpenUrlQueueTests(unittest.TestCase):
         ]
         page.create_external_open_url_worker = Mock(return_value=worker)
 
-        _Page._on_external_open_url_worker_finished(page, object())
+        callbacks = []
+        with patch(
+            "presets.ui.control.control_page_shared.QTimer.singleShot",
+            side_effect=lambda _delay, callback: callbacks.append(callback),
+        ):
+            _Page._on_external_open_url_worker_finished(page, object())
+
+        page.create_external_open_url_worker.assert_not_called()
+        self.assertEqual(page._external_open_url_runtime.started, [])
+        self.assertEqual(len(callbacks), 1)
+
+        callbacks[0]()
 
         page.create_external_open_url_worker.assert_called_once_with(0, url="https://example.org/next")
         self.assertEqual(page._external_open_url_runtime.started, [worker])
