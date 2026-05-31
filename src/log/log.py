@@ -389,8 +389,9 @@ def _build_log_viewer_dialog_class():
         QListWidget, QMessageBox,
     )
     from PyQt6.QtGui import QFont
-    from PyQt6.QtCore import QThread, Qt
+    from PyQt6.QtCore import Qt
     from log_tail import LogTailWorker
+    from ui.one_shot_worker_runtime import OneShotWorkerRuntime
     from ui.log_limits import MAIN_LOG_VIEW_MAX_LINES, apply_text_line_limit
 
     class _LogViewerDialog(QDialog):
@@ -403,6 +404,7 @@ def _build_log_viewer_dialog_class():
             self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
 
             self.current_log_file = log_file or getattr(global_logger, "log_file", LOG_FILE)
+            self._tail_runtime = OneShotWorkerRuntime()
 
             layout = QVBoxLayout(self)
 
@@ -442,42 +444,17 @@ def _build_log_viewer_dialog_class():
             self.start_tail_worker(self.current_log_file)
 
         def start_tail_worker(self, log_file):
-            prev_worker = getattr(self, "_worker", None)
-            if prev_worker:
-                try:
-                    prev_worker.stop()
-                except RuntimeError:
-                    self._worker = None
-
-            prev_thread = getattr(self, "_thread", None)
-            if prev_thread:
-                try:
-                    if prev_thread.isRunning():
-                        prev_thread.quit()
-                        prev_thread.wait()
-                except RuntimeError:
-                    self._thread = None
+            self._tail_runtime.stop(blocking=True, warning_prefix="legacy log tail worker")
 
             self.log_text.clear()
             self.log_info_label.setText(f"Текущий лог: {os.path.basename(log_file)}")
             self.current_log_file = log_file
 
-            self._thread = QThread(self)
-            self._worker = LogTailWorker(log_file)
-            self._worker.moveToThread(self._thread)
-
-            self._thread.started.connect(self._worker.run)
-            self._worker.new_lines.connect(self._append_text)
-            self._worker.finished.connect(self._thread.quit)
-            self._worker.finished.connect(self._worker.deleteLater)
-            self._thread.finished.connect(self._on_tail_thread_finished)
-            self._thread.finished.connect(self._thread.deleteLater)
-
-            self._thread.start()
-
-        def _on_tail_thread_finished(self):
-            self._thread = None
-            self._worker = None
+            self._tail_runtime.start_qobject_worker(
+                parent=self,
+                worker_factory=lambda _request_id: LogTailWorker(log_file),
+                bind_worker=lambda worker: worker.new_lines.connect(self._append_text),
+            )
 
         def update_stats(self):
             try:
@@ -565,15 +542,8 @@ def _build_log_viewer_dialog_class():
 
         def closeEvent(self, event):
             try:
-                if hasattr(self, "_worker") and self._worker:
-                    self._worker.stop()
-                if hasattr(self, "_thread") and self._thread:
-                    try:
-                        if self._thread.isRunning():
-                            self._thread.quit()
-                            self._thread.wait(2_000)
-                    except RuntimeError:
-                        self._thread = None
+                self._tail_runtime.stop(blocking=True, warning_prefix="legacy log tail worker")
+                self._tail_runtime.cancel()
             finally:
                 super().closeEvent(event)
 
