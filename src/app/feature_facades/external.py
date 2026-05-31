@@ -12,15 +12,15 @@ class ExternalActionsFeature:
         object.__setattr__(self, "_open_url", open_url)
 
     @staticmethod
-    def _actions():
-        from app import external_actions
+    def _commands():
+        from app import external_commands
 
-        return external_actions
+        return external_commands
 
     def open_url(self, *args, **kwargs):
         open_url = self._open_url
         if open_url is None:
-            open_url = self._actions().open_url
+            open_url = self._commands().open_url
             object.__setattr__(self, "_open_url", open_url)
         return open_url(*args, **kwargs)
 

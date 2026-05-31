@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import webbrowser
 from dataclasses import dataclass
 
 
@@ -11,11 +10,6 @@ class ExternalActionResult:
 
 
 def open_url(url: str) -> ExternalActionResult:
-    target = str(url or "").strip()
-    if not target:
-        return ExternalActionResult(ok=False, error="Пустая ссылка")
-    try:
-        webbrowser.open(target)
-        return ExternalActionResult(ok=True)
-    except Exception as exc:
-        return ExternalActionResult(ok=False, error=str(exc))
+    from app.external_commands import open_url as command_open_url
+
+    return command_open_url(url)

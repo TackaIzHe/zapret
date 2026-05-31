@@ -17,6 +17,8 @@ class ExternalWorkerArchitectureTests(unittest.TestCase):
         self.assertIn("open_url=self.open_url", feature_source)
         self.assertIn("_open_url", worker_source)
         self.assertNotIn("external_commands", worker_source)
+        self.assertIn("def _commands", feature_source)
+        self.assertNotIn("def _actions", feature_source)
 
 
 if __name__ == "__main__":

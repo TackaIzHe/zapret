@@ -1243,7 +1243,7 @@ class StartupRuntimeSetupTests(unittest.TestCase):
         updater_commands = SimpleNamespace(
             is_auto_update_enabled=Mock(return_value=True),
         )
-        external_actions = SimpleNamespace(
+        external_commands = SimpleNamespace(
             open_url=Mock(return_value="opened"),
         )
 
@@ -1262,7 +1262,7 @@ class StartupRuntimeSetupTests(unittest.TestCase):
 
         with (
             patch.object(BlockcheckFeature, "_commands", staticmethod(lambda: blockcheck_commands)),
-            patch.object(ExternalActionsFeature, "_actions", staticmethod(lambda: external_actions)),
+            patch.object(ExternalActionsFeature, "_commands", staticmethod(lambda: external_commands)),
             patch.object(LogsFeature, "_commands", staticmethod(lambda: logs_commands)),
             patch.object(OrchestraFeature, "_commands", staticmethod(lambda: orchestra_commands)),
             patch.object(PresetsFeature, "_commands", staticmethod(lambda: preset_commands)),
@@ -1278,7 +1278,7 @@ class StartupRuntimeSetupTests(unittest.TestCase):
             self.assertTrue(updater_feature.is_auto_update_enabled())
 
         blockcheck_commands.build_language_plan.assert_called_once_with()
-        external_actions.open_url.assert_called_once_with("https://example.org")
+        external_commands.open_url.assert_called_once_with("https://example.org")
         logs_commands.build_stats.assert_called_once_with()
         orchestra_commands.is_default_blocked_pass_domain.assert_called_once_with("example.org")
         preset_commands.get_selected_source_preset_file_name.assert_called_once_with(
