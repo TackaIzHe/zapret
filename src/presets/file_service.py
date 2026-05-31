@@ -213,6 +213,9 @@ class PresetFileService:
         if manifest is None:
             raise ValueError(f"Preset not found: {file_name}")
         normalized = self.normalize_source_text(source_text)
+        current_text = self.read_source_text_by_file_name(manifest.file_name)
+        if normalized == self.normalize_source_text(current_text):
+            return manifest
         updated = self.preset_file_store.update_preset(self.engine, manifest.file_name, normalized, None)
         if publish_content_changed:
             self.publish_preset_content_changed_by_file_name(updated.file_name)
