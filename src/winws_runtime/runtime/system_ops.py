@@ -425,11 +425,16 @@ def wait_for_windivert_spawn_ready_runtime(
     deadline = time.monotonic() + max(0.0, float(max_wait_seconds))
     interval = max(0.05, float(poll_interval))
     last_probe = WinDivertRuntimeProbeResult(installed=True, ready=True, error_code=None, stage="initial")
+    restored_service_start_type = False
 
     while time.monotonic() < deadline:
         last_probe = probe_windivert_state_runtime()
         if last_probe.ready:
             return last_probe
+        if int(last_probe.error_code or 0) == 1058 and not restored_service_start_type:
+            restored_service_start_type = True
+            log("WinDivert service disabled during readiness probe; restoring manual start", "WARNING")
+            restore_known_windivert_services_demand_start_runtime()
         time.sleep(interval)
 
     log(
