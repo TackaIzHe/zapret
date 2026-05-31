@@ -740,12 +740,13 @@ class ProfileSetupUiGuardTests(unittest.TestCase):
             ProfileSetupPageBase._on_list_file_validation_worker_finished(page, object())
 
         page._start_list_file_validation_worker.assert_not_called()
-        self.assertIsNone(page._pending_list_file_validation)
+        self.assertEqual(page._pending_list_file_validation, pending)
         self.assertEqual(len(callbacks), 1)
 
         callbacks[0]()
 
         page._start_list_file_validation_worker.assert_called_once_with(pending)
+        self.assertIsNone(page._pending_list_file_validation)
 
     def test_list_file_save_uses_cached_text_snapshot(self) -> None:
         from unittest.mock import Mock
