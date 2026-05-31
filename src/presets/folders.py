@@ -199,9 +199,13 @@ def move_preset_to_end(scope_key: str, file_name: str) -> bool:
     items = state.setdefault("items", {})
     if not source:
         return False
+    scope = _normalize_scope(scope_key)
+    before_state = normalize_folder_state(state, build_default_preset_folders(scope))
     meta = items.setdefault(source, {"folder_key": "common", "order": None, "rating": 0})
     folder_key = str(meta.get("folder_key") or "common")
     _move_item_to_end(state, source, folder_key)
+    if normalize_folder_state(state, build_default_preset_folders(scope)) == before_state:
+        return False
     save_preset_folder_state(scope_key, state)
     return True
 

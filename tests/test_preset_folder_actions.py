@@ -17,6 +17,7 @@ from presets.folders import (
     move_preset_by_step,
     move_preset_after,
     move_preset_before,
+    move_preset_to_end,
     rename_preset_folder,
     rename_preset_item_meta,
     set_preset_folder_collapsed,
@@ -214,6 +215,20 @@ class PresetFolderActionTests(unittest.TestCase):
                     side_effect=AssertionError("unchanged preset folder order must not be saved"),
                 ):
                     self.assertFalse(move_preset_after(PRESETS_SCOPE_WINWS2, "A.txt", "B.txt"))
+
+    def test_duplicate_move_preset_to_end_skips_folder_state_save(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            with patch("settings.store.MAIN_DIRECTORY", str(Path(temp_dir))):
+                from presets.folders import move_preset_to_folder
+
+                self.assertTrue(move_preset_to_folder(PRESETS_SCOPE_WINWS2, "A.txt", COMMON_FOLDER_KEY))
+                self.assertTrue(move_preset_to_folder(PRESETS_SCOPE_WINWS2, "B.txt", COMMON_FOLDER_KEY))
+                self.assertTrue(move_preset_to_end(PRESETS_SCOPE_WINWS2, "A.txt"))
+                with patch(
+                    "presets.folders.save_preset_folder_state",
+                    side_effect=AssertionError("unchanged preset move-to-end must not be saved"),
+                ):
+                    self.assertFalse(move_preset_to_end(PRESETS_SCOPE_WINWS2, "A.txt"))
 
     def test_move_preset_after_uses_visible_destination_folder(self) -> None:
         with TemporaryDirectory() as temp_dir:
