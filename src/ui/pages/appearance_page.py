@@ -137,9 +137,11 @@ class AppearancePage(BasePage):
         self._cleanup_in_progress = False
         self._appearance_save_runtime = OneShotWorkerRuntime()
         self._appearance_save_pending: list[dict[str, object]] = []
+        self._appearance_save_start_scheduled = False
         self._initial_state_load_runtime = OneShotWorkerRuntime()
         self._rkn_background_options_runtime = OneShotWorkerRuntime()
         self._rkn_background_options_pending = False
+        self._rkn_background_options_start_scheduled = False
         self._windows_accent_load_runtime = OneShotWorkerRuntime()
         self._build_ui()
         self.bind_ui_state_store(ui_state_store)
@@ -729,7 +731,7 @@ class AppearancePage(BasePage):
             "value": value,
             "context_extra": dict(context_extra or {}),
         }
-        if self._appearance_save_runtime.is_running():
+        if self._appearance_save_runtime.is_running() or self.__dict__.get("_appearance_save_start_scheduled", False):
             self._queue_appearance_save_payload(payload)
             self._coalesce_appearance_save_pending()
             return
@@ -823,7 +825,20 @@ class AppearancePage(BasePage):
     def _on_appearance_save_worker_finished(self, _worker) -> None:
         if self._appearance_save_pending and not self._cleanup_in_progress:
             pending = self._appearance_save_pending.pop(0)
-            self._start_appearance_save_worker(dict(pending or {}))
+            self._schedule_appearance_save_worker_start(dict(pending or {}))
+
+    def _schedule_appearance_save_worker_start(self, payload: dict[str, object]) -> None:
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        queued = dict(payload or {})
+        self._appearance_save_start_scheduled = True
+        QTimer.singleShot(0, lambda value=queued: self._run_scheduled_appearance_save_worker_start(value))
+
+    def _run_scheduled_appearance_save_worker_start(self, payload: dict[str, object]) -> None:
+        self._appearance_save_start_scheduled = False
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        self._start_appearance_save_worker(dict(payload or {}))
 
     def _on_display_mode_changed(self, mode: str):
         """Handle display mode toggle."""
@@ -930,7 +945,10 @@ class AppearancePage(BasePage):
     def _request_rkn_background_options_load(self) -> None:
         if self._cleanup_in_progress:
             return
-        if self._rkn_background_options_runtime.is_running():
+        if (
+            self._rkn_background_options_runtime.is_running()
+            or self.__dict__.get("_rkn_background_options_start_scheduled", False)
+        ):
             self._rkn_background_options_pending = True
             return
         self._start_rkn_background_options_load_worker()
@@ -967,7 +985,19 @@ class AppearancePage(BasePage):
 
     def _on_rkn_background_options_worker_finished(self, _worker) -> None:
         if self._rkn_background_options_pending and not self._cleanup_in_progress:
-            self._start_rkn_background_options_load_worker()
+            self._schedule_rkn_background_options_load_worker_start()
+
+    def _schedule_rkn_background_options_load_worker_start(self) -> None:
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        self._rkn_background_options_start_scheduled = True
+        QTimer.singleShot(0, self._run_scheduled_rkn_background_options_load_worker_start)
+
+    def _run_scheduled_rkn_background_options_load_worker_start(self) -> None:
+        self._rkn_background_options_start_scheduled = False
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        self._start_rkn_background_options_load_worker()
 
     def _apply_rkn_background_options(self, *, saved_value, options) -> None:
         if self._rkn_background_combo is None:
@@ -1394,6 +1424,8 @@ class AppearancePage(BasePage):
                 pass
 
         self._appearance_save_pending.clear()
+        self._appearance_save_start_scheduled = False
+        self._rkn_background_options_start_scheduled = False
         for runtime, name in (
             (self._initial_state_load_runtime, "загрузка оформления"),
             (self._appearance_save_runtime, "сохранение оформления"),
