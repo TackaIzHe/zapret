@@ -7,7 +7,7 @@ import time
 
 import qtawesome as qta
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel
 
@@ -130,6 +130,7 @@ class BlockcheckPage(BasePage):
         self._support_prepare_runtime = OneShotWorkerRuntime()
         self._user_domain_action_runtime = OneShotWorkerRuntime()
         self._user_domain_action_pending: list[dict[str, str]] = []
+        self._user_domain_action_start_scheduled = False
         self._build_ui()
         self._request_page_initial_state_load()
         try:
@@ -970,7 +971,10 @@ class BlockcheckPage(BasePage):
         }
         if not payload["action"] or not payload["domain"]:
             return
-        if self._user_domain_action_runtime.is_running():
+        if (
+            self._user_domain_action_runtime.is_running()
+            or self.__dict__.get("_user_domain_action_start_scheduled", False)
+        ):
             self._user_domain_action_pending.append(payload)
             return
         self._start_user_domain_action_worker(payload)
@@ -1034,7 +1038,23 @@ class BlockcheckPage(BasePage):
     def _on_user_domain_action_runtime_finished(self, _worker) -> None:
         if self._user_domain_action_pending and not self._cleanup_in_progress:
             pending = self._user_domain_action_pending.pop(0)
-            self._start_user_domain_action_worker(dict(pending or {}))
+            self._schedule_user_domain_action_worker_start(dict(pending or {}))
+
+    def _schedule_user_domain_action_worker_start(self, payload: dict[str, str]) -> None:
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        queued = {
+            "action": str((payload or {}).get("action") or "").strip().lower(),
+            "domain": str((payload or {}).get("domain") or "").strip(),
+        }
+        self._user_domain_action_start_scheduled = True
+        QTimer.singleShot(0, lambda value=queued: self._run_scheduled_user_domain_action_worker_start(value))
+
+    def _run_scheduled_user_domain_action_worker_start(self, payload: dict[str, str]) -> None:
+        self._user_domain_action_start_scheduled = False
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        self._start_user_domain_action_worker(payload)
 
     def _add_chip(self, domain: str):
         """Add a chip widget for a domain."""

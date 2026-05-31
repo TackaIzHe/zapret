@@ -1,5 +1,7 @@
 import inspect
 import unittest
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 from blockcheck.ui.page import BlockcheckPage
 
@@ -25,6 +27,26 @@ class BlockcheckUserDomainRuntimeArchitectureTests(unittest.TestCase):
         self.assertNotIn("_user_domain_action_worker =", page_source)
         self.assertNotIn("_user_domain_action_request_id", page_source)
         self.assertNotIn("worker.start()", start_source)
+
+    def test_pending_user_domain_action_restarts_after_event_loop_turn(self) -> None:
+        import blockcheck.ui.page as blockcheck_page
+
+        page = BlockcheckPage.__new__(BlockcheckPage)
+        page._cleanup_in_progress = False
+        page._user_domain_action_pending = [{"action": "add", "domain": "example.com"}]
+        page._start_user_domain_action_worker = Mock()
+        single_shot = Mock(side_effect=lambda _delay, _callback: None)
+
+        with patch.object(blockcheck_page, "QTimer", SimpleNamespace(singleShot=single_shot), create=True):
+            BlockcheckPage._on_user_domain_action_runtime_finished(page, object())
+
+        single_shot.assert_called_once()
+        self.assertEqual(single_shot.call_args.args[0], 0)
+        page._start_user_domain_action_worker.assert_not_called()
+
+        single_shot.call_args.args[1]()
+
+        page._start_user_domain_action_worker.assert_called_once_with({"action": "add", "domain": "example.com"})
 
 
 if __name__ == "__main__":
