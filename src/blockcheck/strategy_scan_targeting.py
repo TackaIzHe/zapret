@@ -193,6 +193,8 @@ def resolve_games_ipset_paths(udp_games_scope: str = "all") -> list[str]:
 
 
 def load_quick_domains() -> list[str]:
+    global _quick_domains_cache
+
     if _quick_domains_cache is not None:
         return list(_quick_domains_cache)
 
@@ -217,6 +219,8 @@ def load_quick_domains() -> list[str]:
 
 
 def load_quick_stun_targets() -> list[str]:
+    global _quick_stun_targets_cache
+
     if _quick_stun_targets_cache is not None:
         return list(_quick_stun_targets_cache)
 
