@@ -126,7 +126,9 @@ class TelegramProxyPage(BasePage):
         self._ensure_hosts_runtime = OneShotWorkerRuntime()
         self._settings_save_runtime = OneShotWorkerRuntime()
         self._open_log_file_runtime = OneShotWorkerRuntime()
+        self._open_log_file_pending: list[str] = []
         self._external_link_runtime = OneShotWorkerRuntime()
+        self._external_link_pending: list[dict[str, str]] = []
         self._log_line_runtime = OneShotWorkerRuntime()
         self._log_line_pending: list[str] = []
         self._auto_deeplink_runtime = OneShotWorkerRuntime()
@@ -730,6 +732,7 @@ class TelegramProxyPage(BasePage):
 
     def _start_open_log_file_worker(self, path: str) -> None:
         if self._open_log_file_runtime.is_running():
+            self.__dict__.setdefault("_open_log_file_pending", []).append(str(path or ""))
             return
 
         def bind_worker(worker) -> None:
@@ -739,6 +742,7 @@ class TelegramProxyPage(BasePage):
         self._open_log_file_runtime.start_qthread_worker(
             worker_factory=lambda _request_id: self.create_open_log_file_worker(path),
             bind_worker=bind_worker,
+            on_finished=self._on_open_log_file_worker_finished,
         )
 
     def _on_open_log_file_finished(self, plan) -> None:
@@ -754,6 +758,12 @@ class TelegramProxyPage(BasePage):
         message = str(error or "").strip()
         if message:
             self._append_log_line(f"Failed to open log file: {message}")
+
+    def _on_open_log_file_worker_finished(self, _worker) -> None:
+        pending_paths = self.__dict__.setdefault("_open_log_file_pending", [])
+        pending = pending_paths.pop(0) if pending_paths else ""
+        if pending and not self._cleanup_in_progress:
+            self._start_open_log_file_worker(pending)
 
     def _on_clear_logs(self):
         if self._log_edit is not None:
@@ -1165,6 +1175,13 @@ class TelegramProxyPage(BasePage):
 
     def _start_external_link_worker(self, url: str, *, success_log: str, error_prefix: str) -> None:
         if self._external_link_runtime.is_running():
+            self.__dict__.setdefault("_external_link_pending", []).append(
+                {
+                    "url": str(url or ""),
+                    "success_log": str(success_log or ""),
+                    "error_prefix": str(error_prefix or ""),
+                }
+            )
             return
 
         def bind_worker(worker) -> None:
@@ -1178,6 +1195,7 @@ class TelegramProxyPage(BasePage):
                 error_prefix=error_prefix,
             ),
             bind_worker=bind_worker,
+            on_finished=self._on_external_link_worker_finished,
         )
 
     def _on_external_link_finished(self, plan) -> None:
@@ -1193,6 +1211,16 @@ class TelegramProxyPage(BasePage):
         message = str(error or "").strip()
         if message:
             self._append_log_line(f"Failed to open link: {message}")
+
+    def _on_external_link_worker_finished(self, _worker) -> None:
+        pending_links = self.__dict__.setdefault("_external_link_pending", [])
+        pending = pending_links.pop(0) if pending_links else None
+        if pending and not self._cleanup_in_progress:
+            self._start_external_link_worker(
+                str(pending.get("url") or ""),
+                success_log=str(pending.get("success_log") or ""),
+                error_prefix=str(pending.get("error_prefix") or ""),
+            )
 
     def _on_copy_link(self):
         """Copy proxy deep link to clipboard."""
@@ -1321,12 +1349,14 @@ class TelegramProxyPage(BasePage):
             warning_prefix="telegram proxy open log file worker",
         )
         self._open_log_file_runtime.cancel()
+        self._open_log_file_pending.clear()
         self._external_link_runtime.stop(
             blocking=False,
             log_fn=log,
             warning_prefix="telegram proxy external link worker",
         )
         self._external_link_runtime.cancel()
+        self._external_link_pending.clear()
         self._settings_save_runtime.stop(
             blocking=False,
             log_fn=log,

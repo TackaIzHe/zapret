@@ -105,6 +105,94 @@ class TelegramProxyWorkerArchitectureTests(unittest.TestCase):
             upstream_config=upstream_config,
         )
 
+    def test_external_links_are_queued_while_worker_runs(self) -> None:
+        from telegram_proxy.ui.page import TelegramProxyPage
+
+        class _Runtime:
+            def is_running(self) -> bool:
+                return True
+
+        page = TelegramProxyPage.__new__(TelegramProxyPage)
+        page._external_link_runtime = _Runtime()
+        page._external_link_pending = []
+        page.create_external_link_worker = Mock()
+
+        TelegramProxyPage._start_external_link_worker(
+            page,
+            "tg://proxy-one",
+            success_log="one",
+            error_prefix="bad one",
+        )
+        TelegramProxyPage._start_external_link_worker(
+            page,
+            "tg://proxy-two",
+            success_log="two",
+            error_prefix="bad two",
+        )
+
+        self.assertEqual(
+            page._external_link_pending,
+            [
+                {"url": "tg://proxy-one", "success_log": "one", "error_prefix": "bad one"},
+                {"url": "tg://proxy-two", "success_log": "two", "error_prefix": "bad two"},
+            ],
+        )
+        page.create_external_link_worker.assert_not_called()
+
+    def test_external_link_worker_finished_starts_next_queued_link(self) -> None:
+        from telegram_proxy.ui.page import TelegramProxyPage
+
+        page = TelegramProxyPage.__new__(TelegramProxyPage)
+        page._cleanup_in_progress = False
+        page._external_link_pending = [
+            {"url": "tg://proxy-one", "success_log": "one", "error_prefix": "bad one"},
+            {"url": "tg://proxy-two", "success_log": "two", "error_prefix": "bad two"},
+        ]
+        page._start_external_link_worker = Mock()
+
+        TelegramProxyPage._on_external_link_worker_finished(page, object())
+
+        page._start_external_link_worker.assert_called_once_with(
+            "tg://proxy-one",
+            success_log="one",
+            error_prefix="bad one",
+        )
+        self.assertEqual(
+            page._external_link_pending,
+            [{"url": "tg://proxy-two", "success_log": "two", "error_prefix": "bad two"}],
+        )
+
+    def test_open_log_file_requests_are_queued_while_worker_runs(self) -> None:
+        from telegram_proxy.ui.page import TelegramProxyPage
+
+        class _Runtime:
+            def is_running(self) -> bool:
+                return True
+
+        page = TelegramProxyPage.__new__(TelegramProxyPage)
+        page._open_log_file_runtime = _Runtime()
+        page._open_log_file_pending = []
+        page.create_open_log_file_worker = Mock()
+
+        TelegramProxyPage._start_open_log_file_worker(page, "first.log")
+        TelegramProxyPage._start_open_log_file_worker(page, "second.log")
+
+        self.assertEqual(page._open_log_file_pending, ["first.log", "second.log"])
+        page.create_open_log_file_worker.assert_not_called()
+
+    def test_open_log_file_worker_finished_starts_next_queued_path(self) -> None:
+        from telegram_proxy.ui.page import TelegramProxyPage
+
+        page = TelegramProxyPage.__new__(TelegramProxyPage)
+        page._cleanup_in_progress = False
+        page._open_log_file_pending = ["first.log", "second.log"]
+        page._start_open_log_file_worker = Mock()
+
+        TelegramProxyPage._on_open_log_file_worker_finished(page, object())
+
+        page._start_open_log_file_worker.assert_called_once_with("first.log")
+        self.assertEqual(page._open_log_file_pending, ["second.log"])
+
 
 if __name__ == "__main__":
     unittest.main()
