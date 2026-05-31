@@ -139,6 +139,8 @@ class PresetSetupPageBase(BasePage):
         self._profile_load_refresh_pending = False
         self._profile_payload_request_scheduled = False
         self._profile_payload_request_force = False
+        self._profile_payload_apply_scheduled = False
+        self._pending_profile_payload_apply = None
         self._profile_context_action_enabled_by_request: dict[int, bool] = {}
         self._cleanup_in_progress = False
         self._ui_state_store = None
@@ -297,6 +299,25 @@ class PresetSetupPageBase(BasePage):
         payload = getattr(payload, "payload", payload)
         self._profile_payload_loaded_once = True
         self._profile_payload_dirty = False
+        self._schedule_profile_payload_apply(payload, view_state=view_state)
+
+    def _schedule_profile_payload_apply(self, payload, *, view_state=None) -> None:
+        self._pending_profile_payload_apply = (payload, view_state)
+        if self.__dict__.get("_profile_payload_apply_scheduled", False):
+            return
+        self._profile_payload_apply_scheduled = True
+        try:
+            QTimer.singleShot(0, self._run_scheduled_profile_payload_apply)
+        except Exception:
+            self._run_scheduled_profile_payload_apply()
+
+    def _run_scheduled_profile_payload_apply(self) -> None:
+        pending = self.__dict__.get("_pending_profile_payload_apply")
+        self._pending_profile_payload_apply = None
+        self._profile_payload_apply_scheduled = False
+        if pending is None or self._cleanup_in_progress:
+            return
+        payload, view_state = pending
         self._apply_payload(payload, view_state=view_state)
 
     def _on_profile_payload_failed(self, request_id: int, error: str) -> None:
@@ -1485,6 +1506,8 @@ class PresetSetupPageBase(BasePage):
         self.__dict__.setdefault("_pending_profile_moves", []).clear()
         self.__dict__.setdefault("_pending_profile_preset_write_operations", []).clear()
         self.__dict__.setdefault("_pending_user_profile_operations", []).clear()
+        self._pending_profile_payload_apply = None
+        self._profile_payload_apply_scheduled = False
         self._profile_folder_action_pending.clear()
         self.__dict__.setdefault("_profile_folder_action_refresh_by_request", {}).clear()
         self.__dict__.setdefault("_profile_context_action_enabled_by_request", {}).clear()

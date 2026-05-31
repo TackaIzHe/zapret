@@ -2462,6 +2462,56 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         page._request_profiles_payload.assert_called_once_with(force=True)
         self.assertFalse(page._profile_payload_request_scheduled)
 
+    def test_loaded_profile_payload_apply_is_deferred_after_worker_signal(self) -> None:
+        page = PresetSetupPageBase.__new__(PresetSetupPageBase)
+        page._profile_load_request_id = 7
+        page._cleanup_in_progress = False
+        page._profile_payload_loaded_once = False
+        page._profile_payload_dirty = True
+        page._apply_payload = Mock()
+        payload = SimpleNamespace(items=(), selected_preset_name="Default")
+        callbacks = []
+
+        with patch(
+            "profile.ui.preset_setup_page.QTimer.singleShot",
+            side_effect=lambda _delay, callback: callbacks.append(callback),
+        ):
+            PresetSetupPageBase._on_profile_payload_loaded(page, 7, payload)
+
+        page._apply_payload.assert_not_called()
+        self.assertEqual(len(callbacks), 1)
+        self.assertTrue(page._profile_payload_loaded_once)
+        self.assertFalse(page._profile_payload_dirty)
+
+        callbacks[0]()
+
+        page._apply_payload.assert_called_once_with(payload, view_state=None)
+
+    def test_loaded_profile_payload_apply_coalesces_latest_payload(self) -> None:
+        page = PresetSetupPageBase.__new__(PresetSetupPageBase)
+        page._profile_load_request_id = 8
+        page._cleanup_in_progress = False
+        page._profile_payload_loaded_once = False
+        page._profile_payload_dirty = True
+        page._apply_payload = Mock()
+        first_payload = SimpleNamespace(items=(), selected_preset_name="First")
+        second_payload = SimpleNamespace(items=(), selected_preset_name="Second")
+        callbacks = []
+
+        with patch(
+            "profile.ui.preset_setup_page.QTimer.singleShot",
+            side_effect=lambda _delay, callback: callbacks.append(callback),
+        ):
+            PresetSetupPageBase._on_profile_payload_loaded(page, 8, first_payload)
+            PresetSetupPageBase._on_profile_payload_loaded(page, 8, second_payload)
+
+        self.assertEqual(len(callbacks), 1)
+        page._apply_payload.assert_not_called()
+
+        callbacks[0]()
+
+        page._apply_payload.assert_called_once_with(second_payload, view_state=None)
+
     def test_preset_switch_refresh_schedules_profile_payload_request(self) -> None:
         page = PresetSetupPageBase.__new__(PresetSetupPageBase)
         page._schedule_profiles_payload_request = Mock()
