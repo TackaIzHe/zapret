@@ -474,6 +474,22 @@ class OrchestraWorkerArchitectureTests(unittest.TestCase):
         page._start_managed_action.assert_called_once_with(("locked_remove", {"domain": "old.org"}))
         self.assertEqual(page._managed_action_pending, [("locked_remove", {"domain": "new.org"})])
 
+    def test_duplicate_locked_managed_action_is_queued_once(self) -> None:
+        from orchestra.ui.locked_page import OrchestraLockedPage
+
+        page = OrchestraLockedPage.__new__(OrchestraLockedPage)
+        page._cleanup_in_progress = False
+        page._managed_action_runtime = SimpleNamespace(is_running=Mock(return_value=True))
+        page._managed_action_start_scheduled = False
+        page._managed_action_pending = []
+        page._start_managed_action = Mock()
+
+        OrchestraLockedPage._request_managed_action(page, "locked_remove", domain="same.org")
+        OrchestraLockedPage._request_managed_action(page, "locked_remove", domain="same.org")
+
+        self.assertEqual(page._managed_action_pending, [("locked_remove", {"domain": "same.org"})])
+        page._start_managed_action.assert_not_called()
+
     def test_blocked_managed_action_pending_restarts_after_event_loop_turn(self) -> None:
         import orchestra.ui.blocked_page as blocked_page
         from orchestra.ui.blocked_page import OrchestraBlockedPage
@@ -518,6 +534,22 @@ class OrchestraWorkerArchitectureTests(unittest.TestCase):
 
         page._start_managed_action.assert_called_once_with(("blocked_remove", {"domain": "old.org"}))
         self.assertEqual(page._managed_action_pending, [("blocked_remove", {"domain": "new.org"})])
+
+    def test_duplicate_blocked_managed_action_is_queued_once(self) -> None:
+        from orchestra.ui.blocked_page import OrchestraBlockedPage
+
+        page = OrchestraBlockedPage.__new__(OrchestraBlockedPage)
+        page._cleanup_in_progress = False
+        page._managed_action_runtime = SimpleNamespace(is_running=Mock(return_value=True))
+        page._managed_action_start_scheduled = False
+        page._managed_action_pending = []
+        page._start_managed_action = Mock()
+
+        OrchestraBlockedPage._request_managed_action(page, "blocked_remove", domain="same.org")
+        OrchestraBlockedPage._request_managed_action(page, "blocked_remove", domain="same.org")
+
+        self.assertEqual(page._managed_action_pending, [("blocked_remove", {"domain": "same.org"})])
+        page._start_managed_action.assert_not_called()
 
     def test_locked_snapshot_load_queues_while_worker_runs(self) -> None:
         from orchestra.ui.locked_page import OrchestraLockedPage

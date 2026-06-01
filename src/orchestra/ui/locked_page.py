@@ -498,9 +498,17 @@ class OrchestraLockedPage(BasePage):
             return
         payload = (str(action or "").strip(), dict(kwargs))
         if self._managed_action_runtime.is_running() or self.__dict__.get("_managed_action_start_scheduled", False):
-            self._managed_action_pending.append(payload)
+            self._queue_managed_action(payload)
             return
         self._start_managed_action(payload)
+
+    def _queue_managed_action(self, payload: tuple[str, dict]) -> None:
+        action, kwargs = payload
+        queued = (str(action or "").strip(), dict(kwargs or {}))
+        pending = self.__dict__.setdefault("_managed_action_pending", [])
+        if queued in pending:
+            return
+        pending.append(queued)
 
     def _start_managed_action(self, payload: tuple[str, dict]) -> None:
         action, kwargs = payload
@@ -592,7 +600,7 @@ class OrchestraLockedPage(BasePage):
         action, kwargs = payload
         queued = (str(action or "").strip(), dict(kwargs or {}))
         if self.__dict__.get("_managed_action_start_scheduled", False):
-            self._managed_action_pending.append(queued)
+            self._queue_managed_action(queued)
             return
         self._managed_action_start_scheduled = True
         QTimer.singleShot(0, lambda value=queued: self._run_scheduled_managed_action_start(value))
