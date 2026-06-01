@@ -360,6 +360,25 @@ class TelegramProxyWorkerArchitectureTests(unittest.TestCase):
         self.assertEqual(page._open_log_file_pending, ["first.log", "second.log"])
         page.create_open_log_file_worker.assert_not_called()
 
+    def test_duplicate_open_log_file_request_is_queued_once(self) -> None:
+        from telegram_proxy.ui.page import TelegramProxyPage
+
+        class _Runtime:
+            def is_running(self) -> bool:
+                return True
+
+        page = TelegramProxyPage.__new__(TelegramProxyPage)
+        page._open_log_file_runtime = _Runtime()
+        page._open_log_file_start_scheduled = False
+        page._open_log_file_pending = []
+        page.create_open_log_file_worker = Mock()
+
+        TelegramProxyPage._start_open_log_file_worker(page, "proxy.log")
+        TelegramProxyPage._start_open_log_file_worker(page, "proxy.log")
+
+        self.assertEqual(page._open_log_file_pending, ["proxy.log"])
+        page.create_open_log_file_worker.assert_not_called()
+
     def test_open_log_file_worker_finished_schedules_next_queued_path(self) -> None:
         import telegram_proxy.ui.page as telegram_proxy_page
         from telegram_proxy.ui.page import TelegramProxyPage

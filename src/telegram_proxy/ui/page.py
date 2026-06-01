@@ -799,7 +799,7 @@ class TelegramProxyPage(BasePage):
             self._open_log_file_runtime.is_running()
             or self.__dict__.get("_open_log_file_start_scheduled", False)
         ):
-            self.__dict__.setdefault("_open_log_file_pending", []).append(str(path or ""))
+            self._queue_open_log_file_path(str(path or ""))
             return
 
         def bind_worker(worker) -> None:
@@ -811,6 +811,13 @@ class TelegramProxyPage(BasePage):
             bind_worker=bind_worker,
             on_finished=self._on_open_log_file_worker_finished,
         )
+
+    def _queue_open_log_file_path(self, path: str) -> None:
+        queued = str(path or "")
+        pending = self.__dict__.setdefault("_open_log_file_pending", [])
+        if queued and queued in pending:
+            return
+        pending.append(queued)
 
     def _on_open_log_file_finished(self, plan) -> None:
         if self._cleanup_in_progress:
@@ -837,7 +844,7 @@ class TelegramProxyPage(BasePage):
             return
         queued = str(path or "")
         if self.__dict__.get("_open_log_file_start_scheduled", False):
-            self.__dict__.setdefault("_open_log_file_pending", []).append(queued)
+            self._queue_open_log_file_path(queued)
             return
         self._open_log_file_start_scheduled = True
         QTimer.singleShot(0, lambda value=queued: self._run_scheduled_open_log_file_worker_start(value))
