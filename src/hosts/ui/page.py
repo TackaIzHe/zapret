@@ -153,6 +153,8 @@ class HostsPage(BasePage):
         self._catalog_refresh_start_scheduled = False
         self._selection_load_runtime = OneShotWorkerRuntime()
         self._selection_load_show_access_errors = False
+        self._selection_load_pending = False
+        self._selection_load_start_scheduled = False
         self._selection_save_runtime = OneShotWorkerRuntime()
         self._selection_save_pending = None
         self._selection_save_start_scheduled = False
@@ -245,7 +247,11 @@ class HostsPage(BasePage):
         self._selection_load_show_access_errors = (
             bool(self._selection_load_show_access_errors) or bool(show_access_errors)
         )
-        if self._selection_load_runtime.is_running():
+        if (
+            self._selection_load_runtime.is_running()
+            or self.__dict__.get("_selection_load_start_scheduled", False)
+        ):
+            self._selection_load_pending = True
             return
         started_at = time.perf_counter()
         self._selection_load_runtime.start_qthread_worker(
@@ -283,7 +289,29 @@ class HostsPage(BasePage):
         self._finish_runtime_init_after_selection(show_access_errors=show_access_errors)
 
     def _on_user_selection_load_worker_finished(self, _worker) -> None:
-        pass
+        if self._cleanup_in_progress:
+            return
+        if self.__dict__.get("_selection_load_pending", False):
+            self._schedule_user_selection_load_start()
+
+    def _schedule_user_selection_load_start(self) -> None:
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        if self.__dict__.get("_selection_load_start_scheduled", False):
+            return
+        self._selection_load_start_scheduled = True
+        QTimer.singleShot(0, self._run_scheduled_user_selection_load_start)
+
+    def _run_scheduled_user_selection_load_start(self) -> None:
+        self._selection_load_start_scheduled = False
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        pending = bool(self.__dict__.get("_selection_load_pending", False))
+        self._selection_load_pending = False
+        if not pending:
+            return
+        show_access_errors = bool(self.__dict__.get("_selection_load_show_access_errors", False))
+        self._start_user_selection_load_worker(show_access_errors=show_access_errors)
 
     def _finish_runtime_init_after_selection(self, *, show_access_errors: bool) -> None:
         started_at = time.perf_counter()
@@ -1272,6 +1300,8 @@ class HostsPage(BasePage):
                 log_fn=log,
                 warning_prefix="Hosts selection load worker",
             )
+            self._selection_load_pending = False
+            self._selection_load_start_scheduled = False
             self._selection_save_runtime.stop(
                 blocking=True,
                 log_fn=log,

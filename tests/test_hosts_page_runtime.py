@@ -147,6 +147,44 @@ class HostsPageRuntimeTests(unittest.TestCase):
 
         page._request_user_selection_save.assert_called_once_with({"service": "latest"})
 
+    def test_user_selection_load_request_waits_while_worker_runs(self) -> None:
+        from hosts.ui.page import HostsPage
+
+        page = HostsPage.__new__(HostsPage)
+        page._selection_load_runtime = SimpleNamespace(is_running=Mock(return_value=True), start_qthread_worker=Mock())
+        page._selection_load_pending = False
+        page._selection_load_show_access_errors = False
+
+        HostsPage._start_user_selection_load_worker(page, show_access_errors=True)
+
+        page._selection_load_runtime.start_qthread_worker.assert_not_called()
+        self.assertTrue(page._selection_load_pending)
+        self.assertTrue(page._selection_load_show_access_errors)
+
+    def test_user_selection_load_pending_restarts_after_event_loop_turn(self) -> None:
+        import hosts.ui.page as hosts_page
+        from hosts.ui.page import HostsPage
+
+        page = HostsPage.__new__(HostsPage)
+        page._cleanup_in_progress = False
+        page._selection_load_pending = True
+        page._selection_load_start_scheduled = False
+        page._selection_load_show_access_errors = True
+        page._start_user_selection_load_worker = Mock()
+        single_shot = Mock(side_effect=lambda _delay, _callback: None)
+
+        with patch.object(hosts_page, "QTimer", SimpleNamespace(singleShot=single_shot), create=True):
+            HostsPage._on_user_selection_load_worker_finished(page, object())
+
+        single_shot.assert_called_once()
+        self.assertEqual(single_shot.call_args.args[0], 0)
+        page._start_user_selection_load_worker.assert_not_called()
+
+        single_shot.call_args.args[1]()
+
+        page._start_user_selection_load_worker.assert_called_once_with(show_access_errors=True)
+        self.assertFalse(page._selection_load_pending)
+
     def test_catalog_refresh_pending_restarts_after_event_loop_turn(self) -> None:
         import hosts.ui.page as hosts_page
         from hosts.ui.page import HostsPage
