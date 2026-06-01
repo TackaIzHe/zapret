@@ -48,6 +48,30 @@ class BlockcheckUserDomainRuntimeArchitectureTests(unittest.TestCase):
 
         page._start_user_domain_action_worker.assert_called_once_with({"action": "add", "domain": "example.com"})
 
+    def test_scheduled_user_domain_action_queues_next_payload(self) -> None:
+        import blockcheck.ui.page as blockcheck_page
+
+        page = BlockcheckPage.__new__(BlockcheckPage)
+        page._cleanup_in_progress = False
+        page._user_domain_action_start_scheduled = False
+        page._user_domain_action_pending = []
+        page._start_user_domain_action_worker = Mock()
+        single_shot = Mock(side_effect=lambda _delay, _callback: None)
+
+        old_payload = {"action": "add", "domain": "old.example"}
+        new_payload = {"action": "remove", "domain": "new.example"}
+        with patch.object(blockcheck_page, "QTimer", SimpleNamespace(singleShot=single_shot), create=True):
+            BlockcheckPage._schedule_user_domain_action_worker_start(page, old_payload)
+            BlockcheckPage._schedule_user_domain_action_worker_start(page, new_payload)
+
+        single_shot.assert_called_once()
+        self.assertEqual(page._user_domain_action_pending, [new_payload])
+
+        single_shot.call_args.args[1]()
+
+        page._start_user_domain_action_worker.assert_called_once_with(old_payload)
+        self.assertEqual(page._user_domain_action_pending, [new_payload])
+
 
 if __name__ == "__main__":
     unittest.main()

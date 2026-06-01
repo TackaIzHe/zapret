@@ -1068,6 +1068,9 @@ class BlockcheckPage(BasePage):
             "action": str((payload or {}).get("action") or "").strip().lower(),
             "domain": str((payload or {}).get("domain") or "").strip(),
         }
+        if self.__dict__.get("_user_domain_action_start_scheduled", False):
+            self._user_domain_action_pending.append(queued)
+            return
         self._user_domain_action_start_scheduled = True
         QTimer.singleShot(0, lambda value=queued: self._run_scheduled_user_domain_action_worker_start(value))
 
