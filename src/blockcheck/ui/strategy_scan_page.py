@@ -119,6 +119,8 @@ class StrategyScanPage(BasePage):
         self._strategy_scan_resume_save_pending = None
         self._strategy_scan_resume_save_start_scheduled = False
         self._strategy_scan_finalize_runtime = OneShotWorkerRuntime()
+        self._strategy_scan_finalize_pending = None
+        self._strategy_scan_finalize_start_scheduled = False
 
         self._build_ui()
         if self._embedded:
@@ -740,8 +742,13 @@ class StrategyScanPage(BasePage):
         self._request_strategy_scan_finalize(report)
 
     def _request_strategy_scan_finalize(self, report) -> None:
-        if self._strategy_scan_finalize_runtime.is_running():
+        if (
+            self._strategy_scan_finalize_runtime.is_running()
+            or self.__dict__.get("_strategy_scan_finalize_start_scheduled", False)
+        ):
+            self._strategy_scan_finalize_pending = report
             return
+        self._strategy_scan_finalize_pending = None
 
         def worker_factory(request_id: int):
             return self.create_strategy_scan_finalize_worker(request_id, report=report)
@@ -753,6 +760,7 @@ class StrategyScanPage(BasePage):
         self._strategy_scan_finalize_runtime.start_qthread_worker(
             worker_factory=worker_factory,
             bind_worker=bind_worker,
+            on_finished=self._on_strategy_scan_finalize_worker_finished,
         )
 
     def _on_strategy_scan_finalize_finished(self, request_id: int, finish_plan) -> None:
@@ -789,6 +797,30 @@ class StrategyScanPage(BasePage):
                 default="Можно подготовить обращение по логам ошибки",
             )
         )
+
+    def _on_strategy_scan_finalize_worker_finished(self, _worker) -> None:
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        if self.__dict__.get("_strategy_scan_finalize_pending") is not None:
+            self._schedule_strategy_scan_finalize_start()
+
+    def _schedule_strategy_scan_finalize_start(self) -> None:
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        if self.__dict__.get("_strategy_scan_finalize_start_scheduled", False):
+            return
+        self._strategy_scan_finalize_start_scheduled = True
+        QTimer.singleShot(0, self._run_scheduled_strategy_scan_finalize_start)
+
+    def _run_scheduled_strategy_scan_finalize_start(self) -> None:
+        self._strategy_scan_finalize_start_scheduled = False
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        pending = self.__dict__.get("_strategy_scan_finalize_pending")
+        self._strategy_scan_finalize_pending = None
+        if pending is None:
+            return
+        self._request_strategy_scan_finalize(pending)
 
     # ------------------------------------------------------------------
     # Apply strategy
@@ -1103,6 +1135,8 @@ class StrategyScanPage(BasePage):
             warning_prefix="strategy scan resume save worker",
         )
         self._strategy_scan_resume_save_runtime.cancel()
+        self._strategy_scan_finalize_pending = None
+        self._strategy_scan_finalize_start_scheduled = False
         self._strategy_scan_finalize_runtime.stop(
             blocking=False,
             warning_prefix="strategy scan finalize worker",
