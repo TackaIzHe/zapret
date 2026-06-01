@@ -1,5 +1,7 @@
 import inspect
 import unittest
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 from blockcheck.ui.strategy_scan_page import StrategyScanPage
 
@@ -7,7 +9,12 @@ from blockcheck.ui.strategy_scan_page import StrategyScanPage
 class StrategyScanSupportRuntimeArchitectureTests(unittest.TestCase):
     def test_support_prepare_uses_runtime_not_manual_page_worker(self) -> None:
         page_source = inspect.getsource(StrategyScanPage)
-        request_source = inspect.getsource(StrategyScanPage._request_support_prepare)
+        request_source = "\n".join(
+            (
+                inspect.getsource(StrategyScanPage._request_support_prepare),
+                inspect.getsource(StrategyScanPage._start_support_prepare_worker),
+            )
+        )
         finished_source = inspect.getsource(StrategyScanPage._on_support_prepare_finished)
         failed_source = inspect.getsource(StrategyScanPage._on_support_prepare_failed)
         cleanup_source = inspect.getsource(StrategyScanPage.cleanup)
@@ -24,6 +31,79 @@ class StrategyScanSupportRuntimeArchitectureTests(unittest.TestCase):
         self.assertNotIn("_support_prepare_worker =", page_source)
         self.assertNotIn("_support_prepare_request_id", page_source)
         self.assertNotIn("worker.start()", request_source)
+
+    def test_support_prepare_queues_latest_request_while_worker_runs(self) -> None:
+        class _Runtime:
+            def is_running(self) -> bool:
+                return True
+
+        page = StrategyScanPage.__new__(StrategyScanPage)
+        page._support_prepare_runtime = _Runtime()
+        page._support_prepare_pending = None
+        page._support_prepare_start_scheduled = False
+        page._set_support_status = Mock()
+        page._prepare_support_btn = SimpleNamespace(setEnabled=Mock())
+
+        StrategyScanPage._request_support_prepare(
+            page,
+            run_log_file="first.log",
+            target="old.example",
+            protocol_label="TCP",
+            mode_label="Quick",
+            scan_protocol="tcp",
+        )
+        StrategyScanPage._request_support_prepare(
+            page,
+            run_log_file="second.log",
+            target="new.example",
+            protocol_label="UDP",
+            mode_label="Full",
+            scan_protocol="udp",
+        )
+
+        self.assertEqual(
+            page._support_prepare_pending,
+            {
+                "run_log_file": "second.log",
+                "target": "new.example",
+                "protocol_label": "UDP",
+                "mode_label": "Full",
+                "scan_protocol": "udp",
+            },
+        )
+        page._prepare_support_btn.setEnabled.assert_not_called()
+
+    def test_support_prepare_pending_restarts_after_event_loop_turn(self) -> None:
+        import blockcheck.ui.strategy_scan_page as strategy_scan_page
+
+        pending = {
+            "run_log_file": "support.log",
+            "target": "new.example",
+            "protocol_label": "TCP",
+            "mode_label": "Full",
+            "scan_protocol": "tcp",
+        }
+        page = StrategyScanPage.__new__(StrategyScanPage)
+        page._cleanup_in_progress = False
+        page._support_prepare_pending = pending
+        page._support_prepare_start_scheduled = False
+        page._prepare_support_btn = SimpleNamespace(setEnabled=Mock())
+        page._set_support_status = Mock()
+        page._start_support_prepare_worker = Mock()
+        single_shot = Mock(side_effect=lambda _delay, _callback: None)
+
+        with patch.object(strategy_scan_page, "QTimer", SimpleNamespace(singleShot=single_shot), create=True):
+            StrategyScanPage._on_support_prepare_runtime_finished(page, object())
+
+        single_shot.assert_called_once()
+        self.assertEqual(single_shot.call_args.args[0], 0)
+        page._prepare_support_btn.setEnabled.assert_not_called()
+        page._start_support_prepare_worker.assert_not_called()
+
+        single_shot.call_args.args[1]()
+
+        page._start_support_prepare_worker.assert_called_once_with(pending)
+        self.assertIsNone(page._support_prepare_pending)
 
 
 if __name__ == "__main__":
