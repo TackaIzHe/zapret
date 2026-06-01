@@ -236,6 +236,39 @@ class PremiumWorkerArchitectureTests(unittest.TestCase):
         page._request_open_extend_bot.assert_called_once_with()
         self.assertTrue(page._open_bot_pending)
 
+    def test_reset_storage_request_is_remembered_while_worker_runs(self) -> None:
+        page = PremiumPage.__new__(PremiumPage)
+        page._reset_storage_runtime = SimpleNamespace(is_running=Mock(return_value=True), start_qthread_worker=Mock())
+        page._reset_storage_pending = False
+        page._reset_storage_start_scheduled = False
+
+        PremiumPage._request_reset_storage(page)
+
+        page._reset_storage_runtime.start_qthread_worker.assert_not_called()
+        self.assertTrue(page._reset_storage_pending)
+
+    def test_reset_storage_pending_restarts_after_event_loop_turn(self) -> None:
+        import donater.ui.page as premium_page
+
+        page = PremiumPage.__new__(PremiumPage)
+        page._cleanup_in_progress = False
+        page._reset_storage_pending = True
+        page._reset_storage_start_scheduled = False
+        page._start_reset_storage_worker = Mock()
+        single_shot = Mock(side_effect=lambda _delay, _callback: None)
+
+        with patch.object(premium_page, "QTimer", SimpleNamespace(singleShot=single_shot), create=True):
+            PremiumPage._on_reset_storage_worker_finished(page, object())
+
+        single_shot.assert_called_once()
+        self.assertEqual(single_shot.call_args.args[0], 0)
+        page._start_reset_storage_worker.assert_not_called()
+
+        single_shot.call_args.args[1]()
+
+        page._start_reset_storage_worker.assert_called_once_with()
+        self.assertFalse(page._reset_storage_pending)
+
 
 if __name__ == "__main__":
     unittest.main()

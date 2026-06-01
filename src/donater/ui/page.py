@@ -118,6 +118,8 @@ class PremiumPage(BasePage):
         self._device_info_pending = False
         self._device_info_start_scheduled = False
         self._reset_storage_runtime = OneShotWorkerRuntime()
+        self._reset_storage_pending = False
+        self._reset_storage_start_scheduled = False
         self._premium_action_runtime = OneShotWorkerRuntime()
         self._pending_premium_action = ""
         self._pending_premium_action_start_scheduled = False
@@ -348,6 +350,8 @@ class PremiumPage(BasePage):
             blocking=True,
             warning_prefix="Premium reset storage worker",
         )
+        self._reset_storage_pending = False
+        self._reset_storage_start_scheduled = False
         self._pending_premium_action = ""
         self._pending_premium_action_start_scheduled = False
 
@@ -956,12 +960,26 @@ class PremiumPage(BasePage):
         return self._premium.create_reset_storage_worker(request_id, parent=self)
 
     def _request_reset_storage(self) -> None:
-        if self._reset_storage_runtime.is_running():
+        if self.__dict__.get("_cleanup_in_progress", False):
             return
+        runtime = self.__dict__.get("_reset_storage_runtime")
+        if (
+            (runtime is not None and runtime.is_running())
+            or self.__dict__.get("_reset_storage_start_scheduled", False)
+        ):
+            self._reset_storage_pending = True
+            return
+        self._start_reset_storage_worker()
+
+    def _start_reset_storage_worker(self) -> None:
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        self._reset_storage_pending = False
         self._reset_storage_runtime.start_qthread_worker(
             worker_factory=lambda request_id: self.create_reset_storage_worker(request_id),
             on_loaded=self._on_reset_storage_finished,
             on_failed=self._on_reset_storage_failed,
+            on_finished=self._on_reset_storage_worker_finished,
         )
 
     def _on_reset_storage_finished(self, request_id: int, _result) -> None:
@@ -992,3 +1010,27 @@ class PremiumPage(BasePage):
                 ),
                 parent=self.window(),
             )
+
+    def _on_reset_storage_worker_finished(self, _worker) -> None:
+        if self.__dict__.get("_reset_storage_pending", False) and not self.__dict__.get(
+            "_cleanup_in_progress",
+            False,
+        ):
+            self._schedule_reset_storage_worker_start()
+
+    def _schedule_reset_storage_worker_start(self) -> None:
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        if self.__dict__.get("_reset_storage_start_scheduled", False):
+            self._reset_storage_pending = True
+            return
+        self._reset_storage_start_scheduled = True
+        QTimer.singleShot(0, self._run_scheduled_reset_storage_worker_start)
+
+    def _run_scheduled_reset_storage_worker_start(self) -> None:
+        self._reset_storage_start_scheduled = False
+        pending = bool(self.__dict__.get("_reset_storage_pending", False))
+        self._reset_storage_pending = False
+        if not pending or self.__dict__.get("_cleanup_in_progress", False):
+            return
+        self._start_reset_storage_worker()
