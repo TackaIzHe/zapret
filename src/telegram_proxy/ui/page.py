@@ -709,6 +709,9 @@ class TelegramProxyPage(BasePage):
         if self.__dict__.get("_cleanup_in_progress", False):
             return
         queued = str(message or "")
+        if self.__dict__.get("_log_line_start_scheduled", False):
+            self._log_line_pending.append(queued)
+            return
         self._log_line_start_scheduled = True
         QTimer.singleShot(0, lambda value=queued: self._run_scheduled_log_line_worker_start(value))
 
@@ -791,6 +794,9 @@ class TelegramProxyPage(BasePage):
         if self.__dict__.get("_cleanup_in_progress", False):
             return
         queued = str(path or "")
+        if self.__dict__.get("_open_log_file_start_scheduled", False):
+            self.__dict__.setdefault("_open_log_file_pending", []).append(queued)
+            return
         self._open_log_file_start_scheduled = True
         QTimer.singleShot(0, lambda value=queued: self._run_scheduled_open_log_file_worker_start(value))
 
@@ -952,6 +958,9 @@ class TelegramProxyPage(BasePage):
         if self.__dict__.get("_cleanup_in_progress", False):
             return
         queued = dict(payload or {})
+        if self.__dict__.get("_settings_save_start_scheduled", False):
+            self._settings_save_pending.append(queued)
+            return
         self._settings_save_start_scheduled = True
         QTimer.singleShot(0, lambda value=queued: self._run_scheduled_settings_save_worker_start(value))
 
@@ -1314,6 +1323,9 @@ class TelegramProxyPage(BasePage):
             "success_log": str((payload or {}).get("success_log") or ""),
             "error_prefix": str((payload or {}).get("error_prefix") or ""),
         }
+        if self.__dict__.get("_external_link_start_scheduled", False):
+            self.__dict__.setdefault("_external_link_pending", []).append(queued)
+            return
         self._external_link_start_scheduled = True
         QTimer.singleShot(0, lambda value=queued: self._run_scheduled_external_link_worker_start(value))
 
