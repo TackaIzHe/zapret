@@ -2653,13 +2653,19 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
     def test_telegram_proxy_stop_runs_through_worker(self) -> None:
         page_source = inspect.getsource(TelegramProxyPage)
         stop_source = inspect.getsource(TelegramProxyPage._stop_proxy)
+        request_source = inspect.getsource(TelegramProxyPage._request_proxy_stop)
+        start_source = inspect.getsource(TelegramProxyPage._start_proxy_stop_worker)
         runtime_source = inspect.getsource(telegram_runtime_workflow.stop_proxy_runtime)
 
         self.assertTrue(hasattr(telegram_proxy_workers, "TelegramProxyStopRuntimeWorker"))
         worker_source = inspect.getsource(telegram_proxy_workers.TelegramProxyStopRuntimeWorker.run)
 
-        self.assertIn("stop_proxy_runtime", stop_source)
+        self.assertIn("_request_proxy_stop", stop_source)
+        self.assertIn("_start_proxy_stop_worker", request_source)
+        self.assertIn("stop_proxy_runtime", start_source)
         self.assertNotIn("manager.stop_proxy()", stop_source)
+        self.assertNotIn("manager.stop_proxy()", request_source)
+        self.assertNotIn("manager.stop_proxy()", start_source)
         self.assertNotIn("manager.stop_proxy()", runtime_source)
         self.assertIn("create_stop_runtime_worker", runtime_source)
         self.assertIn("_proxy_stop_runtime", page_source)
@@ -3764,8 +3770,15 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         feature_source = inspect.getsource(orchestra_feature_facade.OrchestraFeature)
         worker_source = inspect.getsource(orchestra_page_workers.OrchestraClearLearnedWorker.run)
 
-        self.assertIn("_start_clear_learned_worker", clear_source)
+        request_source = inspect.getsource(OrchestraPage._request_clear_learned_worker)
+        start_source = inspect.getsource(OrchestraPage._start_clear_learned_worker)
+
+        self.assertIn("_request_clear_learned_worker", clear_source)
+        self.assertIn("_start_clear_learned_worker", request_source)
+        self.assertIn("runtime.start_qthread_worker", start_source)
         self.assertNotIn("self._controller.clear_learned_data()", clear_source)
+        self.assertNotIn("self._controller.clear_learned_data()", request_source)
+        self.assertNotIn("self._controller.clear_learned_data()", start_source)
         self.assertIn("OneShotWorkerRuntime", page_source)
         self.assertIn("create_clear_learned_worker", page_source)
         self.assertIn("create_clear_learned_worker", feature_source)
