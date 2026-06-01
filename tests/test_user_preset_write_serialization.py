@@ -241,6 +241,30 @@ class UserPresetWriteSerializationTests(unittest.TestCase):
         self.assertEqual(page._pending_preset_write_actions, [])
         self.assertIsNone(page._pending_preset_activation)
 
+    def test_pending_activation_queue_keeps_only_latest_preset_click(self) -> None:
+        page = UserPresetsPageBase.__new__(UserPresetsPageBase)
+        page._preset_activate_runtime = _Runtime(running=True)
+        page._preset_item_action_runtime = _Runtime(running=False)
+        page._preset_bulk_action_runtime = _Runtime(running=False)
+        page._preset_edit_action_runtime = _Runtime(running=False)
+        page._preset_storage_action_runtime = _Runtime(running=False)
+        page._pending_preset_write_actions = []
+        page._pending_preset_activation = None
+        page.create_preset_activate_worker = Mock(return_value=_ActivationWorker())
+
+        UserPresetsPageBase._request_preset_activation(page, "Old.txt", "Old")
+        UserPresetsPageBase._request_preset_activation(page, "Latest.txt", "Latest")
+
+        page.create_preset_activate_worker.assert_not_called()
+        self.assertEqual(
+            [
+                (operation["kind"], operation["file_name"], operation["display_name"])
+                for operation in page._pending_preset_write_actions
+            ],
+            [("activate", "Latest.txt", "Latest")],
+        )
+        self.assertEqual(page._pending_preset_activation, ("Latest.txt", "Latest"))
+
     def test_edit_action_waits_while_activation_worker_runs(self) -> None:
         page = UserPresetsPageBase.__new__(UserPresetsPageBase)
         page._preset_activate_runtime = _Runtime(running=True)

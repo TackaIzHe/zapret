@@ -1403,6 +1403,13 @@ class UserPresetsPageBase(BasePage):
             self._scheduled_preset_write_action = operation
             self._pending_preset_activation = (operation["file_name"], operation["display_name"])
             return
+        if operation["kind"] == "activate":
+            pending_operations = self.__dict__.setdefault("_pending_preset_write_actions", [])
+            pending_operations[:] = [
+                pending
+                for pending in pending_operations
+                if str(pending.get("kind") or "") != "activate"
+            ]
         self.__dict__.setdefault("_pending_preset_write_actions", []).append(operation)
         if operation["kind"] == "storage":
             self.__dict__.setdefault("_pending_preset_storage_actions", []).append(
