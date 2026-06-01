@@ -107,6 +107,57 @@ class ProfileSetupWriteSerializationTests(unittest.TestCase):
             ],
         )
 
+    def test_user_profile_update_queue_keeps_latest_update_for_same_profile(self) -> None:
+        page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        page._user_profile_update_runtime = _Runtime(running=True)
+        page._user_profile_delete_runtime = _Runtime(running=False)
+        page._pending_user_profile_operations = []
+        page._pending_user_profile_updates = []
+        page._pending_user_profile_deletes = []
+        page._user_profile_update_request_id = 0
+        page._set_user_profile_actions_enabled = Mock()
+        page.create_profile_user_update_worker = Mock(return_value=_Worker())
+
+        ProfileSetupPageBase._request_user_profile_update(
+            page,
+            "user-1",
+            name="Old",
+            protocol="tcp",
+            ports="443",
+        )
+        ProfileSetupPageBase._request_user_profile_update(
+            page,
+            "user-1",
+            name="Latest",
+            protocol="udp",
+            ports="443,500",
+        )
+
+        page.create_profile_user_update_worker.assert_not_called()
+        self.assertEqual(
+            page._pending_user_profile_operations,
+            [
+                {
+                    "action": "update",
+                    "profile_id": "user-1",
+                    "name": "Latest",
+                    "protocol": "udp",
+                    "ports": "443,500",
+                }
+            ],
+        )
+        self.assertEqual(
+            page._pending_user_profile_updates,
+            [
+                {
+                    "profile_id": "user-1",
+                    "name": "Latest",
+                    "protocol": "udp",
+                    "ports": "443,500",
+                }
+            ],
+        )
+
     def test_raw_profile_save_waits_while_next_write_start_is_scheduled(self) -> None:
         page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
         page._profile_setup_write_operation_start_scheduled = True

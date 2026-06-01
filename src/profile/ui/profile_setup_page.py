@@ -1700,6 +1700,23 @@ class ProfileSetupPageBase(BasePage):
             "protocol": str(protocol or ""),
             "ports": str(ports or ""),
         }
+        if operation["action"] == "update":
+            profile_id_to_replace = str(operation["profile_id"] or "")
+            pending_operations = self.__dict__.setdefault("_pending_user_profile_operations", [])
+            pending_operations[:] = [
+                pending
+                for pending in pending_operations
+                if not (
+                    str(pending.get("action") or "") == "update"
+                    and str(pending.get("profile_id") or "") == profile_id_to_replace
+                )
+            ]
+            pending_updates = self.__dict__.setdefault("_pending_user_profile_updates", [])
+            pending_updates[:] = [
+                pending
+                for pending in pending_updates
+                if str(pending.get("profile_id") or "") != profile_id_to_replace
+            ]
         self.__dict__.setdefault("_pending_user_profile_operations", []).append(operation)
         if operation["action"] == "update":
             self.__dict__.setdefault("_pending_user_profile_updates", []).append(
