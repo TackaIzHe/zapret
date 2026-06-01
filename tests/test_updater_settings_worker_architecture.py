@@ -31,6 +31,36 @@ class UpdaterSettingsWorkerArchitectureTests(unittest.TestCase):
         self.assertNotIn("import updater.commands", save_source)
         self.assertNotIn("import updater.commands", load_source)
 
+    def test_auto_check_load_queues_while_worker_runs(self) -> None:
+        runtime = update_page_runtime.UpdatePageRuntime.__new__(update_page_runtime.UpdatePageRuntime)
+        runtime._auto_check_load_runtime = SimpleNamespace(is_running=Mock(return_value=True), start_qthread_worker=Mock())
+        runtime._auto_check_load_pending = False
+
+        update_page_runtime.UpdatePageRuntime._request_auto_check_load(runtime)
+
+        runtime._auto_check_load_runtime.start_qthread_worker.assert_not_called()
+        self.assertTrue(runtime._auto_check_load_pending)
+
+    def test_auto_check_load_pending_restarts_after_event_loop_turn(self) -> None:
+        runtime = update_page_runtime.UpdatePageRuntime.__new__(update_page_runtime.UpdatePageRuntime)
+        runtime._cleanup_in_progress = False
+        runtime._auto_check_load_pending = True
+        runtime._auto_check_load_start_scheduled = False
+        runtime._request_auto_check_load = Mock()
+        single_shot = Mock(side_effect=lambda _delay, _callback: None)
+
+        with patch.object(update_page_runtime, "QTimer", SimpleNamespace(singleShot=single_shot)):
+            update_page_runtime.UpdatePageRuntime._on_auto_check_load_worker_finished(runtime, object())
+
+        single_shot.assert_called_once()
+        self.assertEqual(single_shot.call_args.args[0], 0)
+        runtime._request_auto_check_load.assert_not_called()
+
+        single_shot.call_args.args[1]()
+
+        runtime._request_auto_check_load.assert_called_once_with()
+        self.assertFalse(runtime._auto_check_load_pending)
+
     def test_channel_open_worker_receives_feature_action_callable(self) -> None:
         feature_source = inspect.getsource(UpdaterFeature)
         worker_source = inspect.getsource(settings_workers.UpdaterChannelOpenWorker)

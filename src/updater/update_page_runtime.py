@@ -131,6 +131,8 @@ class UpdatePageRuntime:
         self._cache_invalidate_runtime = OneShotWorkerRuntime()
         self._update_install_runtime = OneShotWorkerRuntime()
         self._cleanup_in_progress = False
+        self._auto_check_load_pending = False
+        self._auto_check_load_start_scheduled = False
         self._auto_check_save_pending: bool | None = None
         self._cache_invalidate_pending_context: str | None = None
         self._update_channel_open_pending = ""
@@ -311,8 +313,13 @@ class UpdatePageRuntime:
         self._request_auto_check_load()
 
     def _request_auto_check_load(self) -> None:
-        if self._auto_check_load_runtime.is_running():
+        if (
+            self._auto_check_load_runtime.is_running()
+            or self.__dict__.get("_auto_check_load_start_scheduled", False)
+        ):
+            self._auto_check_load_pending = True
             return
+        self._auto_check_load_pending = False
         self._auto_check_load_runtime.start_qthread_worker(
             worker_factory=lambda request_id: self._updater_feature.create_auto_check_load_worker(
                 request_id,
@@ -320,6 +327,7 @@ class UpdatePageRuntime:
             ),
             on_loaded=self._on_auto_check_load_finished,
             on_failed=self._on_auto_check_load_failed,
+            on_finished=self._on_auto_check_load_worker_finished,
         )
 
     def _on_auto_check_load_finished(self, request_id: int, enabled: bool) -> None:
@@ -339,6 +347,29 @@ class UpdatePageRuntime:
         if not self._auto_check_load_runtime.is_current(request_id, cleanup_in_progress=self._cleanup_in_progress):
             return
         log(f"Не удалось загрузить автопроверку обновлений: {error}", "WARNING")
+
+    def _on_auto_check_load_worker_finished(self, _worker) -> None:
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        if self.__dict__.get("_auto_check_load_pending", False):
+            self._schedule_auto_check_load_start()
+
+    def _schedule_auto_check_load_start(self) -> None:
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        if self.__dict__.get("_auto_check_load_start_scheduled", False):
+            self._auto_check_load_pending = True
+            return
+        self._auto_check_load_start_scheduled = True
+        QTimer.singleShot(0, self._run_scheduled_auto_check_load_start)
+
+    def _run_scheduled_auto_check_load_start(self) -> None:
+        self._auto_check_load_start_scheduled = False
+        pending = bool(self.__dict__.get("_auto_check_load_pending", False))
+        self._auto_check_load_pending = False
+        if self.__dict__.get("_cleanup_in_progress", False) or not pending:
+            return
+        self._request_auto_check_load()
 
     def present_startup_update(self, version: str, release_notes: str, *, install_after_show: bool = True) -> bool:
         if self._cleanup_in_progress:
@@ -854,6 +885,8 @@ class UpdatePageRuntime:
         self._auto_check_save_runtime.cancel()
 
     def _teardown_auto_check_load_worker(self) -> None:
+        self._auto_check_load_pending = False
+        self._auto_check_load_start_scheduled = False
         self._auto_check_load_runtime.stop(
             blocking=True,
             log_fn=log,
