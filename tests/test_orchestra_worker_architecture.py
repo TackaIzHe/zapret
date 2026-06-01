@@ -430,6 +430,31 @@ class OrchestraWorkerArchitectureTests(unittest.TestCase):
         self.assertNotIn("self._controller", action_init)
         self.assertNotIn("self._controller.", action_run)
 
+    def test_whitelist_page_uses_feature_without_controller_wrapper(self) -> None:
+        from app.feature_facades.orchestra import OrchestraFeature
+        from orchestra.ui.settings_page import OrchestraSettingsPage
+        from orchestra.ui.whitelist_page import OrchestraWhitelistPage
+        from ui.page_deps.system import build_orchestra_settings_page_kwargs
+
+        init_source = inspect.getsource(OrchestraWhitelistPage.__init__)
+        page_source = inspect.getsource(OrchestraWhitelistPage)
+        settings_init_source = inspect.getsource(OrchestraSettingsPage.__init__)
+        ensure_source = inspect.getsource(OrchestraSettingsPage._ensure_tab_page)
+        deps_source = inspect.getsource(build_orchestra_settings_page_kwargs)
+        feature_source = inspect.getsource(OrchestraFeature)
+
+        self.assertIn("orchestra_feature", init_source)
+        self.assertIn("self._orchestra = orchestra_feature", init_source)
+        self.assertNotIn("self._controller", page_source)
+        self.assertIn("self._orchestra.create_whitelist_snapshot_load_worker", page_source)
+        self.assertIn("self._orchestra.create_whitelist_action_worker", page_source)
+        self.assertIn("self._orchestra = orchestra_feature", settings_init_source)
+        self.assertIn("orchestra_feature=self._orchestra", ensure_source)
+        self.assertNotIn("WhitelistController", deps_source)
+        self.assertNotIn('"whitelist"', deps_source)
+        self.assertIn("create_whitelist_snapshot_load_worker", feature_source)
+        self.assertIn("create_whitelist_action_worker", feature_source)
+
     def test_whitelist_snapshot_pending_refresh_restarts_after_event_loop_turn(self) -> None:
         import orchestra.ui.whitelist_page as whitelist_page
         from orchestra.ui.whitelist_page import OrchestraWhitelistPage

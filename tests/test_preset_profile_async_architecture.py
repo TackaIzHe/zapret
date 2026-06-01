@@ -3787,7 +3787,7 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         remove_source = inspect.getsource(OrchestraWhitelistPage._on_row_delete_requested)
         clear_source = inspect.getsource(OrchestraWhitelistPage._clear_user_domains)
         page_source = inspect.getsource(OrchestraWhitelistPage)
-        controller_source = inspect.getsource(orchestra_managed_lists_controller.WhitelistController)
+        feature_source = inspect.getsource(orchestra_feature_facade.OrchestraFeature)
         worker_source = inspect.getsource(whitelist_workers.OrchestraWhitelistActionWorker.run)
 
         for source in (add_source, remove_source, clear_source):
@@ -3798,7 +3798,7 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
 
         self.assertIn("OneShotWorkerRuntime", page_source)
         self.assertIn("create_action_worker", page_source)
-        self.assertIn("create_action_worker", controller_source)
+        self.assertIn("create_whitelist_action_worker", feature_source)
         self.assertIn("add_domain", worker_source)
         self.assertIn("remove_domain", worker_source)
         self.assertIn("clear_user_domains", worker_source)
@@ -3806,13 +3806,13 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
     def test_orchestra_whitelist_snapshot_loads_through_worker(self) -> None:
         whitelist_workers = importlib.import_module("orchestra.managed_lists_workers")
         sync_source = inspect.getsource(OrchestraWhitelistPage._sync_whitelist_view)
-        controller_source = inspect.getsource(orchestra_managed_lists_controller.WhitelistController)
+        feature_source = inspect.getsource(orchestra_feature_facade.OrchestraFeature)
 
         self.assertTrue(hasattr(whitelist_workers, "OrchestraWhitelistSnapshotLoadWorker"))
         worker_source = inspect.getsource(whitelist_workers.OrchestraWhitelistSnapshotLoadWorker.run)
         self.assertIn("_start_snapshot_worker", sync_source)
         self.assertNotIn(".snapshot(", sync_source)
-        self.assertIn("create_snapshot_load_worker", controller_source)
+        self.assertIn("create_whitelist_snapshot_load_worker", feature_source)
         self.assertIn("snapshot(refresh=self._refresh)", worker_source)
 
     def test_orchestra_managed_list_actions_run_through_worker(self) -> None:

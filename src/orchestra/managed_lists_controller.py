@@ -5,14 +5,12 @@ from __future__ import annotations
 from orchestra.managed_lists_workflow import (
     add_blocked_strategy,
     add_locked_strategy,
-    add_whitelist_domain,
     build_blocked_snapshot,
     build_locked_snapshot,
     change_blocked_strategy,
     change_locked_strategy,
     clear_locked_strategies,
     clear_user_blocked_strategies,
-    clear_whitelist_user_domains,
     count_locked_strategies,
     count_user_blocked_strategies,
     current_locked_strategy,
@@ -21,7 +19,6 @@ from orchestra.managed_lists_workflow import (
     reload_locked_snapshot,
     remove_blocked_strategy,
     remove_locked_strategy,
-    remove_whitelist_domain,
 )
 
 
@@ -243,82 +240,3 @@ class LockedStrategiesController:
     def _remember_direct_snapshot(self, snapshot) -> None:
         if snapshot.direct_locked_by_askey is not None:
             self._direct_locked_by_askey = snapshot.direct_locked_by_askey
-
-
-class WhitelistController:
-    """Единая точка действий для страницы whitelist оркестратора."""
-
-    def __init__(self, orchestra) -> None:
-        self._orchestra = orchestra
-
-    @property
-    def runner(self):
-        return self._orchestra.runner
-
-    def is_running(self) -> bool:
-        runner = self.runner
-        return bool(runner is not None and runner.is_running())
-
-    def snapshot(self, *, refresh: bool):
-        return self._orchestra.get_whitelist_snapshot(
-            self.runner,
-            refresh=refresh,
-        )
-
-    def create_snapshot_load_worker(self, request_id: int, *, refresh: bool, parent=None):
-        from orchestra.managed_lists_workers import OrchestraWhitelistSnapshotLoadWorker
-
-        return OrchestraWhitelistSnapshotLoadWorker(
-            request_id,
-            self.snapshot,
-            refresh=refresh,
-            parent=parent,
-        )
-
-    def create_action_worker(
-        self,
-        request_id: int,
-        *,
-        action: str,
-        domain: str = "",
-        user_domains: list[str] | None = None,
-        parent=None,
-    ):
-        from orchestra.managed_lists_workers import OrchestraWhitelistActionWorker
-
-        return OrchestraWhitelistActionWorker(
-            request_id,
-            self.add_domain,
-            self.remove_domain,
-            self.clear_user_domains,
-            self.snapshot,
-            action=action,
-            domain=domain,
-            user_domains=user_domains,
-            parent=parent,
-        )
-
-    def add_domain(self, *, domain: str):
-        return add_whitelist_domain(
-            orchestra=self._orchestra,
-            runner=self.runner,
-            domain=domain,
-        )
-
-    def remove_domain(self, *, domain: str):
-        return remove_whitelist_domain(
-            orchestra=self._orchestra,
-            runner=self.runner,
-            domain=domain,
-        )
-
-    def user_domains(self) -> list[str]:
-        snapshot = self.snapshot(refresh=True)
-        return [domain for domain, is_default in snapshot.entries if not is_default]
-
-    def clear_user_domains(self, *, user_domains: list[str]):
-        return clear_whitelist_user_domains(
-            orchestra=self._orchestra,
-            runner=self.runner,
-            user_domains=user_domains,
-        )

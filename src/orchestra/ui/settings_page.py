@@ -33,7 +33,6 @@ class OrchestraSettingsPage(QWidget):
 
         self._locked_controller = controllers["locked"]
         self._blocked_controller = controllers["blocked"]
-        self._whitelist_controller = controllers["whitelist"]
         self.locked_page = None
         self.blocked_page = None
         self.whitelist_page = None
@@ -106,7 +105,7 @@ class OrchestraSettingsPage(QWidget):
 
             page = OrchestraWhitelistPage(
                 self,
-                controller=self._whitelist_controller,
+                orchestra_feature=self._orchestra,
             )
             self.whitelist_page = page
         else:

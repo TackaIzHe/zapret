@@ -253,6 +253,76 @@ class OrchestraFeature:
             or 0
         )
 
+    def is_whitelist_runtime_running(self) -> bool:
+        runner = self.runner
+        return bool(runner is not None and runner.is_running())
+
+    def create_whitelist_snapshot_load_worker(self, request_id: int, *, refresh: bool, parent=None):
+        from orchestra.managed_lists_workers import OrchestraWhitelistSnapshotLoadWorker
+
+        return OrchestraWhitelistSnapshotLoadWorker(
+            request_id,
+            self.load_whitelist_snapshot,
+            refresh=refresh,
+            parent=parent,
+        )
+
+    def create_whitelist_action_worker(
+        self,
+        request_id: int,
+        *,
+        action: str,
+        domain: str = "",
+        user_domains: list[str] | None = None,
+        parent=None,
+    ):
+        from orchestra.managed_lists_workers import OrchestraWhitelistActionWorker
+
+        return OrchestraWhitelistActionWorker(
+            request_id,
+            self.add_whitelist_domain_to_current_runner,
+            self.remove_whitelist_domain_from_current_runner,
+            self.clear_current_whitelist_user_domains,
+            self.load_whitelist_snapshot,
+            action=action,
+            domain=domain,
+            user_domains=user_domains,
+            parent=parent,
+        )
+
+    def load_whitelist_snapshot(self, *, refresh: bool):
+        return self.get_whitelist_snapshot(
+            self.runner,
+            refresh=refresh,
+        )
+
+    def add_whitelist_domain_to_current_runner(self, *, domain: str):
+        from orchestra.managed_lists_workflow import add_whitelist_domain
+
+        return add_whitelist_domain(
+            orchestra=self,
+            runner=self.runner,
+            domain=domain,
+        )
+
+    def remove_whitelist_domain_from_current_runner(self, *, domain: str):
+        from orchestra.managed_lists_workflow import remove_whitelist_domain
+
+        return remove_whitelist_domain(
+            orchestra=self,
+            runner=self.runner,
+            domain=domain,
+        )
+
+    def clear_current_whitelist_user_domains(self, *, user_domains: list[str]):
+        from orchestra.managed_lists_workflow import clear_whitelist_user_domains
+
+        return clear_whitelist_user_domains(
+            orchestra=self,
+            runner=self.runner,
+            user_domains=user_domains,
+        )
+
     def create_loaded_blocked_manager(self):
         return self._commands().create_loaded_blocked_manager()
 

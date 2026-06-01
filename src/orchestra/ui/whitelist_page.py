@@ -143,7 +143,7 @@ class WhitelistDomainRow(QFrame):
 class OrchestraWhitelistPage(BasePage):
     """Страница управления белым списком оркестратора"""
 
-    def __init__(self, parent=None, *, controller):
+    def __init__(self, parent=None, *, orchestra_feature):
         super().__init__(
             "Белый список",
             "Домены, которые НЕ обрабатываются оркестратором. Эти сайты работают без DPI bypass.",
@@ -152,7 +152,7 @@ class OrchestraWhitelistPage(BasePage):
             subtitle_key="page.orchestra.whitelist.subtitle",
         )
         self.setObjectName("orchestraWhitelistPage")
-        self._controller = controller
+        self._orchestra = orchestra_feature
         self._all_whitelist_data = []  # Кэш данных для фильтрации
         self._add_card = None
         self._domains_card = None
@@ -394,13 +394,13 @@ class OrchestraWhitelistPage(BasePage):
 
     def _is_orchestra_running(self) -> bool:
         """Проверяет, запущен ли оркестратор"""
-        return self._controller.is_running()
+        return self._orchestra.is_whitelist_runtime_running()
 
     def _sync_whitelist_view(self, *, refresh: bool) -> None:
         self._start_snapshot_worker(refresh=refresh)
 
     def create_snapshot_worker(self, request_id: int, *, refresh: bool):
-        return self._controller.create_snapshot_load_worker(
+        return self._orchestra.create_whitelist_snapshot_load_worker(
             request_id,
             refresh=refresh,
             parent=self,
@@ -648,7 +648,7 @@ class OrchestraWhitelistPage(BasePage):
         domain: str = "",
         user_domains: list[str] | None = None,
     ):
-        return self._controller.create_action_worker(
+        return self._orchestra.create_whitelist_action_worker(
             request_id,
             action=action,
             domain=domain,
