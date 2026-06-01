@@ -582,6 +582,31 @@ class ProfileSetupUiGuardTests(unittest.TestCase):
 
         page._apply_list_file_editor_state.assert_called_once_with(state)
 
+    def test_pending_list_file_load_restarts_after_worker_signal(self) -> None:
+        from unittest.mock import Mock, patch
+
+        from profile.ui.profile_setup_page import ProfileSetupPageBase
+
+        page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        page._pending_list_file_load = True
+        page._request_list_file_editor_state = Mock()
+        callbacks = []
+
+        with patch(
+            "profile.ui.profile_setup_page.QTimer.singleShot",
+            side_effect=lambda _delay, callback: callbacks.append(callback),
+        ):
+            ProfileSetupPageBase._on_list_file_worker_finished(page, object())
+
+        page._request_list_file_editor_state.assert_not_called()
+        self.assertTrue(page._pending_list_file_load)
+        self.assertEqual(len(callbacks), 1)
+
+        callbacks[0]()
+
+        page._request_list_file_editor_state.assert_called_once_with()
+        self.assertFalse(page._pending_list_file_load)
+
     def test_list_file_validation_skips_duplicate_status_updates(self) -> None:
         from unittest.mock import Mock
 

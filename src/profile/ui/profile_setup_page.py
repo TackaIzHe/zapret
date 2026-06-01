@@ -922,6 +922,7 @@ class ProfileSetupPageBase(BasePage):
         self._list_file_load_runtime = OneShotWorkerRuntime()
         self._list_file_load_request_id = 0
         self._pending_list_file_load = False
+        self._list_file_load_start_scheduled = False
         self._list_file_state_apply_scheduled = False
         self._pending_list_file_state_apply = None
         self._list_file_save_runtime = OneShotWorkerRuntime()
@@ -1404,7 +1405,7 @@ class ProfileSetupPageBase(BasePage):
         if not self._editor_tab_built or not self._profile_key:
             return
         runtime = self._worker_runtime("_list_file_load_runtime")
-        if runtime.is_running():
+        if runtime.is_running() or self.__dict__.get("_list_file_load_start_scheduled", False):
             self._pending_list_file_load = True
             return
         if self._list_file_status_label is not None:
@@ -1459,8 +1460,25 @@ class ProfileSetupPageBase(BasePage):
 
     def _on_list_file_worker_finished(self, _worker) -> None:
         if self.__dict__.get("_pending_list_file_load"):
-            self._pending_list_file_load = False
-            self._request_list_file_editor_state()
+            self._schedule_pending_list_file_load_start()
+
+    def _schedule_pending_list_file_load_start(self) -> None:
+        if self.__dict__.get("_list_file_load_start_scheduled", False):
+            return
+        self._list_file_load_start_scheduled = True
+        try:
+            QTimer.singleShot(0, self._run_scheduled_list_file_load_start)
+        except Exception:
+            self._run_scheduled_list_file_load_start()
+
+    def _run_scheduled_list_file_load_start(self) -> None:
+        self._list_file_load_start_scheduled = False
+        if not self.__dict__.get("_pending_list_file_load"):
+            return
+        self._pending_list_file_load = False
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        self._request_list_file_editor_state()
 
     def _fill_range_combo(self, combo: CompactDisplayComboBox) -> None:
         combo.addItem("a — всегда", userData="a", compactText="a")
@@ -3433,6 +3451,7 @@ class ProfileSetupPageBase(BasePage):
         ):
             setattr(self, attr, None)
         self._list_file_state_apply_scheduled = False
+        self._list_file_load_start_scheduled = False
         self._list_file_validation_start_scheduled = False
         self._enabled_save_start_scheduled = False
         self._strategy_feedback_save_start_scheduled = False
