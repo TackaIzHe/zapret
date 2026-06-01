@@ -83,6 +83,47 @@ class ControlExternalOpenUrlQueueTests(unittest.TestCase):
         self.assertEqual(page._external_open_url_runtime.started, [worker])
         self.assertEqual(page._external_open_url_pending, [])
 
+    def test_external_open_url_request_waits_while_start_is_scheduled(self) -> None:
+        old_worker = object()
+        page = _Page()
+        page._cleanup_in_progress = False
+        page._external_open_url_runtime = _Runtime(running=False)
+        page._external_open_url_pending = []
+        page._external_open_url_start_scheduled = False
+        page.create_external_open_url_worker = Mock(return_value=old_worker)
+
+        callbacks = []
+        with patch(
+            "presets.ui.control.control_page_shared.QTimer.singleShot",
+            side_effect=lambda _delay, callback: callbacks.append(callback),
+        ):
+            _Page._schedule_external_open_url_worker_start(
+                page,
+                ("https://example.org/old", "Ошибка", "Не удалось открыть: {error}"),
+            )
+            _Page._request_external_open_url(
+                page,
+                "https://example.org/new",
+                error_title="Ошибка",
+                error_default="Не удалось открыть: {error}",
+            )
+
+        page.create_external_open_url_worker.assert_not_called()
+        self.assertEqual(len(callbacks), 1)
+        self.assertEqual(
+            page._external_open_url_pending,
+            [("https://example.org/new", "Ошибка", "Не удалось открыть: {error}")],
+        )
+
+        callbacks[0]()
+
+        page.create_external_open_url_worker.assert_called_once_with(0, url="https://example.org/old")
+        self.assertEqual(page._external_open_url_runtime.started, [old_worker])
+        self.assertEqual(
+            page._external_open_url_pending,
+            [("https://example.org/new", "Ошибка", "Не удалось открыть: {error}")],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

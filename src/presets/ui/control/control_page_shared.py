@@ -169,6 +169,7 @@ class ControlPageActionMixin:
             runtime = OneShotWorkerRuntime()
             self._external_open_url_runtime = runtime
             self._external_open_url_pending = []
+            self._external_open_url_start_scheduled = False
         elif self.__dict__.get("_external_open_url_pending") is None:
             self._external_open_url_pending = []
         return runtime
@@ -176,7 +177,7 @@ class ControlPageActionMixin:
     def _request_external_open_url(self, url: str, *, error_title: str, error_default: str) -> None:
         runtime = self._ensure_external_open_url_runtime()
         request = (str(url or "").strip(), str(error_title), str(error_default))
-        if runtime.is_running():
+        if runtime.is_running() or self.__dict__.get("_external_open_url_start_scheduled", False):
             self._external_open_url_pending.append(request)
             return
         self._start_external_open_url_worker(*request)
@@ -239,12 +240,17 @@ class ControlPageActionMixin:
 
     def _schedule_external_open_url_worker_start(self, request: tuple[str, str, str]) -> None:
         pending = tuple(request)
+        if self.__dict__.get("_external_open_url_start_scheduled", False):
+            self.__dict__.setdefault("_external_open_url_pending", []).append(pending)
+            return
+        self._external_open_url_start_scheduled = True
         try:
             QTimer.singleShot(0, lambda: self._run_scheduled_external_open_url_worker_start(pending))
         except Exception:
             self._run_scheduled_external_open_url_worker_start(pending)
 
     def _run_scheduled_external_open_url_worker_start(self, request: tuple[str, str, str]) -> None:
+        self._external_open_url_start_scheduled = False
         if bool(getattr(self, "_cleanup_in_progress", False)):
             return
         self._start_external_open_url_worker(*request)
@@ -256,6 +262,7 @@ class ControlPageActionMixin:
 
     def _stop_external_open_url_worker(self) -> None:
         self.__dict__.setdefault("_external_open_url_pending", []).clear()
+        self._external_open_url_start_scheduled = False
         runtime = self.__dict__.get("_external_open_url_runtime")
         if runtime is not None:
             runtime.stop(blocking=True, warning_prefix="External open url worker")
