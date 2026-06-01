@@ -429,7 +429,7 @@ class UserPresetsDependencyBoundaryTests(unittest.TestCase):
             ],
         )
 
-    def test_user_presets_folder_toggle_keeps_latest_pending_state(self) -> None:
+    def test_user_presets_folder_set_collapsed_keeps_latest_pending_state(self) -> None:
         from presets.ui.common.user_presets_page import UserPresetsPageBase
 
         page = UserPresetsPageBase.__new__(UserPresetsPageBase)
@@ -439,13 +439,13 @@ class UserPresetsDependencyBoundaryTests(unittest.TestCase):
 
         UserPresetsPageBase._request_preset_folder_action(
             page,
-            "toggle_collapsed",
+            "set_collapsed",
             folder_key="games",
             collapsed=True,
         )
         UserPresetsPageBase._request_preset_folder_action(
             page,
-            "toggle_collapsed",
+            "set_collapsed",
             folder_key="games",
             collapsed=False,
         )
@@ -455,7 +455,7 @@ class UserPresetsDependencyBoundaryTests(unittest.TestCase):
             page._preset_folder_action_pending,
             [
                 {
-                    "action": "toggle_collapsed",
+                    "action": "set_collapsed",
                     "folder_key": "games",
                     "name": "",
                     "direction": 0,
@@ -463,6 +463,64 @@ class UserPresetsDependencyBoundaryTests(unittest.TestCase):
                     "context_extra": {},
                 }
             ],
+        )
+
+    def test_user_presets_folder_toggle_fallback_keeps_order(self) -> None:
+        from presets.ui.common.user_presets_page import UserPresetsPageBase
+
+        page = UserPresetsPageBase.__new__(UserPresetsPageBase)
+        page._preset_folder_action_start_scheduled = True
+        page._preset_folder_action_pending = []
+        page._preset_folder_action_runtime = SimpleNamespace(is_running=Mock(return_value=False), start_qthread_worker=Mock())
+
+        UserPresetsPageBase._request_preset_folder_action(page, "toggle_collapsed", folder_key="games")
+        UserPresetsPageBase._request_preset_folder_action(page, "toggle_collapsed", folder_key="games")
+
+        page._preset_folder_action_runtime.start_qthread_worker.assert_not_called()
+        self.assertEqual(len(page._preset_folder_action_pending), 2)
+        self.assertEqual(
+            [item["action"] for item in page._preset_folder_action_pending],
+            ["toggle_collapsed", "toggle_collapsed"],
+        )
+
+    def test_user_presets_folder_click_requests_explicit_collapsed_state(self) -> None:
+        from presets.ui.common.user_presets_page import UserPresetsPageBase
+
+        class _Index:
+            def __init__(self, folder_key: str, collapsed: bool):
+                self._folder_key = folder_key
+                self._collapsed = collapsed
+
+            def isValid(self) -> bool:
+                return True
+
+            def data(self, role):
+                if role == _Model.FolderKeyRole:
+                    return self._folder_key
+                if role == _Model.CollapsedRole:
+                    return self._collapsed
+                return None
+
+        class _Model:
+            FolderKeyRole = 1
+            CollapsedRole = 2
+
+            def rowCount(self) -> int:
+                return 1
+
+            def index(self, row: int, column: int):
+                return _Index("games", True)
+
+        page = UserPresetsPageBase.__new__(UserPresetsPageBase)
+        page._presets_model = _Model()
+        page._request_preset_folder_action = Mock()
+
+        UserPresetsPageBase._on_toggle_folder(page, "games")
+
+        page._request_preset_folder_action.assert_called_once_with(
+            "set_collapsed",
+            folder_key="games",
+            collapsed=False,
         )
 
     def test_user_presets_runtime_actions_do_not_expose_mutating_preset_commands(self) -> None:

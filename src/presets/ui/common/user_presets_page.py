@@ -1064,7 +1064,32 @@ class UserPresetsPageBase(BasePage):
         )
 
     def _on_toggle_folder(self, folder_key: str) -> None:
-        self._request_preset_folder_action("toggle_collapsed", folder_key=folder_key)
+        is_collapsed = self._current_preset_folder_collapsed(folder_key)
+        if is_collapsed is None:
+            self._request_preset_folder_action("toggle_collapsed", folder_key=folder_key)
+            return
+        self._request_preset_folder_action("set_collapsed", folder_key=folder_key, collapsed=not is_collapsed)
+
+    def _current_preset_folder_collapsed(self, folder_key: str) -> bool | None:
+        key = str(folder_key or "").strip()
+        if not key:
+            return None
+        model = getattr(self, "_presets_model", None)
+        folder_key_role = getattr(type(model), "FolderKeyRole", None)
+        collapsed_role = getattr(type(model), "CollapsedRole", None)
+        if model is None or folder_key_role is None or collapsed_role is None:
+            return None
+        try:
+            row_count = int(model.rowCount())
+            for row in range(row_count):
+                index = model.index(row, 0)
+                if not index.isValid():
+                    continue
+                if str(index.data(folder_key_role) or "").strip() == key:
+                    return bool(index.data(collapsed_role))
+        except Exception:
+            return None
+        return None
 
     def _open_preset_subpage(self, name: str):
         self._open_preset_raw_editor_callback(name)
@@ -1173,12 +1198,12 @@ class UserPresetsPageBase(BasePage):
         action = str(payload.get("action") or "")
         folder_key = str(payload.get("folder_key") or "")
         pending = self.__dict__.setdefault("_preset_folder_action_pending", [])
-        if action == "toggle_collapsed" and folder_key:
+        if action == "set_collapsed" and folder_key:
             pending[:] = [
                 item
                 for item in pending
                 if not (
-                    str(item.get("action") or "") == "toggle_collapsed"
+                    str(item.get("action") or "") == "set_collapsed"
                     and str(item.get("folder_key") or "") == folder_key
                 )
             ]
