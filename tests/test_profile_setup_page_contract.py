@@ -3294,6 +3294,26 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         page._apply_payload.assert_called_once_with(payload)
         page._on_profile_changed_callback.assert_called_once_with("profile-2", "raw_profile", item)
 
+    def test_raw_profile_save_finish_ignores_result_when_new_save_is_pending(self) -> None:
+        payload = SimpleNamespace(item=SimpleNamespace(key="profile-2"))
+        page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        page._raw_profile_save_request_id = 7
+        page._profile_key = "profile-1"
+        page._pending_raw_profile_save = ("profile-1", "--new\n--lua-desync=split")
+        page.reload_current_profile = Mock()
+        page._schedule_profile_setup_payload_apply = Mock()
+        page._on_profile_changed_callback = Mock()
+        page.window = Mock(return_value=None)
+
+        with patch("profile.ui.profile_setup_page.InfoBar.success") as success:
+            ProfileSetupPageBase._on_raw_profile_save_finished(page, 7, "profile-2", payload)
+
+        self.assertEqual(page._profile_key, "profile-1")
+        page.reload_current_profile.assert_not_called()
+        page._schedule_profile_setup_payload_apply.assert_not_called()
+        page._on_profile_changed_callback.assert_not_called()
+        success.assert_not_called()
+
     def test_raw_profile_save_finish_skips_duplicate_payload_apply(self) -> None:
         item = SimpleNamespace(key="profile-1")
         payload = SimpleNamespace(item=item)
