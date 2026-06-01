@@ -86,6 +86,53 @@ class UserPresetStorageQueueTests(unittest.TestCase):
             ],
         )
 
+    def test_rating_action_queue_keeps_latest_rating_for_same_preset(self) -> None:
+        page = UserPresetsPageBase.__new__(UserPresetsPageBase)
+        page._preset_storage_action_runtime = _Runtime(running=True)
+        page._pending_preset_write_actions = []
+        page._pending_preset_storage_actions = []
+
+        UserPresetsPageBase._request_preset_storage_action(
+            page,
+            "rating",
+            name="Preset.txt",
+            display_name="Preset",
+            rating=3,
+        )
+        UserPresetsPageBase._request_preset_storage_action(
+            page,
+            "rating",
+            name="Preset.txt",
+            display_name="Preset",
+            rating=9,
+        )
+
+        self.assertEqual(
+            page._pending_preset_storage_actions,
+            [
+                {
+                    "action": "rating",
+                    "name": "Preset.txt",
+                    "display_name": "Preset",
+                    "rating": 9,
+                    "direction": 0,
+                    "cached_metadata": None,
+                    "source_kind": "",
+                    "source_id": "",
+                    "destination_kind": "",
+                    "destination_id": "",
+                    "destination_folder_key": "",
+                },
+            ],
+        )
+        self.assertEqual(
+            [
+                (operation["kind"], operation["action"], operation["name"], operation["rating"])
+                for operation in page._pending_preset_write_actions
+            ],
+            [("storage", "rating", "Preset.txt", 9)],
+        )
+
     def test_storage_action_worker_finished_starts_pending_action(self) -> None:
         page = UserPresetsPageBase.__new__(UserPresetsPageBase)
         old_worker = _Worker(running=False)

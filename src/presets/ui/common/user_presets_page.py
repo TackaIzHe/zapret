@@ -1410,6 +1410,27 @@ class UserPresetsPageBase(BasePage):
                 for pending in pending_operations
                 if str(pending.get("kind") or "") != "activate"
             ]
+        if operation["kind"] == "storage" and operation["action"] == "rating":
+            preset_name_to_replace = str(operation["name"] or "")
+            pending_operations = self.__dict__.setdefault("_pending_preset_write_actions", [])
+            pending_operations[:] = [
+                pending
+                for pending in pending_operations
+                if not (
+                    str(pending.get("kind") or "") == "storage"
+                    and str(pending.get("action") or "") == "rating"
+                    and str(pending.get("name") or "") == preset_name_to_replace
+                )
+            ]
+            pending_storage = self.__dict__.setdefault("_pending_preset_storage_actions", [])
+            pending_storage[:] = [
+                pending
+                for pending in pending_storage
+                if not (
+                    str(pending.get("action") or "") == "rating"
+                    and str(pending.get("name") or "") == preset_name_to_replace
+                )
+            ]
         self.__dict__.setdefault("_pending_preset_write_actions", []).append(operation)
         if operation["kind"] == "storage":
             self.__dict__.setdefault("_pending_preset_storage_actions", []).append(
