@@ -464,7 +464,10 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
             runtime.additional_settings_dirty = True
             self.run_when_page_ready(self._apply_pending_mode_refresh_if_ready)
             return
-        if runtime.additional_settings_load_runtime.is_running():
+        if (
+            runtime.additional_settings_load_runtime.is_running()
+            or bool(getattr(runtime, "additional_settings_load_start_scheduled", False))
+        ):
             runtime.additional_settings_load_pending = True
             runtime.additional_settings_dirty = True
             return
@@ -497,14 +500,23 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
         runtime.additional_settings_load_pending = False
 
     def _schedule_additional_settings_reload_start(self) -> None:
+        runtime = self._refresh_runtime
+        if bool(getattr(runtime, "additional_settings_load_start_scheduled", False)):
+            runtime.additional_settings_load_pending = True
+            runtime.additional_settings_dirty = True
+            return
+        runtime.additional_settings_load_start_scheduled = True
         try:
             QTimer.singleShot(0, self._run_scheduled_additional_settings_reload_start)
         except Exception:
             self._run_scheduled_additional_settings_reload_start()
 
     def _run_scheduled_additional_settings_reload_start(self) -> None:
+        runtime = self._refresh_runtime
+        runtime.additional_settings_load_start_scheduled = False
         if self.__dict__.get("_cleanup_in_progress", False):
             return
+        runtime.additional_settings_load_pending = False
         self._schedule_additional_settings_reload(force=True)
 
     def _on_discord_restart_changed(self, enabled: bool) -> None:

@@ -287,7 +287,10 @@ class ControlPageActionMixin:
 
     def _request_program_settings_load(self) -> None:
         runtime = self._refresh_runtime
-        if runtime.program_settings_load_runtime.is_running():
+        if (
+            runtime.program_settings_load_runtime.is_running()
+            or bool(getattr(runtime, "program_settings_load_start_scheduled", False))
+        ):
             runtime.program_settings_load_pending = True
             return
 
@@ -336,14 +339,22 @@ class ControlPageActionMixin:
         runtime.program_settings_load_pending = False
 
     def _schedule_program_settings_load_start(self) -> None:
+        runtime = self._refresh_runtime
+        if bool(getattr(runtime, "program_settings_load_start_scheduled", False)):
+            runtime.program_settings_load_pending = True
+            return
+        runtime.program_settings_load_start_scheduled = True
         try:
             QTimer.singleShot(0, self._run_scheduled_program_settings_load_start)
         except Exception:
             self._run_scheduled_program_settings_load_start()
 
     def _run_scheduled_program_settings_load_start(self) -> None:
+        runtime = self._refresh_runtime
+        runtime.program_settings_load_start_scheduled = False
         if bool(getattr(self, "_cleanup_in_progress", False)):
             return
+        runtime.program_settings_load_pending = False
         self._request_program_settings_load()
 
     def _request_program_settings_save(self, action: str, enabled: bool) -> None:
@@ -508,6 +519,7 @@ def cleanup_control_page_subscriptions(owner) -> None:
             runtime.top_summary_worker = None
 
         runtime.program_settings_load_pending = False
+        runtime.program_settings_load_start_scheduled = False
         runtime.program_settings_load_runtime.stop(warning_prefix="Program settings load worker")
         runtime.program_settings_load_runtime.cancel()
 

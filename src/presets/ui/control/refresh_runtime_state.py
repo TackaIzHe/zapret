@@ -7,6 +7,7 @@ class ModeControlRefreshRuntime:
     def __init__(self) -> None:
         self.additional_settings_load_runtime = OneShotWorkerRuntime()
         self.additional_settings_load_pending = False
+        self.additional_settings_load_start_scheduled = False
         self.additional_settings_save_runtime = OneShotWorkerRuntime()
         self.additional_settings_save_pending: list[tuple[str, bool, str]] = []
         self.additional_settings_save_start_scheduled = False
@@ -18,6 +19,7 @@ class ModeControlRefreshRuntime:
         self.top_summary_request_id = 0
         self.program_settings_load_runtime = OneShotWorkerRuntime()
         self.program_settings_load_pending = False
+        self.program_settings_load_start_scheduled = False
         self.program_settings_save_runtime = OneShotWorkerRuntime()
         self.program_settings_save_pending: list[tuple[str, bool]] = []
         self.program_settings_save_start_scheduled = False
@@ -55,7 +57,9 @@ class ModeControlRefreshRuntime:
         return True
 
     def stop_workers(self, *, log_fn=None) -> None:
+        self.additional_settings_load_start_scheduled = False
         self.additional_settings_save_start_scheduled = False
+        self.program_settings_load_start_scheduled = False
         self.program_settings_save_start_scheduled = False
         for runtime, label in (
             (self.additional_settings_load_runtime, "control additional settings load worker"),

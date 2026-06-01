@@ -33,6 +33,7 @@ class ControlProgramSettingsLoadQueueTests(unittest.TestCase):
         page._refresh_runtime = SimpleNamespace(
             program_settings_load_runtime=load_runtime,
             program_settings_load_pending=False,
+            program_settings_load_start_scheduled=False,
         )
         page.create_program_settings_load_worker = Mock(return_value=object())
         return page, load_runtime
@@ -63,6 +64,25 @@ class ControlProgramSettingsLoadQueueTests(unittest.TestCase):
         callbacks[0]()
 
         self.assertEqual(load_runtime.started, 1)
+
+    def test_program_settings_load_waits_while_restart_is_scheduled(self) -> None:
+        page, load_runtime = self._make_page(running=False)
+        page._refresh_runtime.program_settings_load_pending = True
+        callbacks = []
+
+        with patch(
+            "presets.ui.control.control_page_shared.QTimer.singleShot",
+            side_effect=lambda _delay, callback: callbacks.append(callback),
+        ):
+            page._on_program_settings_load_worker_finished(object())
+
+        self.assertTrue(page._refresh_runtime.program_settings_load_start_scheduled)
+
+        page._request_program_settings_load()
+
+        self.assertEqual(load_runtime.started, 0)
+        self.assertTrue(page._refresh_runtime.program_settings_load_pending)
+        self.assertEqual(len(callbacks), 1)
 
 
 if __name__ == "__main__":

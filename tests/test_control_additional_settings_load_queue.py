@@ -22,6 +22,7 @@ def _make_refresh_runtime(*, running: bool):
     runtime = SimpleNamespace(
         additional_settings_load_runtime=load_runtime,
         additional_settings_load_pending=False,
+        additional_settings_load_start_scheduled=False,
         additional_settings_dirty=False,
         additional_settings_request_id=0,
         next_additional_settings_request_id=Mock(return_value=1),
@@ -109,6 +110,54 @@ class ControlAdditionalSettingsLoadQueueTests(unittest.TestCase):
         callbacks[0]()
 
         self.assertEqual(load_runtime.started, 1)
+
+    def test_zapret1_additional_settings_reload_waits_while_restart_is_scheduled(self) -> None:
+        from presets.ui.control.zapret1.page import Zapret1ModeControlPage
+
+        runtime, load_runtime = _make_refresh_runtime(running=False)
+        runtime.additional_settings_load_pending = True
+        runtime.additional_settings_dirty = True
+        page = _make_page(Zapret1ModeControlPage, runtime)
+
+        callbacks = []
+        with patch(
+            "presets.ui.control.zapret1.page.QTimer.singleShot",
+            side_effect=lambda _delay, callback: callbacks.append(callback),
+        ):
+            Zapret1ModeControlPage._on_additional_settings_load_worker_finished(page, object())
+
+        self.assertTrue(runtime.additional_settings_load_start_scheduled)
+
+        Zapret1ModeControlPage._schedule_additional_settings_reload(page, force=True)
+
+        self.assertEqual(load_runtime.started, 0)
+        self.assertTrue(runtime.additional_settings_load_pending)
+        self.assertTrue(runtime.additional_settings_dirty)
+        self.assertEqual(len(callbacks), 1)
+
+    def test_zapret2_additional_settings_reload_waits_while_restart_is_scheduled(self) -> None:
+        from presets.ui.control.zapret2.page import Zapret2ModeControlPage
+
+        runtime, load_runtime = _make_refresh_runtime(running=False)
+        runtime.additional_settings_load_pending = True
+        runtime.additional_settings_dirty = True
+        page = _make_page(Zapret2ModeControlPage, runtime)
+
+        callbacks = []
+        with patch(
+            "presets.ui.control.zapret2.page.QTimer.singleShot",
+            side_effect=lambda _delay, callback: callbacks.append(callback),
+        ):
+            Zapret2ModeControlPage._on_additional_settings_load_worker_finished(page, object())
+
+        self.assertTrue(runtime.additional_settings_load_start_scheduled)
+
+        Zapret2ModeControlPage._schedule_additional_settings_reload(page, force=True)
+
+        self.assertEqual(load_runtime.started, 0)
+        self.assertTrue(runtime.additional_settings_load_pending)
+        self.assertTrue(runtime.additional_settings_dirty)
+        self.assertEqual(len(callbacks), 1)
 
 
 if __name__ == "__main__":
