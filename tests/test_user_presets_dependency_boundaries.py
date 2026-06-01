@@ -247,6 +247,32 @@ class UserPresetsDependencyBoundaryTests(unittest.TestCase):
         worker.start.assert_called_once()
         self.assertEqual(page._preset_link_action_pending, ["new_configs"])
 
+    def test_user_presets_link_scheduled_start_queues_next_action(self) -> None:
+        from presets.ui.common.user_presets_page import UserPresetsPageBase
+
+        page = UserPresetsPageBase.__new__(UserPresetsPageBase)
+        page._cleanup_in_progress = False
+        page._preset_link_action_start_scheduled = False
+        page._preset_link_action_pending = []
+        page._request_preset_link_action = Mock()
+        callbacks = []
+
+        with patch(
+            "presets.ui.common.user_presets_page.QTimer.singleShot",
+            side_effect=lambda _delay, callback: callbacks.append(callback),
+        ):
+            UserPresetsPageBase._schedule_preset_link_action_start(page, "info")
+            UserPresetsPageBase._schedule_preset_link_action_start(page, "new_configs")
+
+        self.assertEqual(len(callbacks), 1)
+        self.assertEqual(page._preset_link_action_pending, ["new_configs"])
+        page._request_preset_link_action.assert_not_called()
+
+        callbacks[0]()
+
+        page._request_preset_link_action.assert_called_once_with("info")
+        self.assertEqual(page._preset_link_action_pending, ["new_configs"])
+
     def test_user_presets_open_folder_pending_restarts_later_after_worker_finished(self) -> None:
         from presets.ui.common.user_presets_page import UserPresetsPageBase
 
@@ -320,6 +346,55 @@ class UserPresetsDependencyBoundaryTests(unittest.TestCase):
             collapsed=False,
             context_extra={"source": "menu"},
         )
+
+    def test_user_presets_folder_scheduled_start_queues_next_action(self) -> None:
+        from presets.ui.common.user_presets_page import UserPresetsPageBase
+
+        first = {
+            "action": "move",
+            "folder_key": "favorites",
+            "name": "First.txt",
+            "direction": 1,
+            "collapsed": False,
+            "context_extra": {"source": "menu"},
+        }
+        second = {
+            "action": "toggle",
+            "folder_key": "favorites",
+            "name": "",
+            "direction": 0,
+            "collapsed": True,
+            "context_extra": {"source": "toolbar"},
+        }
+        page = UserPresetsPageBase.__new__(UserPresetsPageBase)
+        page._cleanup_in_progress = False
+        page._preset_folder_action_start_scheduled = False
+        page._preset_folder_action_pending = []
+        page._request_preset_folder_action = Mock()
+        callbacks = []
+
+        with patch(
+            "presets.ui.common.user_presets_page.QTimer.singleShot",
+            side_effect=lambda _delay, callback: callbacks.append(callback),
+        ):
+            UserPresetsPageBase._schedule_preset_folder_action_start(page, first)
+            UserPresetsPageBase._schedule_preset_folder_action_start(page, second)
+
+        self.assertEqual(len(callbacks), 1)
+        self.assertEqual(page._preset_folder_action_pending, [second])
+        page._request_preset_folder_action.assert_not_called()
+
+        callbacks[0]()
+
+        page._request_preset_folder_action.assert_called_once_with(
+            "move",
+            folder_key="favorites",
+            name="First.txt",
+            direction=1,
+            collapsed=False,
+            context_extra={"source": "menu"},
+        )
+        self.assertEqual(page._preset_folder_action_pending, [second])
 
     def test_user_presets_folder_action_waits_while_restart_is_scheduled(self) -> None:
         from presets.ui.common.user_presets_page import UserPresetsPageBase

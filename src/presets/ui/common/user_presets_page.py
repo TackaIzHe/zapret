@@ -1200,6 +1200,11 @@ class UserPresetsPageBase(BasePage):
 
     def _schedule_preset_folder_action_start(self, pending: dict[str, object]) -> None:
         queued = dict(pending or {})
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        if self.__dict__.get("_preset_folder_action_start_scheduled", False):
+            self.__dict__.setdefault("_preset_folder_action_pending", []).append(queued)
+            return
         self._preset_folder_action_start_scheduled = True
         try:
             QTimer.singleShot(0, lambda: self._run_scheduled_preset_folder_action_start(queued))
@@ -2187,6 +2192,12 @@ class UserPresetsPageBase(BasePage):
 
     def _schedule_preset_link_action_start(self, action: str) -> None:
         clean_action = str(action or "").strip()
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        if self.__dict__.get("_preset_link_action_start_scheduled", False):
+            if clean_action:
+                self.__dict__.setdefault("_preset_link_action_pending", []).append(clean_action)
+            return
         self._preset_link_action_start_scheduled = True
         try:
             QTimer.singleShot(0, lambda: self._run_scheduled_preset_link_action_start(clean_action))
