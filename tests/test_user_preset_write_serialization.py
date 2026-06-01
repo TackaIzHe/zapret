@@ -79,6 +79,57 @@ class UserPresetWriteSerializationTests(unittest.TestCase):
             ],
         )
 
+    def test_storage_action_waits_while_folder_action_worker_runs(self) -> None:
+        page = UserPresetsPageBase.__new__(UserPresetsPageBase)
+        page._preset_folder_action_runtime = _Runtime(running=True)
+        page._preset_storage_action_runtime = _Runtime(running=False)
+        page._pending_preset_write_actions = []
+        page._pending_preset_storage_actions = []
+        page._preset_storage_action_request_id = 0
+        page.create_preset_storage_action_worker = Mock(return_value=_Worker())
+
+        UserPresetsPageBase._request_preset_storage_action(
+            page,
+            "rating",
+            name="Preset.txt",
+            display_name="Preset",
+            rating=7,
+        )
+
+        page.create_preset_storage_action_worker.assert_not_called()
+        self.assertEqual(page._pending_preset_write_actions[0]["kind"], "storage")
+        self.assertEqual(page._pending_preset_storage_actions[0]["action"], "rating")
+
+    def test_folder_action_waits_while_storage_action_worker_runs(self) -> None:
+        page = UserPresetsPageBase.__new__(UserPresetsPageBase)
+        page._preset_storage_action_runtime = _Runtime(running=True)
+        page._preset_folder_action_runtime = _Runtime(running=False)
+        page._preset_folder_action_pending = []
+        page._preset_folder_action_request_id = 0
+        page.create_preset_folder_action_worker = Mock(return_value=_Worker())
+
+        UserPresetsPageBase._request_preset_folder_action(
+            page,
+            "set_collapsed",
+            folder_key="games",
+            collapsed=True,
+        )
+
+        page.create_preset_folder_action_worker.assert_not_called()
+        self.assertEqual(
+            page._preset_folder_action_pending,
+            [
+                {
+                    "action": "set_collapsed",
+                    "folder_key": "games",
+                    "name": "",
+                    "direction": 0,
+                    "collapsed": True,
+                    "context_extra": {},
+                }
+            ],
+        )
+
     def test_storage_action_waits_while_next_write_start_is_scheduled(self) -> None:
         page = UserPresetsPageBase.__new__(UserPresetsPageBase)
         page._preset_write_action_start_scheduled = True
@@ -350,6 +401,122 @@ class UserPresetWriteSerializationTests(unittest.TestCase):
             1,
             action="import",
             file_path="C:/Temp/Preset.txt",
+        )
+
+    def test_folder_action_restarts_later_after_storage_worker_finished(self) -> None:
+        page = UserPresetsPageBase.__new__(UserPresetsPageBase)
+        page._preset_activate_runtime = _Runtime(running=False)
+        page._preset_item_action_runtime = _Runtime(running=False)
+        page._preset_bulk_action_runtime = _Runtime(running=False)
+        page._preset_edit_action_runtime = _Runtime(running=False)
+        page._preset_storage_action_runtime = _Runtime(running=False)
+        page._preset_folder_action_runtime = _Runtime(running=False)
+        page._pending_preset_write_actions = []
+        page._preset_folder_action_pending = [
+            {
+                "action": "set_collapsed",
+                "folder_key": "games",
+                "name": "",
+                "direction": 0,
+                "collapsed": True,
+                "context_extra": {},
+            }
+        ]
+        page._preset_folder_action_request_id = 0
+        page.create_preset_folder_action_worker = Mock(return_value=_Worker())
+        callbacks = []
+
+        with patch(
+            "presets.ui.common.user_presets_page.QTimer.singleShot",
+            side_effect=lambda _delay, callback: callbacks.append(callback),
+        ):
+            UserPresetsPageBase._on_preset_storage_action_worker_finished(page, object())
+
+        page.create_preset_folder_action_worker.assert_not_called()
+        self.assertEqual(len(callbacks), 1)
+
+        callbacks[0]()
+
+        page.create_preset_folder_action_worker.assert_called_once_with(
+            1,
+            action="set_collapsed",
+            folder_key="games",
+            name="",
+            direction=0,
+            collapsed=True,
+            context_extra={},
+        )
+
+    def test_storage_action_restarts_later_after_folder_worker_finished(self) -> None:
+        page = UserPresetsPageBase.__new__(UserPresetsPageBase)
+        page._preset_activate_runtime = _Runtime(running=False)
+        page._preset_item_action_runtime = _Runtime(running=False)
+        page._preset_bulk_action_runtime = _Runtime(running=False)
+        page._preset_edit_action_runtime = _Runtime(running=False)
+        page._preset_storage_action_runtime = _Runtime(running=False)
+        page._preset_folder_action_runtime = _Runtime(running=False)
+        page._pending_preset_write_actions = [
+            {
+                "kind": "storage",
+                "action": "rating",
+                "name": "Default.txt",
+                "display_name": "Default",
+                "rating": 5,
+                "direction": 0,
+                "cached_metadata": None,
+                "source_kind": "",
+                "source_id": "",
+                "destination_kind": "",
+                "destination_id": "",
+                "destination_folder_key": "",
+                "file_name": "",
+                "file_path": "",
+            }
+        ]
+        page._pending_preset_storage_actions = [
+            {
+                "action": "rating",
+                "name": "Default.txt",
+                "display_name": "Default",
+                "rating": 5,
+                "direction": 0,
+                "cached_metadata": None,
+                "source_kind": "",
+                "source_id": "",
+                "destination_kind": "",
+                "destination_id": "",
+                "destination_folder_key": "",
+            }
+        ]
+        page._preset_folder_action_pending = []
+        page._preset_storage_action_request_id = 0
+        page.create_preset_storage_action_worker = Mock(return_value=_Worker())
+        callbacks = []
+
+        with patch(
+            "presets.ui.common.user_presets_page.QTimer.singleShot",
+            side_effect=lambda _delay, callback: callbacks.append(callback),
+        ):
+            UserPresetsPageBase._on_preset_folder_action_worker_finished(page, object())
+
+        page.create_preset_storage_action_worker.assert_not_called()
+        self.assertEqual(len(callbacks), 1)
+
+        callbacks[0]()
+
+        page.create_preset_storage_action_worker.assert_called_once_with(
+            1,
+            action="rating",
+            name="Default.txt",
+            display_name="Default",
+            rating=5,
+            direction=0,
+            cached_metadata=None,
+            source_kind="",
+            source_id="",
+            destination_kind="",
+            destination_id="",
+            destination_folder_key="",
         )
 
     def test_legacy_pending_edit_action_restarts_later_after_worker_finished(self) -> None:

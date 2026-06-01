@@ -1449,6 +1449,7 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         request_source = inspect.getsource(UserPresetsPageBase._request_preset_folder_action)
         action_finished_source = inspect.getsource(UserPresetsPageBase._on_preset_folder_action_finished)
         finished_source = inspect.getsource(UserPresetsPageBase._on_preset_folder_action_worker_finished)
+        next_write_source = inspect.getsource(UserPresetsPageBase._start_next_preset_write_action)
         show_source = inspect.getsource(UserPresetsPageBase._show_folder_menu)
 
         for source in (toggle_source, menu_source):
@@ -1487,7 +1488,9 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
             "_preset_folder_action_pending",
             inspect.getsource(UserPresetsPageBase._queue_preset_folder_action),
         )
-        self.assertIn("_preset_folder_action_pending.pop(0)", finished_source)
+        self.assertIn("_start_next_preset_write_action", finished_source)
+        self.assertIn("_preset_folder_action_pending", next_write_source)
+        self.assertIn("pending_folder_actions.pop(0)", next_write_source)
         self.assertIn("update_cached_folder_state", action_finished_source)
         self.assertIn("show_menu", action_finished_source)
         self.assertIn("create_preset_folder_action_worker", request_source)

@@ -1168,7 +1168,7 @@ class UserPresetsPageBase(BasePage):
             "collapsed": bool(collapsed),
             "context_extra": dict(context_extra or {}),
         }
-        if runtime.is_running() or self.__dict__.get("_preset_folder_action_start_scheduled", False):
+        if self._preset_write_action_running():
             self._queue_preset_folder_action(payload)
             return
         self._preset_folder_action_request_id = int(
@@ -1236,9 +1236,7 @@ class UserPresetsPageBase(BasePage):
         log(f"{self.__class__.__name__}: не удалось выполнить действие папки preset ({action}): {error}", "ERROR")
 
     def _on_preset_folder_action_worker_finished(self, worker) -> None:
-        if self._preset_folder_action_pending:
-            pending = self._preset_folder_action_pending.pop(0)
-            self._schedule_preset_folder_action_start(pending)
+        self._start_next_preset_write_action()
 
     def _schedule_preset_folder_action_start(self, pending: dict[str, object]) -> None:
         queued = dict(pending or {})
@@ -1383,12 +1381,15 @@ class UserPresetsPageBase(BasePage):
     def _preset_write_action_running(self) -> bool:
         if self.__dict__.get("_preset_write_action_start_scheduled", False):
             return True
+        if self.__dict__.get("_preset_folder_action_start_scheduled", False):
+            return True
         for attr in (
             "_preset_activate_runtime",
             "_preset_item_action_runtime",
             "_preset_bulk_action_runtime",
             "_preset_edit_action_runtime",
             "_preset_storage_action_runtime",
+            "_preset_folder_action_runtime",
         ):
             if self._worker_runtime(attr).is_running():
                 return True
@@ -1641,6 +1642,11 @@ class UserPresetsPageBase(BasePage):
 
     def _start_next_preset_write_action(self) -> bool:
         if self._preset_write_action_running():
+            return True
+        pending_folder_actions = self.__dict__.setdefault("_preset_folder_action_pending", [])
+        if pending_folder_actions:
+            pending_folder = pending_folder_actions.pop(0)
+            self._schedule_preset_folder_action_start(pending_folder)
             return True
         pending = self._pop_next_preset_write_action()
         if not pending:
