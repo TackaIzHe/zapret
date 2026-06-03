@@ -145,6 +145,22 @@ class AppearanceWorkerQueueTests(unittest.TestCase):
 
         page._emit_accent_update.assert_not_called()
 
+    def test_appearance_save_error_ignored_when_same_action_is_pending(self) -> None:
+        from ui.pages.appearance_page import AppearancePage
+
+        page = AppearancePage.__new__(AppearancePage)
+        page._cleanup_in_progress = False
+        page._appearance_save_runtime = Mock()
+        page._appearance_save_runtime.is_current.return_value = True
+        page._appearance_save_pending = [
+            {"action": "accent_color", "value": "#222222", "context_extra": {}}
+        ]
+
+        with patch("ui.pages.appearance_page.log") as log_mock:
+            AppearancePage._on_appearance_save_failed(page, 7, "accent_color", "old error", {})
+
+        log_mock.assert_not_called()
+
     def test_rkn_background_options_pending_restarts_after_event_loop_turn(self) -> None:
         import ui.pages.appearance_page as appearance_page
         from ui.pages.appearance_page import AppearancePage

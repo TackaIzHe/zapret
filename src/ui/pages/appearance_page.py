@@ -864,6 +864,8 @@ class AppearancePage(BasePage):
             cleanup_in_progress=self._cleanup_in_progress,
         ):
             return
+        if self._has_pending_appearance_save_action(action):
+            return
         log(f"Ошибка сохранения настройки внешнего вида ({action}): {error}", "WARNING")
 
     def _on_appearance_save_worker_finished(self, _worker) -> None:
