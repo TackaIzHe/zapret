@@ -206,6 +206,17 @@ class TelegramProxyWorkerQueueTests(unittest.TestCase):
         page._start_auto_deeplink_worker.assert_called_once_with()
         self.assertFalse(page._auto_deeplink_pending)
 
+    def test_stale_auto_deeplink_worker_finished_does_not_restart_pending_check(self) -> None:
+        page = TelegramProxyPage.__new__(TelegramProxyPage)
+        page._cleanup_in_progress = False
+        page._auto_deeplink_runtime = SimpleNamespace(request_id=3)
+        page._auto_deeplink_pending = True
+        page._schedule_auto_deeplink_worker_start = Mock()
+
+        TelegramProxyPage._on_auto_deeplink_worker_finished(page, SimpleNamespace(_request_id=2))
+
+        page._schedule_auto_deeplink_worker_start.assert_not_called()
+
     def test_scheduled_auto_deeplink_start_coalesces_duplicate_request(self) -> None:
         page = TelegramProxyPage.__new__(TelegramProxyPage)
         page._cleanup_in_progress = False
@@ -257,6 +268,17 @@ class TelegramProxyWorkerQueueTests(unittest.TestCase):
 
         page._restart_if_running.assert_called_once_with()
         self.assertFalse(page._restart_stop_pending)
+
+    def test_stale_log_line_worker_finished_does_not_restart_pending_append(self) -> None:
+        page = TelegramProxyPage.__new__(TelegramProxyPage)
+        page._cleanup_in_progress = False
+        page._log_line_runtime = SimpleNamespace(request_id=5)
+        page._log_line_pending = ["new"]
+        page._schedule_log_line_worker_start = Mock()
+
+        TelegramProxyPage._on_log_line_worker_finished(page, SimpleNamespace(_request_id=4))
+
+        page._schedule_log_line_worker_start.assert_not_called()
 
     def test_proxy_start_request_queues_while_start_worker_runs(self) -> None:
         page = TelegramProxyPage.__new__(TelegramProxyPage)
@@ -323,6 +345,28 @@ class TelegramProxyWorkerQueueTests(unittest.TestCase):
 
         page._start_proxy_stop_worker.assert_called_once_with()
         self.assertFalse(page._proxy_stop_pending)
+
+    def test_stale_settings_save_worker_finished_does_not_restart_pending_save(self) -> None:
+        page = TelegramProxyPage.__new__(TelegramProxyPage)
+        page._cleanup_in_progress = False
+        page._settings_save_runtime = SimpleNamespace(request_id=7)
+        page._settings_save_pending = [{"action": "host", "host": "new"}]
+        page._schedule_settings_save_worker_start = Mock()
+
+        TelegramProxyPage._on_settings_save_worker_finished(page, SimpleNamespace(_request_id=6))
+
+        page._schedule_settings_save_worker_start.assert_not_called()
+
+    def test_stale_ensure_hosts_worker_finished_does_not_restart_pending_ensure(self) -> None:
+        page = TelegramProxyPage.__new__(TelegramProxyPage)
+        page._cleanup_in_progress = False
+        page._ensure_hosts_runtime = SimpleNamespace(request_id=9)
+        page._ensure_hosts_pending = True
+        page._schedule_ensure_hosts_worker_start = Mock()
+
+        TelegramProxyPage._on_ensure_hosts_worker_finished(page, SimpleNamespace(_request_id=8))
+
+        page._schedule_ensure_hosts_worker_start.assert_not_called()
 
 
 if __name__ == "__main__":

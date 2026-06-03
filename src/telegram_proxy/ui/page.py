@@ -648,6 +648,8 @@ class TelegramProxyPage(BasePage):
         log(f"Telegram Proxy auto deeplink check failed: {error}", "WARNING")
 
     def _on_auto_deeplink_worker_finished(self, _worker) -> None:
+        if not self._is_current_worker_finish(self.__dict__.get("_auto_deeplink_runtime"), _worker):
+            return
         if self.__dict__.get("_auto_deeplink_pending", False) and not self.__dict__.get(
             "_cleanup_in_progress",
             False,
@@ -743,6 +745,8 @@ class TelegramProxyPage(BasePage):
         log(f"Telegram Proxy log append failed: {error}", "WARNING")
 
     def _on_log_line_worker_finished(self, _worker) -> None:
+        if not self._is_current_worker_finish(self.__dict__.get("_log_line_runtime"), _worker):
+            return
         if self._log_line_pending and not self._cleanup_in_progress:
             pending = self._log_line_pending.pop(0)
             self._schedule_log_line_worker_start(pending)
@@ -1045,6 +1049,8 @@ class TelegramProxyPage(BasePage):
         log(f"{self.__class__.__name__}: не удалось сохранить настройку Telegram Proxy ({action}): {error}", "WARNING")
 
     def _on_settings_save_worker_finished(self, _worker) -> None:
+        if not self._is_current_worker_finish(self.__dict__.get("_settings_save_runtime"), _worker):
+            return
         if self._settings_save_pending and not self._cleanup_in_progress:
             pending = self._settings_save_pending.pop(0)
             self._schedule_settings_save_worker_start(dict(pending or {}))
@@ -1602,8 +1608,21 @@ class TelegramProxyPage(BasePage):
             log(plan.log_line, "WARNING")
 
     def _on_ensure_hosts_worker_finished(self, _worker) -> None:
+        if not self._is_current_worker_finish(self.__dict__.get("_ensure_hosts_runtime"), _worker):
+            return
         if self.__dict__.get("_ensure_hosts_pending", False) and not self.__dict__.get("_cleanup_in_progress", False):
             self._schedule_ensure_hosts_worker_start()
+
+    def _is_current_worker_finish(self, runtime, worker) -> bool:
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return False
+        request_id = getattr(worker, "_request_id", None)
+        if request_id is None:
+            return True
+        try:
+            return int(request_id) == int(getattr(runtime, "request_id", -1))
+        except (TypeError, ValueError):
+            return False
 
     def _schedule_ensure_hosts_worker_start(self) -> None:
         if self.__dict__.get("_cleanup_in_progress", False):
