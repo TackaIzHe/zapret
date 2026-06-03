@@ -243,6 +243,72 @@ class UserPresetsMetadataLoadQueueTests(unittest.TestCase):
 
         self.assertEqual(service._cached_presets_metadata, {"Default.txt": metadata})
 
+    def test_single_metadata_result_ignored_when_same_file_is_pending(self) -> None:
+        from presets.user_presets_runtime_service import UserPresetsRuntimeAdapter, UserPresetsRuntimeService
+
+        page = SimpleNamespace(isVisible=lambda: True)
+        adapter = UserPresetsRuntimeAdapter(
+            bulk_reset_running=lambda: False,
+            read_single_metadata=lambda _name: None,
+            selected_source_file_name=lambda: "",
+            presets_dir=lambda: None,
+            cached_metadata=lambda: {},
+            load_all_metadata=lambda: {},
+            load_folder_state=lambda: {},
+            build_rows_plan=lambda _metadata, _folder_state: object(),
+            apply_rows_plan=lambda _plan, _started_at: None,
+        )
+        service = UserPresetsRuntimeService()
+        service.attach_page(page, adapter)
+        service._single_metadata_request_id = 3
+        service._single_metadata_pending = ["Default.txt"]
+        service._cached_presets_metadata = {"Default.txt": {"display_name": "Old"}}
+        service._schedule_watched_preset_files_sync = Mock()
+        service.try_apply_single_preset_metadata_update = Mock()
+        service.refresh_presets_view_from_cache = Mock()
+
+        service._on_single_metadata_loaded(
+            3,
+            "Default.txt",
+            ("Default.txt", {"display_name": "New"}),
+            page,
+        )
+
+        self.assertEqual(service._cached_presets_metadata, {"Default.txt": {"display_name": "Old"}})
+        service._schedule_watched_preset_files_sync.assert_not_called()
+        service.try_apply_single_preset_metadata_update.assert_not_called()
+        service.refresh_presets_view_from_cache.assert_not_called()
+
+    def test_single_metadata_error_ignored_when_same_file_is_pending(self) -> None:
+        import presets.user_presets_runtime_service as runtime_service
+        from presets.user_presets_runtime_service import UserPresetsRuntimeAdapter, UserPresetsRuntimeService
+
+        page = SimpleNamespace(isVisible=lambda: True)
+        adapter = UserPresetsRuntimeAdapter(
+            bulk_reset_running=lambda: False,
+            read_single_metadata=lambda _name: None,
+            selected_source_file_name=lambda: "",
+            presets_dir=lambda: None,
+            cached_metadata=lambda: {},
+            load_all_metadata=lambda: {},
+            load_folder_state=lambda: {},
+            build_rows_plan=lambda _metadata, _folder_state: object(),
+            apply_rows_plan=lambda _plan, _started_at: None,
+        )
+        service = UserPresetsRuntimeService()
+        service.attach_page(page, adapter)
+        service._single_metadata_request_id = 3
+        service._single_metadata_pending = ["Default.txt"]
+        service._ui_dirty = False
+        service.schedule_presets_reload = Mock()
+
+        with patch.object(runtime_service, "log") as log_mock:
+            service._on_single_metadata_failed(3, "Default.txt", "stale error", page)
+
+        self.assertFalse(service._ui_dirty)
+        service.schedule_presets_reload.assert_not_called()
+        log_mock.assert_not_called()
+
     def test_metadata_loaded_defers_watcher_sync_after_rows_request(self) -> None:
         from presets.user_presets_runtime_service import UserPresetsRuntimeAdapter, UserPresetsRuntimeService
 

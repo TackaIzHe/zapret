@@ -291,6 +291,8 @@ class UserPresetsRuntimeService:
     def _on_single_metadata_loaded(self, request_id: int, file_name: str, refreshed, page=None) -> None:
         if request_id != self._single_metadata_request_id:
             return
+        if str(file_name or "").strip() in self.__dict__.get("_single_metadata_pending", []):
+            return
         page = self._resolve_page(page)
         adapter = self._resolve_adapter()
         if refreshed is None:
@@ -321,6 +323,8 @@ class UserPresetsRuntimeService:
 
     def _on_single_metadata_failed(self, request_id: int, file_name: str, error: str, page=None) -> None:
         if request_id != self._single_metadata_request_id:
+            return
+        if str(file_name or "").strip() in self.__dict__.get("_single_metadata_pending", []):
             return
         page = self._resolve_page(page)
         self._ui_dirty = True
