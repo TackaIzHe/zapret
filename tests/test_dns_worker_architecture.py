@@ -144,6 +144,19 @@ class DnsWorkerArchitectureTests(unittest.TestCase):
 
         page._start_next_dns_mutation_action.assert_not_called()
 
+    def test_stale_dns_apply_worker_object_finished_does_not_restart_pending_action(self) -> None:
+        old_worker = object()
+        current_worker = object()
+        page = NetworkPage.__new__(NetworkPage)
+        page._cleanup_in_progress = False
+        page._dns_apply_runtime = SimpleNamespace(request_id=3, worker=current_worker)
+        page._dns_apply_pending = [{"action": "auto", "adapters": ["Ethernet"]}]
+        page._start_next_dns_mutation_action = Mock()
+
+        NetworkPage._on_dns_apply_worker_finished(page, old_worker)
+
+        page._start_next_dns_mutation_action.assert_not_called()
+
     def test_dns_apply_scheduled_start_uses_latest_pending_request(self) -> None:
         class _Runtime:
             def is_running(self) -> bool:
@@ -412,6 +425,19 @@ class DnsWorkerArchitectureTests(unittest.TestCase):
 
         page._start_next_dns_mutation_action.assert_not_called()
 
+    def test_stale_force_dns_worker_object_finished_does_not_restart_pending_action(self) -> None:
+        old_worker = object()
+        current_worker = object()
+        page = NetworkPage.__new__(NetworkPage)
+        page._cleanup_in_progress = False
+        page._force_dns_action_runtime = SimpleNamespace(request_id=5, worker=current_worker)
+        page._force_dns_action_pending = [{"action": "toggle", "enabled": True}]
+        page._start_next_dns_mutation_action = Mock()
+
+        NetworkPage._on_force_dns_action_worker_finished(page, old_worker)
+
+        page._start_next_dns_mutation_action.assert_not_called()
+
     def test_force_dns_scheduled_toggle_uses_latest_pending_value(self) -> None:
         class _Runtime:
             def is_running(self) -> bool:
@@ -506,6 +532,20 @@ class DnsWorkerArchitectureTests(unittest.TestCase):
 
         page._schedule_dns_flush_cache_worker_start.assert_not_called()
 
+    def test_stale_dns_flush_cache_worker_object_finished_does_not_restart_pending_flush(self) -> None:
+        old_worker = object()
+        current_worker = object()
+        page = NetworkPage.__new__(NetworkPage)
+        page._cleanup_in_progress = False
+        page._dns_flush_cache_runtime = SimpleNamespace(request_id=8, worker=current_worker)
+        page._dns_flush_cache_pending = True
+        page._schedule_dns_flush_cache_worker_start = Mock()
+
+        NetworkPage._on_dns_flush_cache_worker_finished(page, old_worker)
+
+        page._schedule_dns_flush_cache_worker_start.assert_not_called()
+        self.assertTrue(page._dns_flush_cache_pending)
+
     def test_dns_flush_cache_scheduled_start_queues_next_flush(self) -> None:
         page = NetworkPage.__new__(NetworkPage)
         page._cleanup_in_progress = False
@@ -593,6 +633,20 @@ class DnsWorkerArchitectureTests(unittest.TestCase):
 
         page._schedule_page_load_worker_start.assert_not_called()
 
+    def test_stale_network_page_load_worker_object_finished_does_not_restart_load(self) -> None:
+        old_worker = object()
+        current_worker = object()
+        page = NetworkPage.__new__(NetworkPage)
+        page._cleanup_in_progress = False
+        page._page_load_runtime = SimpleNamespace(request_id=11, worker=current_worker)
+        page._page_load_pending = True
+        page._schedule_page_load_worker_start = Mock()
+
+        NetworkPage._on_page_load_worker_finished(page, old_worker)
+
+        page._schedule_page_load_worker_start.assert_not_called()
+        self.assertTrue(page._page_load_pending)
+
     def test_isp_warning_plan_queues_while_worker_runs(self) -> None:
         page = NetworkPage.__new__(NetworkPage)
         page._isp_warning_runtime = SimpleNamespace(is_running=Mock(return_value=True), start_qthread_worker=Mock())
@@ -633,6 +687,20 @@ class DnsWorkerArchitectureTests(unittest.TestCase):
         NetworkPage._on_isp_dns_warning_worker_finished(page, SimpleNamespace(_request_id=13))
 
         page._schedule_isp_warning_worker_start.assert_not_called()
+
+    def test_stale_isp_warning_worker_object_finished_does_not_restart_warning_plan(self) -> None:
+        old_worker = object()
+        current_worker = object()
+        page = NetworkPage.__new__(NetworkPage)
+        page._cleanup_in_progress = False
+        page._isp_warning_runtime = SimpleNamespace(request_id=14, worker=current_worker)
+        page._isp_warning_pending = True
+        page._schedule_isp_warning_worker_start = Mock()
+
+        NetworkPage._on_isp_dns_warning_worker_finished(page, old_worker)
+
+        page._schedule_isp_warning_worker_start.assert_not_called()
+        self.assertTrue(page._isp_warning_pending)
 
     def test_connectivity_test_queues_while_worker_runs(self) -> None:
         page = NetworkPage.__new__(NetworkPage)
@@ -677,6 +745,20 @@ class DnsWorkerArchitectureTests(unittest.TestCase):
         NetworkPage._on_connectivity_test_worker_finished(page, SimpleNamespace(_request_id=16))
 
         page._schedule_connectivity_test_start.assert_not_called()
+
+    def test_stale_connectivity_worker_object_finished_does_not_restart_test(self) -> None:
+        old_worker = object()
+        current_worker = object()
+        page = NetworkPage.__new__(NetworkPage)
+        page._cleanup_in_progress = False
+        page._connectivity_test_runtime = SimpleNamespace(request_id=17, worker=current_worker)
+        page._connectivity_test_pending = True
+        page._schedule_connectivity_test_start = Mock()
+
+        NetworkPage._on_connectivity_test_worker_finished(page, old_worker)
+
+        page._schedule_connectivity_test_start.assert_not_called()
+        self.assertTrue(page._connectivity_test_pending)
 
     def test_dns_check_page_uses_one_shot_runtime_for_check_save_and_quick(self) -> None:
         page_source = inspect.getsource(DNSCheckPage)
