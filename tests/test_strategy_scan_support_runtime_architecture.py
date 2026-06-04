@@ -105,6 +105,26 @@ class StrategyScanSupportRuntimeArchitectureTests(unittest.TestCase):
         page._start_support_prepare_worker.assert_called_once_with(pending)
         self.assertIsNone(page._support_prepare_pending)
 
+    def test_stale_support_prepare_runtime_finish_does_not_restart_pending_prepare(self) -> None:
+        pending = {
+            "run_log_file": "support.log",
+            "target": "new.example",
+            "protocol_label": "TCP",
+            "mode_label": "Full",
+            "scan_protocol": "tcp",
+        }
+        page = StrategyScanPage.__new__(StrategyScanPage)
+        page._support_prepare_runtime = SimpleNamespace(request_id=2)
+        page._support_prepare_pending = pending
+        page._schedule_support_prepare_worker_start = Mock()
+        page._prepare_support_btn = SimpleNamespace(setEnabled=Mock())
+
+        StrategyScanPage._on_support_prepare_runtime_finished(page, SimpleNamespace(_request_id=1))
+
+        page._schedule_support_prepare_worker_start.assert_not_called()
+        page._prepare_support_btn.setEnabled.assert_not_called()
+        self.assertEqual(page._support_prepare_pending, pending)
+
 
 if __name__ == "__main__":
     unittest.main()

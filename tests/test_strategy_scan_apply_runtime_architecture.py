@@ -80,6 +80,21 @@ class StrategyScanApplyRuntimeArchitectureTests(unittest.TestCase):
         page._start_strategy_apply_worker.assert_called_once_with(pending)
         self.assertIsNone(page._strategy_apply_pending)
 
+    def test_stale_strategy_apply_runtime_finish_does_not_restart_pending_apply(self) -> None:
+        pending = {
+            "strategy_args": "--dpi-desync=split",
+            "strategy_name": "new",
+        }
+        page = StrategyScanPage.__new__(StrategyScanPage)
+        page._strategy_apply_runtime = SimpleNamespace(request_id=2)
+        page._strategy_apply_pending = pending
+        page._schedule_strategy_apply_worker_start = Mock()
+
+        StrategyScanPage._on_strategy_apply_runtime_finished(page, SimpleNamespace(_request_id=1))
+
+        page._schedule_strategy_apply_worker_start.assert_not_called()
+        self.assertEqual(page._strategy_apply_pending, pending)
+
     def test_strategy_apply_result_ignored_when_new_apply_is_pending(self) -> None:
         import blockcheck.ui.strategy_scan_page as strategy_scan_page
 

@@ -61,6 +61,23 @@ class StrategyScanResumeSaveRuntimeArchitectureTests(unittest.TestCase):
 
         page._start_strategy_scan_resume_save_worker.assert_called_once_with(pending)
 
+    def test_stale_resume_save_runtime_finish_does_not_restart_pending_save(self) -> None:
+        page = StrategyScanPage.__new__(StrategyScanPage)
+        pending = {
+            "scan_target": "example.org",
+            "scan_protocol": "tcp_https",
+            "udp_games_scope": "all",
+            "next_index": 2,
+        }
+        page._strategy_scan_resume_save_runtime = SimpleNamespace(request_id=2)
+        page._strategy_scan_resume_save_pending = pending
+        page._schedule_strategy_scan_resume_save_worker_start = Mock()
+
+        StrategyScanPage._on_strategy_scan_resume_save_runtime_finished(page, SimpleNamespace(_request_id=1))
+
+        page._schedule_strategy_scan_resume_save_worker_start.assert_not_called()
+        self.assertEqual(page._strategy_scan_resume_save_pending, pending)
+
 
 if __name__ == "__main__":
     unittest.main()
