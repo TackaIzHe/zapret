@@ -923,6 +923,7 @@ class ProfileSetupPageBase(BasePage):
         self._setup_load_start_scheduled = False
         self._list_file_load_runtime = OneShotWorkerRuntime()
         self._list_file_load_request_id = 0
+        self._list_file_load_runtime_worker = None
         self._pending_list_file_load = False
         self._list_file_load_start_scheduled = False
         self._list_file_state_apply_scheduled = False
@@ -935,6 +936,7 @@ class ProfileSetupPageBase(BasePage):
         self._list_file_save_start_scheduled = False
         self._list_file_validation_runtime = OneShotWorkerRuntime()
         self._list_file_validation_request_id = 0
+        self._list_file_validation_runtime_worker = None
         self._pending_list_file_validation = None
         self._list_file_validation_start_scheduled = False
         self._settings_save_runtime = OneShotWorkerRuntime()
@@ -1429,14 +1431,14 @@ class ProfileSetupPageBase(BasePage):
             return
         runtime = self._worker_runtime("_list_file_load_runtime")
         if runtime.is_running() or self.__dict__.get("_list_file_load_start_scheduled", False):
-            self._list_file_load_request_id += 1
+            self._list_file_load_request_id = int(self.__dict__.get("_list_file_load_request_id", 0) or 0) + 1
             self._pending_list_file_load = True
             return
         if self._list_file_status_label is not None:
             set_widget_text_if_changed(self._list_file_status_label, "Загрузка файла списка...")
-        self._list_file_load_request_id += 1
+        self._list_file_load_request_id = int(self.__dict__.get("_list_file_load_request_id", 0) or 0) + 1
         request_id = self._list_file_load_request_id
-        runtime.start_qthread_worker(
+        _request_id, worker = runtime.start_qthread_worker(
             worker_factory=lambda _runtime_request_id: self.create_profile_list_file_load_worker(
                 request_id,
                 self._profile_key,
@@ -1448,6 +1450,7 @@ class ProfileSetupPageBase(BasePage):
             on_failed=self._on_list_file_editor_state_failed,
             on_finished=self._on_list_file_worker_finished,
         )
+        self._list_file_load_runtime_worker = worker
 
     def _on_list_file_editor_state_loaded(self, request_id: int, state) -> None:
         if request_id != self._list_file_load_request_id:
@@ -1483,6 +1486,8 @@ class ProfileSetupPageBase(BasePage):
             )
 
     def _on_list_file_worker_finished(self, _worker) -> None:
+        if not self._accept_current_profile_setup_worker_finished("_list_file_load_runtime_worker", _worker):
+            return
         if self.__dict__.get("_pending_list_file_load"):
             self._schedule_pending_list_file_load_start()
 
@@ -2468,7 +2473,7 @@ class ProfileSetupPageBase(BasePage):
         runtime = self._worker_runtime("_list_file_validation_runtime")
         self._list_file_validation_request_id = int(getattr(self, "_list_file_validation_request_id", 0) or 0) + 1
         request_id = self._list_file_validation_request_id
-        runtime.start_qthread_worker(
+        _request_id, worker = runtime.start_qthread_worker(
             worker_factory=lambda _runtime_request_id: self.create_profile_list_file_validation_worker(
                 request_id,
                 kind=str(request.get("kind") or ""),
@@ -2480,6 +2485,7 @@ class ProfileSetupPageBase(BasePage):
             on_finished=self._on_list_file_validation_worker_finished,
             loaded_signal_name="validated",
         )
+        self._list_file_validation_runtime_worker = worker
 
     def _on_list_file_validation_finished(
         self,
@@ -2537,6 +2543,8 @@ class ProfileSetupPageBase(BasePage):
             set_widget_text_if_changed(self._list_file_status_label, "Ошибка проверки списка.")
 
     def _on_list_file_validation_worker_finished(self, _worker) -> None:
+        if not self._accept_current_profile_setup_worker_finished("_list_file_validation_runtime_worker", _worker):
+            return
         pending = self.__dict__.get("_pending_list_file_validation")
         if pending:
             self._schedule_pending_list_file_validation_start()
@@ -3623,7 +3631,9 @@ class ProfileSetupPageBase(BasePage):
             runtime.cancel()
         self._strategy_apply_runtime_strategy_id = ""
         self._enabled_save_runtime_enabled = None
+        self._list_file_load_runtime_worker = None
         self._list_file_save_runtime_worker = None
+        self._list_file_validation_runtime_worker = None
         self._settings_save_runtime_worker = None
         self._raw_profile_save_runtime_worker = None
         self._enabled_save_runtime_worker = None

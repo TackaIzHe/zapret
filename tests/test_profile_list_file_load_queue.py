@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from profile.ui.profile_setup_page import ProfileSetupPageBase
 from ui.one_shot_worker_runtime import OneShotWorkerRuntime
@@ -48,6 +48,7 @@ class ProfileListFileLoadQueueTests(unittest.TestCase):
         page._list_file_load_runtime = OneShotWorkerRuntime()
         page._list_file_load_runtime.worker = old_worker
         page._list_file_load_runtime.request_id = 0
+        page._list_file_load_runtime_worker = old_worker
         page._pending_list_file_load = True
         page._list_file_load_request_id = 0
         page._list_file_status_label = None
@@ -55,7 +56,11 @@ class ProfileListFileLoadQueueTests(unittest.TestCase):
         page._current_filter_value = Mock(return_value="example.com")
         page.create_profile_list_file_load_worker = Mock(return_value=next_worker)
 
-        ProfileSetupPageBase._on_list_file_worker_finished(page, old_worker)
+        with patch(
+            "profile.ui.profile_setup_page.QTimer.singleShot",
+            side_effect=lambda _delay, callback: callback(),
+        ):
+            ProfileSetupPageBase._on_list_file_worker_finished(page, old_worker)
 
         page.create_profile_list_file_load_worker.assert_called_once_with(
             1,

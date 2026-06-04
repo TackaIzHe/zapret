@@ -607,6 +607,31 @@ class ProfileSetupUiGuardTests(unittest.TestCase):
         page._request_list_file_editor_state.assert_called_once_with()
         self.assertFalse(page._pending_list_file_load)
 
+    def test_stale_list_file_load_worker_finished_does_not_restart_pending_load(self) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import Mock, patch
+
+        from profile.ui.profile_setup_page import ProfileSetupPageBase
+
+        page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        current_worker = SimpleNamespace()
+        old_worker = SimpleNamespace()
+        page._list_file_load_runtime_worker = current_worker
+        page._pending_list_file_load = True
+        page._request_list_file_editor_state = Mock()
+        callbacks = []
+
+        with patch(
+            "profile.ui.profile_setup_page.QTimer.singleShot",
+            side_effect=lambda _delay, callback: callbacks.append(callback),
+        ):
+            ProfileSetupPageBase._on_list_file_worker_finished(page, old_worker)
+
+        page._request_list_file_editor_state.assert_not_called()
+        self.assertTrue(page._pending_list_file_load)
+        self.assertEqual(callbacks, [])
+        self.assertIs(page._list_file_load_runtime_worker, current_worker)
+
     def test_list_file_validation_skips_duplicate_status_updates(self) -> None:
         from unittest.mock import Mock
 
@@ -772,6 +797,32 @@ class ProfileSetupUiGuardTests(unittest.TestCase):
 
         page._start_list_file_validation_worker.assert_called_once_with(pending)
         self.assertIsNone(page._pending_list_file_validation)
+
+    def test_stale_list_file_validation_worker_finished_does_not_restart_pending_validation(self) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import Mock, patch
+
+        from profile.ui.profile_setup_page import ProfileSetupPageBase
+
+        page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        current_worker = SimpleNamespace()
+        old_worker = SimpleNamespace()
+        pending = {"kind": "hostlist", "text": "next.example"}
+        page._list_file_validation_runtime_worker = current_worker
+        page._pending_list_file_validation = pending
+        page._start_list_file_validation_worker = Mock()
+        callbacks = []
+
+        with patch(
+            "profile.ui.profile_setup_page.QTimer.singleShot",
+            side_effect=lambda _delay, callback: callbacks.append(callback),
+        ):
+            ProfileSetupPageBase._on_list_file_validation_worker_finished(page, old_worker)
+
+        page._start_list_file_validation_worker.assert_not_called()
+        self.assertEqual(page._pending_list_file_validation, pending)
+        self.assertEqual(callbacks, [])
+        self.assertIs(page._list_file_validation_runtime_worker, current_worker)
 
     def test_list_file_save_uses_cached_text_snapshot(self) -> None:
         from unittest.mock import Mock
