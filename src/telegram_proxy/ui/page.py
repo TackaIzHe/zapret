@@ -838,6 +838,8 @@ class TelegramProxyPage(BasePage):
             self._append_log_line(f"Failed to open log file: {message}")
 
     def _on_open_log_file_worker_finished(self, _worker) -> None:
+        if not self._is_current_worker_finish(self.__dict__.get("_open_log_file_runtime"), _worker):
+            return
         pending_paths = self.__dict__.setdefault("_open_log_file_pending", [])
         pending = pending_paths.pop(0) if pending_paths else ""
         if pending and not self._cleanup_in_progress:
@@ -910,6 +912,8 @@ class TelegramProxyPage(BasePage):
         self._start_proxy()
 
     def _on_restart_stop_worker_finished(self, _worker) -> None:
+        if not self._is_current_worker_finish(self.__dict__.get("_restart_stop_runtime"), _worker):
+            return
         if self.__dict__.get("_restart_stop_pending", False) and not self.__dict__.get(
             "_cleanup_in_progress",
             False,
@@ -1124,6 +1128,8 @@ class TelegramProxyPage(BasePage):
         )
 
     def _on_proxy_start_worker_finished(self, _worker) -> None:
+        if not self._is_current_worker_finish(self.__dict__.get("_proxy_start_runtime"), _worker):
+            return
         if self.__dict__.get("_proxy_start_pending", False) and not self.__dict__.get(
             "_cleanup_in_progress",
             False,
@@ -1178,6 +1184,8 @@ class TelegramProxyPage(BasePage):
         )
 
     def _on_relay_check_worker_finished(self, _worker) -> None:
+        if not self._is_current_worker_finish(self.__dict__.get("_relay_check_runtime"), _worker):
+            return
         if self.__dict__.get("_relay_check_pending", False):
             self._schedule_relay_check_worker_start()
 
@@ -1248,6 +1256,8 @@ class TelegramProxyPage(BasePage):
         self._request_settings_save("proxy_enabled", enabled=False)
 
     def _on_proxy_stop_worker_finished(self, _worker) -> None:
+        if not self._is_current_worker_finish(self.__dict__.get("_proxy_stop_runtime"), _worker):
+            return
         if self.__dict__.get("_proxy_stop_pending", False) and not self.__dict__.get(
             "_cleanup_in_progress",
             False,
@@ -1517,6 +1527,8 @@ class TelegramProxyPage(BasePage):
             self._append_log_line(f"Failed to open link: {message}")
 
     def _on_external_link_worker_finished(self, _worker) -> None:
+        if not self._is_current_worker_finish(self.__dict__.get("_external_link_runtime"), _worker):
+            return
         pending_links = self.__dict__.setdefault("_external_link_pending", [])
         pending = pending_links.pop(0) if pending_links else None
         if pending and not self._cleanup_in_progress:
@@ -1618,6 +1630,9 @@ class TelegramProxyPage(BasePage):
             return False
         request_id = getattr(worker, "_request_id", None)
         if request_id is None:
+            current_worker = getattr(runtime, "worker", None)
+            if current_worker is not None:
+                return worker is current_worker
             return True
         try:
             return int(request_id) == int(getattr(runtime, "request_id", -1))

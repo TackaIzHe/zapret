@@ -49,6 +49,19 @@ class TelegramProxyWorkerQueueTests(unittest.TestCase):
         page._start_open_log_file_worker.assert_called_once_with("old.log")
         self.assertEqual(page._open_log_file_pending, ["new.log"])
 
+    def test_stale_open_log_file_worker_finished_does_not_restart_pending_open(self) -> None:
+        page = TelegramProxyPage.__new__(TelegramProxyPage)
+        page._cleanup_in_progress = False
+        current_worker = SimpleNamespace()
+        page._open_log_file_runtime = SimpleNamespace(worker=current_worker)
+        page._open_log_file_pending = ["next.log"]
+        page._schedule_open_log_file_worker_start = Mock()
+
+        TelegramProxyPage._on_open_log_file_worker_finished(page, SimpleNamespace())
+
+        page._schedule_open_log_file_worker_start.assert_not_called()
+        self.assertEqual(page._open_log_file_pending, ["next.log"])
+
     def test_scheduled_settings_save_start_queues_next_payload(self) -> None:
         page = TelegramProxyPage.__new__(TelegramProxyPage)
         page._cleanup_in_progress = False
@@ -154,6 +167,20 @@ class TelegramProxyWorkerQueueTests(unittest.TestCase):
             error_prefix="old error",
         )
         self.assertEqual(page._external_link_pending, [new_payload])
+
+    def test_stale_external_link_worker_finished_does_not_restart_pending_open(self) -> None:
+        page = TelegramProxyPage.__new__(TelegramProxyPage)
+        page._cleanup_in_progress = False
+        current_worker = SimpleNamespace()
+        pending = {"url": "https://new.example", "success_log": "new", "error_prefix": "new error"}
+        page._external_link_runtime = SimpleNamespace(worker=current_worker)
+        page._external_link_pending = [pending]
+        page._schedule_external_link_worker_start = Mock()
+
+        TelegramProxyPage._on_external_link_worker_finished(page, SimpleNamespace())
+
+        page._schedule_external_link_worker_start.assert_not_called()
+        self.assertEqual(page._external_link_pending, [pending])
 
     def test_scheduled_ensure_hosts_start_coalesces_duplicate_request(self) -> None:
         page = TelegramProxyPage.__new__(TelegramProxyPage)
@@ -269,6 +296,19 @@ class TelegramProxyWorkerQueueTests(unittest.TestCase):
         page._restart_if_running.assert_called_once_with()
         self.assertFalse(page._restart_stop_pending)
 
+    def test_stale_restart_stop_worker_finished_does_not_restart_pending_stop(self) -> None:
+        page = TelegramProxyPage.__new__(TelegramProxyPage)
+        page._cleanup_in_progress = False
+        current_worker = SimpleNamespace()
+        page._restart_stop_runtime = SimpleNamespace(worker=current_worker)
+        page._restart_stop_pending = True
+        page._schedule_restart_stop_worker_start = Mock()
+
+        TelegramProxyPage._on_restart_stop_worker_finished(page, SimpleNamespace())
+
+        page._schedule_restart_stop_worker_start.assert_not_called()
+        self.assertTrue(page._restart_stop_pending)
+
     def test_stale_log_line_worker_finished_does_not_restart_pending_append(self) -> None:
         page = TelegramProxyPage.__new__(TelegramProxyPage)
         page._cleanup_in_progress = False
@@ -313,6 +353,32 @@ class TelegramProxyWorkerQueueTests(unittest.TestCase):
         page._start_proxy_worker.assert_called_once_with()
         self.assertFalse(page._proxy_start_pending)
 
+    def test_stale_proxy_start_worker_finished_does_not_restart_pending_start(self) -> None:
+        page = TelegramProxyPage.__new__(TelegramProxyPage)
+        page._cleanup_in_progress = False
+        current_worker = SimpleNamespace()
+        page._proxy_start_runtime = SimpleNamespace(worker=current_worker)
+        page._proxy_start_pending = True
+        page._schedule_proxy_start_worker_start = Mock()
+
+        TelegramProxyPage._on_proxy_start_worker_finished(page, SimpleNamespace())
+
+        page._schedule_proxy_start_worker_start.assert_not_called()
+        self.assertTrue(page._proxy_start_pending)
+
+    def test_stale_relay_check_worker_finished_does_not_restart_pending_check(self) -> None:
+        page = TelegramProxyPage.__new__(TelegramProxyPage)
+        page._cleanup_in_progress = False
+        current_worker = SimpleNamespace()
+        page._relay_check_runtime = SimpleNamespace(worker=current_worker)
+        page._relay_check_pending = True
+        page._schedule_relay_check_worker_start = Mock()
+
+        TelegramProxyPage._on_relay_check_worker_finished(page, SimpleNamespace())
+
+        page._schedule_relay_check_worker_start.assert_not_called()
+        self.assertTrue(page._relay_check_pending)
+
     def test_proxy_stop_request_queues_while_stop_worker_runs(self) -> None:
         page = TelegramProxyPage.__new__(TelegramProxyPage)
         page._cleanup_in_progress = False
@@ -345,6 +411,19 @@ class TelegramProxyWorkerQueueTests(unittest.TestCase):
 
         page._start_proxy_stop_worker.assert_called_once_with()
         self.assertFalse(page._proxy_stop_pending)
+
+    def test_stale_proxy_stop_worker_finished_does_not_restart_pending_stop(self) -> None:
+        page = TelegramProxyPage.__new__(TelegramProxyPage)
+        page._cleanup_in_progress = False
+        current_worker = SimpleNamespace()
+        page._proxy_stop_runtime = SimpleNamespace(worker=current_worker)
+        page._proxy_stop_pending = True
+        page._schedule_proxy_stop_worker_start = Mock()
+
+        TelegramProxyPage._on_proxy_stop_worker_finished(page, SimpleNamespace())
+
+        page._schedule_proxy_stop_worker_start.assert_not_called()
+        self.assertTrue(page._proxy_stop_pending)
 
     def test_stale_settings_save_worker_finished_does_not_restart_pending_save(self) -> None:
         page = TelegramProxyPage.__new__(TelegramProxyPage)

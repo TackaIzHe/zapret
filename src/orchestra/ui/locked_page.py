@@ -463,6 +463,8 @@ class OrchestraLockedPage(BasePage):
         self._set_refresh_loading(False)
 
     def _on_snapshot_worker_finished(self, worker) -> None:
+        if not self._is_current_worker_finish(self.__dict__.get("_snapshot_load_runtime"), worker):
+            return
         if self._snapshot_load_runtime.worker is worker:
             self._snapshot_load_runtime.worker = None
         pending = bool(self.__dict__.get("_snapshot_load_pending", False))
@@ -588,11 +590,27 @@ class OrchestraLockedPage(BasePage):
         log(f"Не удалось выполнить действие залоченных стратегий ({action}): {error}", "WARNING")
 
     def _on_managed_action_worker_finished(self, worker) -> None:
+        if not self._is_current_worker_finish(self.__dict__.get("_managed_action_runtime"), worker):
+            return
         if self._managed_action_runtime.worker is worker:
             self._managed_action_runtime.worker = None
         if self._managed_action_pending and not self._cleanup_in_progress:
             pending = self._managed_action_pending.pop(0)
             self._schedule_managed_action_start(pending)
+
+    def _is_current_worker_finish(self, runtime, worker) -> bool:
+        request_id = getattr(worker, "_request_id", None)
+        if request_id is None:
+            current_worker = getattr(runtime, "worker", None)
+            if current_worker is not None:
+                return worker is current_worker
+            return True
+        if runtime is None:
+            return False
+        try:
+            return int(request_id) == int(getattr(runtime, "request_id", -1))
+        except (TypeError, ValueError):
+            return False
 
     def _schedule_managed_action_start(self, payload: tuple[str, dict]) -> None:
         if self.__dict__.get("_cleanup_in_progress", False):
