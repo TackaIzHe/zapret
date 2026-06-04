@@ -418,7 +418,9 @@ class StrategyScanPage(BasePage):
             return
         logger.warning("Failed to load quick targets: %s", error)
 
-    def _on_quick_targets_worker_finished(self, _worker) -> None:
+    def _on_quick_targets_worker_finished(self, worker) -> None:
+        if not self._is_current_worker_finish(self.__dict__.get("_quick_targets_runtime"), worker):
+            return
         if self.__dict__.get("_cleanup_in_progress", False):
             return
         if self.__dict__.get("_quick_targets_pending"):
@@ -792,7 +794,9 @@ class StrategyScanPage(BasePage):
             )
         )
 
-    def _on_strategy_scan_finalize_worker_finished(self, _worker) -> None:
+    def _on_strategy_scan_finalize_worker_finished(self, worker) -> None:
+        if not self._is_current_worker_finish(self.__dict__.get("_strategy_scan_finalize_runtime"), worker):
+            return
         if self.__dict__.get("_cleanup_in_progress", False):
             return
         if self.__dict__.get("_strategy_scan_finalize_pending") is not None:
@@ -815,6 +819,20 @@ class StrategyScanPage(BasePage):
         if pending is None:
             return
         self._request_strategy_scan_finalize(pending)
+
+    def _is_current_worker_finish(self, runtime, worker) -> bool:
+        if runtime is None:
+            return True
+        request_id = getattr(worker, "_request_id", None)
+        if request_id is not None:
+            try:
+                return int(request_id) == int(getattr(runtime, "request_id", request_id))
+            except (TypeError, ValueError):
+                return False
+        current_worker = getattr(runtime, "worker", None)
+        if current_worker is not None:
+            return worker is current_worker
+        return True
 
     # ------------------------------------------------------------------
     # Apply strategy
