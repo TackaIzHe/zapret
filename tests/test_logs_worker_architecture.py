@@ -65,6 +65,23 @@ class LogsWorkerArchitectureTests(unittest.TestCase):
         page._request_open_logs_folder.assert_not_called()
         self.assertTrue(page._open_folder_pending)
 
+    def test_stale_open_folder_worker_object_finished_does_not_restart_pending_open(self) -> None:
+        old_worker = object()
+        current_worker = object()
+        page = logs_page.LogsPage.__new__(logs_page.LogsPage)
+        page._cleanup_in_progress = False
+        page._open_folder_runtime = SimpleNamespace(request_id=2, worker=current_worker)
+        page._open_folder_pending = True
+        page._request_open_logs_folder = Mock()
+        single_shot = Mock()
+
+        with patch.object(logs_page, "QTimer", SimpleNamespace(singleShot=single_shot)):
+            logs_page.LogsPage._on_open_logs_folder_worker_finished(page, old_worker)
+
+        single_shot.assert_not_called()
+        page._request_open_logs_folder.assert_not_called()
+        self.assertTrue(page._open_folder_pending)
+
     def test_open_folder_scheduled_start_is_not_duplicated(self) -> None:
         page = logs_page.LogsPage.__new__(logs_page.LogsPage)
         page._cleanup_in_progress = False
@@ -134,6 +151,23 @@ class LogsWorkerArchitectureTests(unittest.TestCase):
 
         with patch.object(logs_page, "QTimer", SimpleNamespace(singleShot=single_shot)):
             logs_page.LogsPage._on_support_prepare_worker_finished(page, SimpleNamespace(_request_id=1))
+
+        single_shot.assert_not_called()
+        page._request_support_prepare.assert_not_called()
+        self.assertTrue(page._support_prepare_pending)
+
+    def test_stale_support_prepare_worker_object_finished_does_not_restart_pending_prepare(self) -> None:
+        old_worker = object()
+        current_worker = object()
+        page = logs_page.LogsPage.__new__(logs_page.LogsPage)
+        page._cleanup_in_progress = False
+        page._support_prepare_runtime = SimpleNamespace(request_id=2, worker=current_worker)
+        page._support_prepare_pending = True
+        page._request_support_prepare = Mock()
+        single_shot = Mock()
+
+        with patch.object(logs_page, "QTimer", SimpleNamespace(singleShot=single_shot)):
+            logs_page.LogsPage._on_support_prepare_worker_finished(page, old_worker)
 
         single_shot.assert_not_called()
         page._request_support_prepare.assert_not_called()
