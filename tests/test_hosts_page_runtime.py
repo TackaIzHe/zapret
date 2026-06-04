@@ -131,6 +131,23 @@ class HostsPageRuntimeTests(unittest.TestCase):
         page._request_user_selection_save.assert_not_called()
         self.assertEqual(page._selection_save_pending, {"service": "profile"})
 
+    def test_stale_user_selection_save_worker_object_finished_does_not_restart_pending_save(self) -> None:
+        import hosts.ui.page as hosts_page
+        from hosts.ui.page import HostsPage
+
+        page = HostsPage.__new__(HostsPage)
+        page._cleanup_in_progress = False
+        page._selection_save_runtime = SimpleNamespace(worker=object())
+        page._selection_save_pending = {"service": "profile"}
+        page._request_user_selection_save = Mock()
+
+        with patch.object(hosts_page, "QTimer", SimpleNamespace(singleShot=Mock()), create=True) as timer_mock:
+            HostsPage._on_user_selection_save_worker_finished(page, object())
+
+        timer_mock.singleShot.assert_not_called()
+        page._request_user_selection_save.assert_not_called()
+        self.assertEqual(page._selection_save_pending, {"service": "profile"})
+
     def test_user_selection_save_request_waits_while_restart_is_scheduled(self) -> None:
         from hosts.ui.page import HostsPage
 
