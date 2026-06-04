@@ -87,6 +87,7 @@ class StatusMessageContractTests(unittest.TestCase):
         window = Window()
         window._open_folder_pending = True
         window._open_folder_start_scheduled = False
+        window._open_folder_runtime_worker = None
         window._start_open_folder_worker = Mock()
         single_shot = Mock(side_effect=lambda _delay, _callback: None)
 
@@ -98,6 +99,30 @@ class StatusMessageContractTests(unittest.TestCase):
         single_shot.call_args.args[1]()
 
         window._start_open_folder_worker.assert_called_once_with()
+
+    def test_stale_window_open_folder_finish_does_not_restart_pending_open(self) -> None:
+        import main.window_actions as window_actions
+
+        from main.window_actions import WindowActionsMixin
+
+        class Window(WindowActionsMixin):
+            pass
+
+        current_worker = object()
+        window = Window()
+        window._open_folder_pending = True
+        window._open_folder_start_scheduled = False
+        window._open_folder_runtime_worker = current_worker
+        window._start_open_folder_worker = Mock()
+        single_shot = Mock()
+
+        with patch.object(window_actions, "QTimer", SimpleNamespace(singleShot=single_shot), create=True):
+            window._on_open_folder_worker_finished(object())
+
+        single_shot.assert_not_called()
+        window._start_open_folder_worker.assert_not_called()
+        self.assertTrue(window._open_folder_pending)
+        self.assertIs(window._open_folder_runtime_worker, current_worker)
 
 
 if __name__ == "__main__":

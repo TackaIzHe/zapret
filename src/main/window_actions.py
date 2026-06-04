@@ -62,19 +62,26 @@ class WindowActionsMixin:
     def _start_open_folder_worker(self) -> None:
         try:
             self._open_folder_pending = False
-            self._open_folder_runtime().start_qthread_worker(
+            runtime = self._open_folder_runtime()
+            started = runtime.start_qthread_worker(
                 worker_factory=lambda _request_id: self.create_open_folder_worker(),
                 on_failed=lambda _request_id, error: self._on_open_folder_failed(error),
                 on_finished=self._on_open_folder_worker_finished,
                 signal_includes_request_id=False,
             )
+            worker = started[1] if isinstance(started, tuple) and len(started) > 1 else getattr(runtime, "worker", None)
+            self._open_folder_runtime_worker = worker
         except Exception as e:
             self.set_status(f"Ошибка при открытии папки: {str(e)}")
 
     def _on_open_folder_failed(self, error: str) -> None:
         self.set_status(f"Ошибка при открытии папки: {str(error)}")
 
-    def _on_open_folder_worker_finished(self, _worker) -> None:
+    def _on_open_folder_worker_finished(self, worker) -> None:
+        current_worker = getattr(self, "_open_folder_runtime_worker", None)
+        if current_worker is not None and worker is not current_worker:
+            return
+        self._open_folder_runtime_worker = None
         if getattr(self, "_open_folder_pending", False):
             self._schedule_open_folder_worker_start()
 
