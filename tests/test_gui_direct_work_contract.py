@@ -9,11 +9,20 @@ SRC_ROOT = Path(__file__).resolve().parents[1] / "src"
 
 GUI_ROOTS = (
     SRC_ROOT / "ui" / "pages",
+    SRC_ROOT / "autostart" / "ui",
+    SRC_ROOT / "blobs" / "ui",
+    SRC_ROOT / "blockcheck" / "ui",
+    SRC_ROOT / "diagnostics" / "ui",
+    SRC_ROOT / "dns" / "ui",
+    SRC_ROOT / "donater" / "ui",
+    SRC_ROOT / "hosts" / "ui",
+    SRC_ROOT / "log" / "ui",
+    SRC_ROOT / "orchestra" / "ui",
     SRC_ROOT / "presets" / "ui",
     SRC_ROOT / "profile" / "ui",
-    SRC_ROOT / "dns" / "ui",
-    SRC_ROOT / "blockcheck" / "ui",
+    SRC_ROOT / "settings" / "dpi",
     SRC_ROOT / "telegram_proxy" / "ui",
+    SRC_ROOT / "updater" / "ui",
 )
 
 FORBIDDEN_IMPORT_ROOTS = {
