@@ -48,6 +48,25 @@ class WindowNotificationActionsContractTests(unittest.TestCase):
 
         center._start_external_open_url_worker.assert_called_once_with("https://example.org")
 
+    def test_stale_notification_open_url_finish_does_not_restart_pending_url(self) -> None:
+        import ui.window_notification_center as notification_center
+
+        center = WindowNotificationCenter.__new__(WindowNotificationCenter)
+        center._external_open_url_runtime = SimpleNamespace(request_id=2)
+        center._external_open_url_pending = "https://example.org"
+        center._start_external_open_url_worker = Mock()
+        single_shot = Mock()
+
+        with patch.object(notification_center, "QTimer", SimpleNamespace(singleShot=single_shot), create=True):
+            WindowNotificationCenter._on_external_open_url_worker_finished(
+                center,
+                SimpleNamespace(_request_id=1),
+            )
+
+        single_shot.assert_not_called()
+        center._start_external_open_url_worker.assert_not_called()
+        self.assertEqual(center._external_open_url_pending, "https://example.org")
+
     def test_notification_open_url_scheduled_start_keeps_latest_request(self) -> None:
         import ui.window_notification_center as notification_center
 
@@ -121,6 +140,30 @@ class WindowNotificationActionsContractTests(unittest.TestCase):
             action_fn,
             bar,
             {"reason": "test"},
+        )
+
+    def test_stale_notification_action_finish_does_not_restart_pending_action(self) -> None:
+        import ui.window_notification_center as notification_center
+
+        center = WindowNotificationCenter.__new__(WindowNotificationCenter)
+        action_fn = Mock()
+        bar = object()
+        center._notification_action_runtime = SimpleNamespace(request_id=2)
+        center._notification_action_pending = ("disable_proxy", action_fn, bar, {"reason": "test"})
+        center._run_notification_action_worker = Mock()
+        single_shot = Mock()
+
+        with patch.object(notification_center, "QTimer", SimpleNamespace(singleShot=single_shot), create=True):
+            WindowNotificationCenter._on_notification_action_worker_finished(
+                center,
+                SimpleNamespace(_request_id=1),
+            )
+
+        single_shot.assert_not_called()
+        center._run_notification_action_worker.assert_not_called()
+        self.assertEqual(
+            center._notification_action_pending,
+            ("disable_proxy", action_fn, bar, {"reason": "test"}),
         )
 
     def test_notification_action_scheduled_start_keeps_latest_request(self) -> None:

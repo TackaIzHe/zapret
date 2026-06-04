@@ -147,6 +147,8 @@ class WindowNotificationCenter(QObject):
         self._notify_external_open_url_error(str(error or ""))
 
     def _on_external_open_url_worker_finished(self, _worker) -> None:
+        if not self._is_current_worker_finish(self.__dict__.get("_external_open_url_runtime"), _worker):
+            return
         pending = self._external_open_url_pending
         self._external_open_url_pending = None
         if pending:
@@ -363,6 +365,8 @@ class WindowNotificationCenter(QObject):
             self._finish_launch_conflict_action((False, error), context=context, bar=bar)
 
     def _on_notification_action_worker_finished(self, _worker) -> None:
+        if not self._is_current_worker_finish(self.__dict__.get("_notification_action_runtime"), _worker):
+            return
         pending = self._notification_action_pending
         self._notification_action_pending = None
         if pending is not None:
@@ -384,6 +388,17 @@ class WindowNotificationCenter(QObject):
         next_request = pending if pending is not None else request
         if next_request is not None:
             self._run_notification_action_worker(*next_request)
+
+    def _is_current_worker_finish(self, runtime, worker) -> bool:
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return False
+        request_id = getattr(worker, "_request_id", None)
+        if request_id is None:
+            return True
+        try:
+            return int(request_id) == int(getattr(runtime, "request_id", -1))
+        except (TypeError, ValueError):
+            return False
 
     def _notify_disable_proxy_result(self, result, *, bar=None) -> None:
         success, error = self._coerce_bool_message_result(result)
