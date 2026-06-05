@@ -715,6 +715,8 @@ class UpdatePageRuntime:
             cleanup_in_progress=self._cleanup_in_progress,
         ):
             return
+        if self.__dict__.get("_update_channel_open_pending"):
+            return
         self._view.show_update_channel_open_error(str(error or ""))
 
     def _on_update_channel_open_worker_finished(self, _worker) -> None:
