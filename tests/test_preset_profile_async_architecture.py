@@ -220,6 +220,28 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertFalse(page._profile_payload_dirty)
         self.assertNotIn(8, page._profile_folder_action_refresh_by_request)
 
+    def test_profile_folder_action_error_ignored_when_new_action_is_pending(self) -> None:
+        page = PresetSetupPageBase.__new__(PresetSetupPageBase)
+        page._profile_folder_action_request_id = 9
+        page._profile_folder_action_refresh_by_request = {9: True}
+        page._profile_folder_action_pending = [
+            {
+                "action": "set_collapsed",
+                "folder_key": "video",
+                "name": "",
+                "direction": 0,
+                "collapsed": True,
+                "refresh": False,
+                "context_extra": {},
+            }
+        ]
+
+        with patch("profile.ui.preset_setup_page.log") as log_mock:
+            PresetSetupPageBase._on_profile_folder_action_failed(page, 9, "rename", "old error", {})
+
+        log_mock.assert_not_called()
+        self.assertNotIn(9, page._profile_folder_action_refresh_by_request)
+
     def test_profile_model_applies_folder_state_without_loading_profiles_again(self) -> None:
         model = ProfileSetupListModel()
         model.set_profiles((
