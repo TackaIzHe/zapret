@@ -107,6 +107,28 @@ class ControlDefenderAdminCheckQueueTests(unittest.TestCase):
         page.create_program_settings_admin_check_worker.assert_not_called()
         self.assertFalse(page._defender_admin_check_pending)
 
+    def test_defender_admin_check_result_ignored_when_new_check_is_pending(self) -> None:
+        page = _Page()
+        page._defender_admin_check_pending = False
+        page._defender_admin_check_runtime = Mock()
+        page._defender_admin_check_runtime.is_current.return_value = True
+        page._continue_defender_toggle = Mock()
+
+        page._on_defender_admin_check_finished(3, True, disable=True)
+
+        page._continue_defender_toggle.assert_not_called()
+
+    def test_defender_admin_check_error_ignored_when_new_check_is_pending(self) -> None:
+        page = _Page()
+        page._defender_admin_check_pending = False
+        page._defender_admin_check_runtime = Mock()
+        page._defender_admin_check_runtime.is_current.return_value = True
+        page._continue_defender_toggle = Mock()
+
+        page._on_defender_admin_check_failed(3, "old admin check failed", disable=True)
+
+        page._continue_defender_toggle.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

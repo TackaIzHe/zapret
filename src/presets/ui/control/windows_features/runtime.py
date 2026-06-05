@@ -88,11 +88,15 @@ class ControlPageWindowsFeatureMixin:
         runtime = self._ensure_defender_admin_check_runtime()
         if not runtime.is_current(request_id, cleanup_in_progress=bool(getattr(self, "_cleanup_in_progress", False))):
             return
+        if self.__dict__.get("_defender_admin_check_pending") is not None:
+            return
         self._continue_defender_toggle(bool(disable), is_admin=bool(is_admin))
 
     def _on_defender_admin_check_failed(self, request_id: int, _error: str, *, disable: bool) -> None:
         runtime = self._ensure_defender_admin_check_runtime()
         if not runtime.is_current(request_id, cleanup_in_progress=bool(getattr(self, "_cleanup_in_progress", False))):
+            return
+        if self.__dict__.get("_defender_admin_check_pending") is not None:
             return
         self._continue_defender_toggle(bool(disable), is_admin=False)
 
