@@ -1296,6 +1296,8 @@ class PresetRawEditorPage(BasePage):
     def _on_raw_preset_action_finished(self, request_id: int, action: str, result, payload) -> None:
         if request_id != self._raw_action_request_id:
             return
+        if self.__dict__.get("_pending_raw_preset_write_operations"):
+            return
         if action == "rename":
             updated, path = result
             self._notify_preset_structure_changed()
@@ -1335,6 +1337,8 @@ class PresetRawEditorPage(BasePage):
 
     def _on_raw_preset_action_failed(self, request_id: int, _action: str, error: str, _payload) -> None:
         if request_id != self._raw_action_request_id:
+            return
+        if self.__dict__.get("_pending_raw_preset_write_operations"):
             return
         self._show_error(str(error))
 
