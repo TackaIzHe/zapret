@@ -729,6 +729,8 @@ class PresetRawEditorPage(BasePage):
         self._raw_text_apply_scheduled = False
         if result is None or self.__dict__.get("_cleanup_in_progress", False):
             return
+        if self.__dict__.get("_raw_load_pending", False) or self.__dict__.get("_raw_load_start_scheduled", False):
+            return
         if getattr(result, "file_name", ""):
             self._preset_file_name = str(result.file_name or "").strip()
         if getattr(result, "display_name", ""):

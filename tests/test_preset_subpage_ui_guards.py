@@ -202,6 +202,58 @@ class PresetSubpageUiGuardTests(unittest.TestCase):
         page._refresh_header.assert_called_once_with()
         self.assertFalse(page._is_loading)
 
+    def test_pending_raw_text_apply_is_ignored_after_new_load_is_requested(self) -> None:
+        from presets.ui.common.preset_subpage_base import PresetRawEditorPage
+
+        runtime = SimpleNamespace(
+            is_running=Mock(return_value=True),
+            start_qthread_worker=Mock(),
+        )
+        page = PresetRawEditorPage.__new__(PresetRawEditorPage)
+        page._raw_load_runtime = runtime
+        page._raw_load_request_id = 4
+        page._raw_load_pending = False
+        page._raw_load_start_scheduled = False
+        page._raw_text_apply_scheduled = False
+        page._pending_raw_text_apply = None
+        page._cleanup_in_progress = False
+        page._preset_file_name = "Old.txt"
+        page._preset_name = "Old"
+        page._preset_path = None
+        page._preset_origin = "user"
+        page._is_loading = True
+        page.editor = _PlainTextEditor("")
+        page._set_footer = Mock()
+        page._refresh_header = Mock()
+        callbacks = []
+
+        result = SimpleNamespace(
+            file_name="Old.txt",
+            display_name="Old",
+            path="C:/Zapret/Dev/presets/winws2/Old.txt",
+            origin="user",
+            text="--new\n--filter-tcp=443\n",
+            footer_text="Готово",
+        )
+
+        with patch(
+            "presets.ui.common.preset_subpage_base.QTimer.singleShot",
+            side_effect=lambda _delay, callback: callbacks.append(callback),
+        ):
+            PresetRawEditorPage._on_raw_preset_text_loaded(page, 4, result)
+
+        PresetRawEditorPage._request_raw_preset_text(page)
+
+        self.assertTrue(page._raw_load_pending)
+        self.assertEqual(page._raw_load_request_id, 5)
+        self.assertEqual(len(callbacks), 1)
+
+        callbacks[0]()
+
+        self.assertEqual(page.editor.plain_text_calls, [])
+        page._refresh_header.assert_not_called()
+        self.assertTrue(page._is_loading)
+
     def test_raw_preset_activation_skips_duplicate_button_disable(self) -> None:
         from presets.ui.common.preset_subpage_base import PresetRawEditorPage
 
