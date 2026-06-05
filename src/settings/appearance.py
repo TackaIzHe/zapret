@@ -397,6 +397,7 @@ def store_warmed_page_initial_state(state: AppearancePageInitialStatePlan) -> No
     store_warmed_animations_enabled(state.animations_enabled)
     store_warmed_smooth_scroll_enabled(state.smooth_scroll_enabled)
     store_warmed_editor_smooth_scroll_enabled(state.editor_smooth_scroll_enabled)
+    store_warmed_sidebar_icon_style(state.sidebar_icon_style)
     store_warmed_premium_effects(state.garland_enabled, state.snowflakes_enabled)
 
 

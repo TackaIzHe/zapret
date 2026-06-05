@@ -43,14 +43,14 @@ def normalize_sidebar_icon_style(style: str | None) -> str:
 
 def current_sidebar_icon_style() -> str:
     try:
-        from settings.appearance import load_sidebar_icon_style, peek_warmed_sidebar_icon_style
+        from settings.appearance import peek_warmed_sidebar_icon_style
 
         warmed = peek_warmed_sidebar_icon_style()
         if warmed is not None:
             return normalize_sidebar_icon_style(warmed)
-        return normalize_sidebar_icon_style(load_sidebar_icon_style().style)
     except Exception:
-        return "standard"
+        pass
+    return "standard"
 
 
 def build_standard_nav_icons() -> dict[PageName, Any]:
