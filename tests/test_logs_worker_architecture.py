@@ -184,6 +184,61 @@ class LogsWorkerArchitectureTests(unittest.TestCase):
         page._support_prepare_runtime.start_qthread_worker.assert_not_called()
         self.assertTrue(page._support_prepare_pending)
 
+    def test_support_prepare_result_ignored_when_new_prepare_is_pending(self) -> None:
+        page = logs_page.LogsPage.__new__(logs_page.LogsPage)
+        page._cleanup_in_progress = False
+        page._support_prepare_pending = True
+        page._support_prepare_runtime = Mock()
+        page._support_prepare_runtime.is_current.return_value = True
+        page._logs = Mock()
+        page._render_send_status_label = Mock()
+        page.window = Mock(return_value=None)
+
+        with patch.object(logs_page, "apply_support_feedback") as apply_feedback:
+            logs_page.LogsPage._on_support_prepare_finished(page, 9, object())
+
+        apply_feedback.assert_not_called()
+        page._render_send_status_label.assert_not_called()
+
+    def test_support_prepare_error_ignored_when_new_prepare_is_pending(self) -> None:
+        page = logs_page.LogsPage.__new__(logs_page.LogsPage)
+        page._cleanup_in_progress = False
+        page._support_prepare_pending = True
+        page._support_prepare_runtime = Mock()
+        page._support_prepare_runtime.is_current.return_value = True
+        page._logs = Mock()
+        page._logs.build_support_error_feedback.return_value = SimpleNamespace(
+            status_text="old",
+            status_tone="error",
+            infobar_title="Ошибка",
+            infobar_content="old",
+        )
+        page._render_send_status_label = Mock()
+        page.window = Mock(return_value=None)
+
+        with (
+            patch.object(logs_page, "InfoBar") as info_bar,
+            patch.object(logs_page, "log") as log_mock,
+        ):
+            logs_page.LogsPage._on_support_prepare_failed(page, 9, "old error")
+
+        page._logs.build_support_error_feedback.assert_not_called()
+        page._render_send_status_label.assert_not_called()
+        info_bar.warning.assert_not_called()
+        log_mock.assert_not_called()
+
+    def test_open_folder_error_ignored_when_new_open_is_pending(self) -> None:
+        page = logs_page.LogsPage.__new__(logs_page.LogsPage)
+        page._cleanup_in_progress = False
+        page._open_folder_pending = True
+        page._open_folder_runtime = Mock()
+        page._open_folder_runtime.is_current.return_value = True
+
+        with patch.object(logs_page, "log") as log_mock:
+            logs_page.LogsPage._on_open_logs_folder_failed(page, 10, "old error")
+
+        log_mock.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

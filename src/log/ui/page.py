@@ -715,6 +715,8 @@ class LogsPage(BasePage):
     def _on_support_prepare_finished(self, request_id: int, result) -> None:
         if not self._support_prepare_runtime.is_current(request_id, cleanup_in_progress=self._cleanup_in_progress):
             return
+        if self.__dict__.get("_support_prepare_pending", False):
+            return
         apply_support_feedback(
             result=result,
             build_feedback_fn=self._logs.build_support_feedback,
@@ -731,6 +733,8 @@ class LogsPage(BasePage):
 
     def _on_support_prepare_failed(self, request_id: int, error: str) -> None:
         if not self._support_prepare_runtime.is_current(request_id, cleanup_in_progress=self._cleanup_in_progress):
+            return
+        if self.__dict__.get("_support_prepare_pending", False):
             return
         feedback = self._logs.build_support_error_feedback(str(error or ""))
         self._send_status_text = feedback.status_text
@@ -1046,6 +1050,8 @@ class LogsPage(BasePage):
 
     def _on_open_logs_folder_failed(self, request_id: int, error: str) -> None:
         if not self._open_folder_runtime.is_current(request_id, cleanup_in_progress=self._cleanup_in_progress):
+            return
+        if self.__dict__.get("_open_folder_pending", False):
             return
         log(f"Ошибка открытия папки: {error}", "ERROR")
 
