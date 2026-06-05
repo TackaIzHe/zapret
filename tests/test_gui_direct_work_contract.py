@@ -49,11 +49,17 @@ FORBIDDEN_IMPORT_ROOTS = {
 FORBIDDEN_BUILTIN_CALLS = {"open"}
 
 FORBIDDEN_ATTRIBUTE_CALLS = {
+    ("_time", "sleep"),
+    ("QThread", "msleep"),
+    ("QThread", "sleep"),
+    ("QThread", "wait"),
+    ("QApplication", "processEvents"),
     ("os", "startfile"),
     ("subprocess", "run"),
     ("subprocess", "Popen"),
     ("subprocess", "check_call"),
     ("subprocess", "check_output"),
+    ("time", "sleep"),
     ("webbrowser", "open"),
     ("requests", "get"),
     ("requests", "post"),
