@@ -501,6 +501,8 @@ class DNSCheckPage(BasePage):
             cleanup_in_progress=self._cleanup_in_progress,
         ):
             return
+        if self.__dict__.get("_save_results_pending"):
+            return
         if InfoBar:
             if bool(getattr(plan, "success", False)):
                 InfoBar.success(title=plan.title, content=plan.content, parent=self.window())

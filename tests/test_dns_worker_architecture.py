@@ -877,6 +877,24 @@ class DnsWorkerArchitectureTests(unittest.TestCase):
         page._save_runtime.start_qthread_worker.assert_not_called()
         self.assertEqual(page._save_results_pending, {"file_path": "first.txt", "plain_text": "latest"})
 
+    def test_dns_check_pending_save_hides_previous_save_result(self) -> None:
+        import dns.ui.dns_check_page as dns_check_page
+
+        page = DNSCheckPage.__new__(DNSCheckPage)
+        page._cleanup_in_progress = False
+        page._save_runtime = SimpleNamespace(is_current=Mock(return_value=True))
+        page._save_results_pending = {"file_path": "second.txt", "plain_text": "newer"}
+        page.window = Mock(return_value=object())
+        plan = SimpleNamespace(success=True, title="saved", content="old result")
+        success = Mock()
+        error = Mock()
+
+        with patch.object(dns_check_page, "InfoBar", SimpleNamespace(success=success, error=error)):
+            DNSCheckPage._on_save_results_finished(page, 1, plan)
+
+        success.assert_not_called()
+        error.assert_not_called()
+
     def test_dns_check_pending_save_restarts_after_event_loop_turn(self) -> None:
         import dns.ui.dns_check_page as dns_check_page
 
