@@ -483,6 +483,41 @@ class ProfileOrderPageTests(unittest.TestCase):
             ],
         )
 
+    def test_stale_profile_order_move_worker_object_does_not_start_pending_move(self) -> None:
+        import profile.ui.profile_order_page as order_page
+        from profile.ui.profile_order_page import ProfileOrderPageBase
+        from ui.one_shot_worker_runtime import OneShotWorkerRuntime
+
+        page = ProfileOrderPageBase.__new__(ProfileOrderPageBase)
+        page._cleanup_in_progress = False
+        page._order_move_runtime = OneShotWorkerRuntime()
+        page._order_move_runtime.worker = object()
+        page._pending_profile_order_moves = [
+            {
+                "action": "after",
+                "source_profile_key": "profile-a",
+                "destination_profile_key": "profile-b",
+            }
+        ]
+        page._schedule_next_profile_order_move_start = Mock(
+            side_effect=AssertionError("stale profile order move worker must not drive pending queue")
+        )
+
+        with patch.object(order_page, "QTimer") as timer_mock:
+            ProfileOrderPageBase._on_profile_order_move_worker_finished(page, object())
+
+        timer_mock.singleShot.assert_not_called()
+        self.assertEqual(
+            page._pending_profile_order_moves,
+            [
+                {
+                    "action": "after",
+                    "source_profile_key": "profile-a",
+                    "destination_profile_key": "profile-b",
+                }
+            ],
+        )
+
     def test_order_page_move_error_ignored_when_new_move_is_pending(self) -> None:
         import profile.ui.profile_order_page as order_page
         from profile.ui.profile_order_page import ProfileOrderPageBase
