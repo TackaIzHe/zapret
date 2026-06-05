@@ -196,11 +196,9 @@ class TelegramProxyFeature:
             manager = self.get_proxy_manager()
             if manager.is_running:
                 self._tray_stop_runtime.start_qthread_worker(
-                    worker_factory=lambda _request_id: self.create_stop_runtime_worker(
+                    worker_factory=lambda request_id: self._create_tray_stop_worker(
+                        request_id,
                         manager=manager,
-                        emit_status=True,
-                        set_enabled=self.set_enabled,
-                        enabled_after_stop=False,
                     ),
                     on_finished=self._on_tray_toggle_worker_finished,
                     signal_includes_request_id=False,
@@ -210,7 +208,8 @@ class TelegramProxyFeature:
 
             config = self.get_start_config()
             self._tray_start_runtime.start_qthread_worker(
-                worker_factory=lambda _request_id: self.create_start_worker(
+                worker_factory=lambda request_id: self._create_tray_start_worker(
+                    request_id,
                     manager=manager,
                     port=config.port,
                     mode=config.mode,
@@ -237,8 +236,55 @@ class TelegramProxyFeature:
         self._tray_toggle_state.pending_count += 1
 
     def _on_tray_toggle_worker_finished(self, _worker) -> None:
+        if not self._is_current_tray_toggle_worker_finish(_worker):
+            return
         if self._tray_toggle_state.pending_count > 0:
             self._schedule_tray_toggle_start()
+
+    def _create_tray_start_worker(self, request_id: int, **kwargs):
+        worker = self.create_start_worker(**kwargs)
+        self._mark_tray_toggle_worker(worker, request_id, "start")
+        return worker
+
+    def _create_tray_stop_worker(self, request_id: int, *, manager):
+        worker = self.create_stop_runtime_worker(
+            manager=manager,
+            emit_status=True,
+            set_enabled=self.set_enabled,
+            enabled_after_stop=False,
+        )
+        self._mark_tray_toggle_worker(worker, request_id, "stop")
+        return worker
+
+    def _mark_tray_toggle_worker(self, worker, request_id: int, runtime_name: str) -> None:
+        try:
+            worker._request_id = int(request_id)
+            worker._tray_toggle_runtime = str(runtime_name)
+        except Exception:
+            pass
+
+    def _is_current_tray_toggle_worker_finish(self, worker) -> bool:
+        runtime_name = getattr(worker, "_tray_toggle_runtime", None)
+        runtime = None
+        if runtime_name == "start":
+            runtime = self._tray_start_runtime
+        elif runtime_name == "stop":
+            runtime = self._tray_stop_runtime
+        else:
+            for candidate in (self._tray_start_runtime, self._tray_stop_runtime):
+                current_worker = getattr(candidate, "worker", None)
+                if current_worker is not None and worker is current_worker:
+                    return True
+            return False
+
+        request_id = getattr(worker, "_request_id", None)
+        if request_id is None:
+            current_worker = getattr(runtime, "worker", None)
+            return current_worker is not None and worker is current_worker
+        try:
+            return int(request_id) == int(getattr(runtime, "request_id", -1))
+        except (TypeError, ValueError):
+            return False
 
     def _schedule_tray_toggle_start(self) -> None:
         if self._tray_toggle_state.start_scheduled:

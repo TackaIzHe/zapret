@@ -146,9 +146,11 @@ class TelegramProxyWorkerArchitectureTests(unittest.TestCase):
         self.assertNotIn("build_upstream_config", runtime_source)
         self.assertIn("build_upstream_config=self.build_upstream_config", feature_source)
         self.assertIn("_tray_start_runtime", feature_source)
+        self.assertIn("create_start_worker", feature_source)
+        self.assertIn("_create_tray_start_worker", toggle_source)
         self.assertIn("start_qthread_worker", toggle_source)
         self.assertNotIn("worker.start()", toggle_source)
-        self.assertNotIn("_tray_start_worker", toggle_source)
+        self.assertNotIn("_tray_start_worker =", feature_source)
         self.assertIn("_build_upstream_config", worker_source)
         self.assertNotIn("telegram_proxy.commands", worker_source)
 
@@ -157,7 +159,8 @@ class TelegramProxyWorkerArchitectureTests(unittest.TestCase):
         toggle_source = inspect.getsource(TelegramProxyFeature.toggle_async)
 
         self.assertIn("_tray_stop_runtime", feature_source)
-        self.assertIn("create_stop_runtime_worker", toggle_source)
+        self.assertIn("create_stop_runtime_worker", feature_source)
+        self.assertIn("_create_tray_stop_worker", toggle_source)
         self.assertIn("_tray_stop_runtime.start_qthread_worker", toggle_source)
         self.assertNotIn("manager.stop_proxy()", toggle_source)
         self.assertNotIn("self.set_enabled(False)", toggle_source)
@@ -231,7 +234,7 @@ class TelegramProxyWorkerArchitectureTests(unittest.TestCase):
         self.assertEqual(feature._tray_toggle_state.pending_count, 1)
 
     def test_tray_toggle_pending_restarts_after_event_loop_turn(self) -> None:
-        start_runtime = SimpleNamespace(is_running=Mock(return_value=False), start_qthread_worker=Mock())
+        start_runtime = SimpleNamespace(is_running=Mock(return_value=False), start_qthread_worker=Mock(), request_id=1)
         stop_runtime = SimpleNamespace(is_running=Mock(return_value=False), start_qthread_worker=Mock())
         manager = Mock()
         manager.is_running = False
@@ -241,10 +244,11 @@ class TelegramProxyWorkerArchitectureTests(unittest.TestCase):
             stop_runtime=stop_runtime,
         )
         feature._tray_toggle_state.pending_count = 1
+        worker = SimpleNamespace(_request_id=1, _tray_toggle_runtime="start")
         single_shot = Mock(side_effect=lambda _delay, _callback: None)
 
         with patch.object(telegram_proxy_feature_module, "QTimer", SimpleNamespace(singleShot=single_shot), create=True):
-            feature._on_tray_toggle_worker_finished(object())
+            feature._on_tray_toggle_worker_finished(worker)
 
         single_shot.assert_called_once()
         self.assertEqual(single_shot.call_args.args[0], 0)
@@ -254,6 +258,28 @@ class TelegramProxyWorkerArchitectureTests(unittest.TestCase):
 
         start_runtime.start_qthread_worker.assert_called_once()
         self.assertEqual(feature._tray_toggle_state.pending_count, 0)
+
+    def test_stale_tray_toggle_worker_finish_does_not_schedule_pending_toggle(self) -> None:
+        start_runtime = SimpleNamespace(is_running=Mock(return_value=False), start_qthread_worker=Mock(), request_id=2)
+        stop_runtime = SimpleNamespace(is_running=Mock(return_value=False), start_qthread_worker=Mock(), request_id=1)
+        manager = Mock()
+        manager.is_running = False
+        feature = self._make_feature(
+            manager=manager,
+            start_runtime=start_runtime,
+            stop_runtime=stop_runtime,
+        )
+        feature._tray_toggle_state.pending_count = 1
+        stale_worker = SimpleNamespace(_request_id=1, _tray_toggle_runtime="start")
+        single_shot = Mock()
+
+        with patch.object(telegram_proxy_feature_module, "QTimer", SimpleNamespace(singleShot=single_shot), create=True):
+            feature._on_tray_toggle_worker_finished(stale_worker)
+
+        single_shot.assert_not_called()
+        start_runtime.start_qthread_worker.assert_not_called()
+        stop_runtime.start_qthread_worker.assert_not_called()
+        self.assertEqual(feature._tray_toggle_state.pending_count, 1)
 
     def test_start_worker_passes_command_loaded_upstream_config_to_manager(self) -> None:
         manager = Mock()
