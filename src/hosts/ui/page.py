@@ -1345,14 +1345,14 @@ class HostsPage(BasePage):
                 warning_prefix="Hosts operation worker",
             )
             self._operation_runtime.cancel()
-            self._stop_services_catalog_worker(blocking=True)
+            self._stop_services_catalog_worker(blocking=False)
             self._catalog_refresh_runtime.stop(
-                blocking=True,
+                blocking=False,
                 log_fn=log,
                 warning_prefix="Hosts catalog refresh worker",
             )
             self._selection_load_runtime.stop(
-                blocking=True,
+                blocking=False,
                 log_fn=log,
                 warning_prefix="Hosts selection load worker",
             )
@@ -1364,12 +1364,12 @@ class HostsPage(BasePage):
                 warning_prefix="Hosts selection save worker",
             )
             self._state_load_runtime.stop(
-                blocking=True,
+                blocking=False,
                 log_fn=log,
                 warning_prefix="Hosts state load worker",
             )
             self._open_file_runtime.stop(
-                blocking=True,
+                blocking=False,
                 log_fn=log,
                 warning_prefix="Hosts open file worker",
             )

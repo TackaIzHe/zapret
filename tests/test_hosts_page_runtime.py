@@ -795,6 +795,21 @@ class HostsPageRuntimeTests(unittest.TestCase):
         self.assertNotIn("moveToThread", workflow_source)
         self.assertNotIn("execute_hosts_operation_fn=self._controller.execute_hosts_operation", run_source)
 
+    def test_hosts_cleanup_does_not_wait_for_read_only_workers(self) -> None:
+        from hosts.ui.page import HostsPage
+
+        cleanup_source = inspect.getsource(HostsPage.cleanup)
+
+        self.assertIn("_stop_services_catalog_worker(blocking=False)", cleanup_source)
+        self.assertIn("_catalog_refresh_runtime.stop(\n                blocking=False,", cleanup_source)
+        self.assertIn("_selection_load_runtime.stop(\n                blocking=False,", cleanup_source)
+        self.assertIn("_state_load_runtime.stop(\n                blocking=False,", cleanup_source)
+        self.assertIn("_open_file_runtime.stop(\n                blocking=False,", cleanup_source)
+
+        self.assertIn("_operation_runtime.stop(\n                blocking=True,", cleanup_source)
+        self.assertIn("_selection_save_runtime.stop(\n                blocking=True,", cleanup_source)
+        self.assertIn("_permission_restore_runtime.stop(\n                blocking=True,", cleanup_source)
+
 
 if __name__ == "__main__":
     unittest.main()
