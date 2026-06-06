@@ -140,7 +140,7 @@ def close_premium_page(
         stop_pairing_status_autopoll_fn()
     if plan.should_quit_thread:
         premium_action_runtime.stop(
-            blocking=True,
+            blocking=False,
             wait_timeout_ms=plan.wait_timeout_ms,
             warning_prefix="Premium action worker",
         )
@@ -156,7 +156,7 @@ def cleanup_premium_page(
     set_cleanup_in_progress_fn(True)
     stop_pairing_status_autopoll_fn()
     premium_action_runtime.stop(
-        blocking=True,
+        blocking=False,
         wait_timeout_ms=1000,
         warning_prefix="Premium action worker",
     )

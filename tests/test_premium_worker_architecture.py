@@ -348,10 +348,41 @@ class PremiumWorkerArchitectureTests(unittest.TestCase):
         )
         page._device_info_runtime.cancel.assert_called_once()
         page._premium_action_runtime.stop.assert_called_once_with(
-            blocking=True,
+            blocking=False,
             wait_timeout_ms=1000,
             warning_prefix="Premium action worker",
         )
+
+    def test_close_event_stops_premium_action_worker_without_blocking_gui(self) -> None:
+        from donater.ui.page_lifecycle import close_premium_page
+
+        runtime = SimpleNamespace(is_running=Mock(return_value=True), stop=Mock())
+        event = SimpleNamespace(accept=Mock())
+        cleanup_values = []
+        stop_autopoll = Mock()
+
+        close_premium_page(
+            set_cleanup_in_progress_fn=cleanup_values.append,
+            build_close_plan_fn=Mock(
+                return_value=SimpleNamespace(
+                    stop_autopoll=True,
+                    should_quit_thread=True,
+                    wait_timeout_ms=750,
+                )
+            ),
+            premium_action_runtime=runtime,
+            stop_pairing_status_autopoll_fn=stop_autopoll,
+            event=event,
+        )
+
+        self.assertEqual(cleanup_values, [True])
+        stop_autopoll.assert_called_once_with()
+        runtime.stop.assert_called_once_with(
+            blocking=False,
+            wait_timeout_ms=750,
+            warning_prefix="Premium action worker",
+        )
+        event.accept.assert_called_once_with()
 
     def test_device_info_pending_restart_is_coalesced_while_scheduled(self) -> None:
         import donater.ui.page as premium_page
