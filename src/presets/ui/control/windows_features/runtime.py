@@ -163,7 +163,7 @@ class ControlPageWindowsFeatureMixin:
         self._defender_admin_check_start_scheduled = False
         runtime = self.__dict__.get("_defender_admin_check_runtime")
         if runtime is not None:
-            runtime.stop(blocking=True, warning_prefix="Defender admin check worker")
+            runtime.stop(blocking=False, warning_prefix="Defender admin check worker")
             runtime.cancel()
 
     def _is_current_worker_finish(self, runtime, worker) -> bool:

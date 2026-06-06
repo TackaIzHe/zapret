@@ -129,6 +129,23 @@ class ControlDefenderAdminCheckQueueTests(unittest.TestCase):
 
         page._continue_defender_toggle.assert_not_called()
 
+    def test_stop_defender_admin_check_worker_does_not_block_gui(self) -> None:
+        runtime = Mock()
+        page = _Page()
+        page._defender_admin_check_runtime = runtime
+        page._defender_admin_check_pending = True
+        page._defender_admin_check_start_scheduled = True
+
+        page._stop_defender_admin_check_worker()
+
+        self.assertIsNone(page._defender_admin_check_pending)
+        self.assertFalse(page._defender_admin_check_start_scheduled)
+        runtime.stop.assert_called_once_with(
+            blocking=False,
+            warning_prefix="Defender admin check worker",
+        )
+        runtime.cancel.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()
