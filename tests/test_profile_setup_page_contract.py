@@ -2232,7 +2232,7 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         page._schedule_profiles_payload_request.assert_not_called()
         self.assertTrue(page._profile_payload_dirty)
 
-    def test_profile_context_action_result_ignored_when_new_action_is_pending(self) -> None:
+    def test_profile_context_action_result_applies_enabled_locally_when_new_action_is_pending(self) -> None:
         page = PresetSetupPageBase.__new__(PresetSetupPageBase)
         page._profile_context_action_request_id = 3
         page._profile_payload_dirty = False
@@ -2265,10 +2265,10 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             "profile-1",
         )
 
-        page._apply_profile_enabled_locally.assert_not_called()
+        page._apply_profile_enabled_locally.assert_called_once_with("profile-1", True)
         page._add_created_user_profile_locally.assert_not_called()
         page._refresh_profile_item_locally.assert_not_called()
-        self.assertFalse(page._profile_payload_dirty)
+        self.assertTrue(page._profile_payload_dirty)
         self.assertNotIn(3, page._profile_context_action_enabled_by_request)
 
     def test_profile_context_actions_start_worker_without_direct_profile_calls(self) -> None:

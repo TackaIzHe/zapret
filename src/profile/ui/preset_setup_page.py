@@ -845,23 +845,18 @@ class PresetSetupPageBase(BasePage):
     def _on_profile_context_action_finished(self, request_id: int, action: str, profile_key: str, result) -> None:
         if request_id != int(getattr(self, "_profile_context_action_request_id", 0) or 0):
             return
+        applied_pending_result = False
+        if action == "set_enabled":
+            applied_pending_result = self._apply_profile_context_enabled_result(
+                request_id,
+                profile_key,
+                result,
+            )
         if self._has_pending_profile_preset_write_operation():
-            self.__dict__.get("_profile_context_action_enabled_by_request", {}).pop(request_id, None)
             return
         if action == "set_enabled":
-            target_key = _profile_context_action_result_key(result) or str(profile_key or "").strip()
-            target_item = _profile_context_action_result_item(result)
-            requested_enabled = bool(
-                self.__dict__.get("_profile_context_action_enabled_by_request", {}).pop(request_id, True)
-            )
-            if (
-                target_key == str(profile_key or "")
-                and self._apply_profile_enabled_locally(profile_key, requested_enabled)
-            ):
-                self._profile_payload_dirty = True
-            elif target_item is not None and self._add_created_user_profile_locally(target_item):
-                pass
-            else:
+            if not applied_pending_result:
+                target_key = _profile_context_action_result_key(result) or str(profile_key or "").strip()
                 self._refresh_profile_item_locally(profile_key, target_key)
             return
         if action == "duplicate":
@@ -872,6 +867,19 @@ class PresetSetupPageBase(BasePage):
             return
         if action == "delete" and bool(result):
             self._remove_profile_item_locally(profile_key)
+
+    def _apply_profile_context_enabled_result(self, request_id: int, profile_key: str, result) -> bool:
+        target_key = _profile_context_action_result_key(result) or str(profile_key or "").strip()
+        target_item = _profile_context_action_result_item(result)
+        requested_enabled = bool(
+            self.__dict__.get("_profile_context_action_enabled_by_request", {}).pop(request_id, True)
+        )
+        if target_key == str(profile_key or "") and self._apply_profile_enabled_locally(profile_key, requested_enabled):
+            self._profile_payload_dirty = True
+            return True
+        if target_item is not None and self._add_created_user_profile_locally(target_item):
+            return True
+        return False
 
     def _on_profile_context_action_failed(self, request_id: int, error: str) -> None:
         if request_id != int(getattr(self, "_profile_context_action_request_id", 0) or 0):
