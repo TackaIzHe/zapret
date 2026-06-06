@@ -309,8 +309,11 @@ def _profile_row_layout(
     right_edge = rect.right() - right_padding
     available_after_name = max(0, right_edge - (text_left + min_name_width))
 
-    strategy_width = min(max(min_strategy_width, int(strategy_text_width or 0)), max(min_strategy_width, rect.width() // 3))
-    if available_after_name < dot_width + gap + min_strategy_width:
+    requested_strategy_width = max(0, int(strategy_text_width or 0))
+    max_strategy_width = max(min_strategy_width, rect.width() // 3)
+    strategy_width = min(requested_strategy_width, max_strategy_width)
+    required_strategy_width = min(strategy_width, min_strategy_width)
+    if strategy_width <= 0 or available_after_name < dot_width + gap + required_strategy_width:
         strategy_width = 0
 
     feedback_width = max(0, int(feedback_text_width or 0))
