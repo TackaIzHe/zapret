@@ -571,7 +571,7 @@ class DNSCheckPage(BasePage):
             self._quick_check_pending = False
             self._quick_check_start_scheduled = False
             self._check_runtime.stop(
-                blocking=True,
+                blocking=False,
                 log_fn=log,
                 warning_prefix="DNS check worker",
             )

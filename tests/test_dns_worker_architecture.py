@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 import unittest
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 from app.feature_facades.dns import build_dns_feature
 from dns import dns_check_worker, dns_worker, page_workers
@@ -967,6 +967,47 @@ class DnsWorkerArchitectureTests(unittest.TestCase):
         single_shot.assert_not_called()
         page.start_check.assert_not_called()
         self.assertTrue(page._check_pending)
+
+    def test_dns_check_cleanup_does_not_block_gui_for_one_shot_workers(self) -> None:
+        page = DNSCheckPage.__new__(DNSCheckPage)
+        page._cleanup_in_progress = False
+        page._check_runtime = Mock()
+        page._save_runtime = Mock()
+        page._quick_runtime = Mock()
+        page._check_pending = True
+        page._check_start_scheduled = True
+        page._save_results_pending = {"file_path": "dns.txt", "plain_text": "old"}
+        page._save_results_start_scheduled = True
+        page._quick_check_pending = True
+        page._quick_check_start_scheduled = True
+
+        DNSCheckPage.cleanup(page)
+
+        self.assertTrue(page._cleanup_in_progress)
+        self.assertFalse(page._check_pending)
+        self.assertFalse(page._check_start_scheduled)
+        self.assertIsNone(page._save_results_pending)
+        self.assertFalse(page._save_results_start_scheduled)
+        self.assertFalse(page._quick_check_pending)
+        self.assertFalse(page._quick_check_start_scheduled)
+        page._check_runtime.stop.assert_called_once_with(
+            blocking=False,
+            log_fn=ANY,
+            warning_prefix="DNS check worker",
+        )
+        page._check_runtime.cancel.assert_called_once()
+        page._save_runtime.stop.assert_called_once_with(
+            blocking=False,
+            log_fn=ANY,
+            warning_prefix="DNS check save worker",
+        )
+        page._save_runtime.cancel.assert_called_once()
+        page._quick_runtime.stop.assert_called_once_with(
+            blocking=False,
+            log_fn=ANY,
+            warning_prefix="DNS quick check worker",
+        )
+        page._quick_runtime.cancel.assert_called_once()
 
     def test_dns_full_check_queues_while_worker_runs(self) -> None:
         page = DNSCheckPage.__new__(DNSCheckPage)
