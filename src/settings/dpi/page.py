@@ -700,9 +700,17 @@ class DpiSettingsPage(BasePage):
 
     def cleanup(self) -> None:
         self._dpi_settings_pending.clear()
-        self._dpi_settings_runtime.stop(log_fn=log, warning_prefix="DPI-настройки")
+        self._dpi_settings_runtime.stop(
+            blocking=False,
+            log_fn=log,
+            warning_prefix="DPI-настройки",
+        )
         self._dpi_settings_runtime.cancel()
         self._orchestra_settings_save_pending.clear()
-        self._orchestra_settings_save_runtime.stop(log_fn=log, warning_prefix="настройки оркестратора")
+        self._orchestra_settings_save_runtime.stop(
+            blocking=False,
+            log_fn=log,
+            warning_prefix="настройки оркестратора",
+        )
         self._orchestra_settings_save_runtime.cancel()
         super().cleanup()

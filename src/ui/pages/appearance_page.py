@@ -1543,7 +1543,11 @@ class AppearancePage(BasePage):
             (self._rkn_background_options_runtime, "RKN-фоны"),
             (self._windows_accent_load_runtime, "акцент Windows"),
         ):
-            runtime.stop(log_fn=log, warning_prefix=name)
+            runtime.stop(
+                blocking=False,
+                log_fn=log,
+                warning_prefix=name,
+            )
             runtime.cancel()
         self._ui_state_unsubscribe = None
         self._ui_state_store = None

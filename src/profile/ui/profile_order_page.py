@@ -392,9 +392,15 @@ class ProfileOrderPageBase(BasePage):
         self._order_move_start_scheduled = False
         self._order_move_reload_required = False
         self.__dict__.setdefault("_pending_profile_order_moves", []).clear()
-        self._order_load_runtime.stop(warning_prefix="Profile order load worker")
+        self._order_load_runtime.stop(
+            blocking=False,
+            warning_prefix="Profile order load worker",
+        )
         self._order_load_runtime.cancel()
-        self._order_move_runtime.stop(warning_prefix="Profile order move worker")
+        self._order_move_runtime.stop(
+            blocking=False,
+            warning_prefix="Profile order move worker",
+        )
         self._order_move_runtime.cancel()
         try:
             super().cleanup()

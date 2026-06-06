@@ -565,15 +565,24 @@ def cleanup_control_page_subscriptions(owner) -> None:
     if runtime is not None:
         runtime.top_summary_pending = False
         runtime.top_summary_start_scheduled = False
-        runtime.top_summary_runtime.stop(warning_prefix="Control top summary worker")
+        runtime.top_summary_runtime.stop(
+            blocking=False,
+            warning_prefix="Control top summary worker",
+        )
         runtime.top_summary_runtime.cancel()
 
         runtime.program_settings_load_pending = False
         runtime.program_settings_load_start_scheduled = False
-        runtime.program_settings_load_runtime.stop(warning_prefix="Program settings load worker")
+        runtime.program_settings_load_runtime.stop(
+            blocking=False,
+            warning_prefix="Program settings load worker",
+        )
         runtime.program_settings_load_runtime.cancel()
 
         runtime.program_settings_save_pending.clear()
         runtime.program_settings_save_start_scheduled = False
-        runtime.program_settings_save_runtime.stop(warning_prefix="Program settings save worker")
+        runtime.program_settings_save_runtime.stop(
+            blocking=False,
+            warning_prefix="Program settings save worker",
+        )
         runtime.program_settings_save_runtime.cancel()
