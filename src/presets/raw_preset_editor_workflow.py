@@ -15,6 +15,8 @@ class RawPresetLoadResult:
     display_name: str = ""
     path: Path | None = None
     origin: str = "user"
+    active_file_name: str = ""
+    active_name: str = ""
 
 
 @dataclass(frozen=True)
@@ -103,6 +105,14 @@ def load_raw_preset_for_file(*, presets_feature, launch_method: str | None, file
         file_name=resolved_file_name,
     )
     text_result = load_raw_preset_text(path)
+    active_file_name = get_selected_raw_preset_file_name(
+        presets_feature=presets_feature,
+        launch_method=launch_method,
+    )
+    active_name = get_selected_raw_preset_name(
+        presets_feature=presets_feature,
+        launch_method=launch_method,
+    )
     return RawPresetLoadResult(
         text=text_result.text,
         footer_text=text_result.footer_text,
@@ -110,6 +120,8 @@ def load_raw_preset_for_file(*, presets_feature, launch_method: str | None, file
         display_name=display_name,
         path=path,
         origin=origin,
+        active_file_name=active_file_name,
+        active_name=active_name,
     )
 
 

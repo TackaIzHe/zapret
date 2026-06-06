@@ -25,6 +25,7 @@ class _Button:
     def __init__(self, *, enabled: bool = True) -> None:
         self._enabled = bool(enabled)
         self.enabled_calls: list[bool] = []
+        self.visible = True
 
     def isEnabled(self) -> bool:  # noqa: N802
         return self._enabled
@@ -33,6 +34,23 @@ class _Button:
         value = bool(enabled)
         self.enabled_calls.append(value)
         self._enabled = value
+
+    def setVisible(self, visible: bool) -> None:  # noqa: N802
+        self.visible = bool(visible)
+
+    def isVisible(self) -> bool:  # noqa: N802
+        return self.visible
+
+
+class _Label:
+    def __init__(self) -> None:
+        self.text_value = ""
+
+    def text(self) -> str:
+        return self.text_value
+
+    def setText(self, text: str) -> None:  # noqa: N802
+        self.text_value = str(text)
 
 
 class _Signal:
@@ -239,6 +257,55 @@ class PresetSubpageUiGuardTests(unittest.TestCase):
         page._set_footer.assert_called_once_with("Готово")
         page._refresh_header.assert_called_once_with()
         self.assertFalse(page._is_loading)
+
+    def test_raw_preset_load_updates_active_preset_state_from_worker_result(self) -> None:
+        from presets.ui.common.preset_subpage_base import PresetRawEditorPage
+
+        page = PresetRawEditorPage.__new__(PresetRawEditorPage)
+        page._raw_load_request_id = 4
+        page._cleanup_in_progress = False
+        page._raw_load_pending = False
+        page._raw_load_start_scheduled = False
+        page._preset_file_name = "Default.txt"
+        page._preset_name = "Default"
+        page._preset_path = None
+        page._preset_origin = "user"
+        page._active_preset_file_name = ""
+        page._active_preset_name = ""
+        page._is_loading = True
+        page.editor = _PlainTextEditor("")
+        page._set_footer = Mock()
+        page._refresh_header = Mock(wraps=lambda: PresetRawEditorPage._refresh_header(page))
+        page._rebuild_breadcrumb = Mock()
+        page.statusLabel = _Label()
+        page.metaLabel = _Label()
+        page.pathLabel = _Label()
+        page.activateButton = _Button()
+        callbacks = []
+
+        result = SimpleNamespace(
+            file_name="Default.txt",
+            display_name="Default",
+            path="C:/Zapret/Dev/presets/winws2/Default.txt",
+            origin="user",
+            text="--new\n",
+            footer_text="Готово",
+            active_file_name="Default.txt",
+            active_name="Default",
+        )
+
+        with patch(
+            "presets.ui.common.preset_subpage_base.QTimer.singleShot",
+            side_effect=lambda _delay, callback: callbacks.append(callback),
+        ):
+            PresetRawEditorPage._on_raw_preset_text_loaded(page, 4, result)
+
+        callbacks[0]()
+
+        self.assertEqual(page._active_preset_file_name, "Default.txt")
+        self.assertEqual(page._active_preset_name, "Default")
+        self.assertFalse(page.activateButton.visible)
+        self.assertEqual(page.statusLabel.text_value, "Активный пресет")
 
     def test_pending_raw_text_apply_is_ignored_after_new_load_is_requested(self) -> None:
         from presets.ui.common.preset_subpage_base import PresetRawEditorPage

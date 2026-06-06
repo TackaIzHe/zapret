@@ -56,8 +56,10 @@ class RawPresetEditorWorkerArchitectureTests(unittest.TestCase):
             self.assertIn(factory_name, feature_source)
             self.assertIn(f"_{factory_name}_fn", page_source)
 
-        self.assertIn("get_selected_raw_preset_name", init_source)
-        self.assertIn("get_selected_raw_preset_file_name", init_source)
+        self.assertNotIn("get_selected_raw_preset_name", init_source)
+        self.assertNotIn("get_selected_raw_preset_file_name", init_source)
+        self.assertNotIn("_get_selected_raw_preset_name_fn", page_source)
+        self.assertNotIn("_get_selected_raw_preset_file_name_fn", page_source)
         self.assertNotIn("RawPresetEditorController", page_source)
         self.assertNotIn("_controller", page_source)
         self.assertNotIn("save_preset_source_by_file_name", init_source)
@@ -75,8 +77,8 @@ class RawPresetEditorWorkerArchitectureTests(unittest.TestCase):
 
         for factory_name in worker_factories:
             self.assertIs(kwargs[factory_name], getattr(presets_feature, factory_name))
-        self.assertIs(kwargs["get_selected_raw_preset_name"], presets_feature.get_selected_raw_preset_name)
-        self.assertIs(kwargs["get_selected_raw_preset_file_name"], presets_feature.get_selected_raw_preset_file_name)
+        self.assertNotIn("get_selected_raw_preset_name", kwargs)
+        self.assertNotIn("get_selected_raw_preset_file_name", kwargs)
         self.assertNotIn("presets_feature", kwargs)
 
 

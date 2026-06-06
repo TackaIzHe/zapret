@@ -217,8 +217,6 @@ class PresetRawEditorPage(BasePage):
         create_raw_preset_save_worker,
         create_raw_preset_activate_worker,
         create_raw_preset_action_worker,
-        get_selected_raw_preset_name,
-        get_selected_raw_preset_file_name,
         launch_method: str,
         title: str,
         open_back,
@@ -236,6 +234,8 @@ class PresetRawEditorPage(BasePage):
         self._preset_file_name = ""
         self._preset_path: Path | None = None
         self._preset_origin = "user"
+        self._active_preset_file_name = ""
+        self._active_preset_name = ""
         self._is_loading = False
         self._raw_load_runtime = OneShotWorkerRuntime()
         self._raw_load_request_id = 0
@@ -274,8 +274,6 @@ class PresetRawEditorPage(BasePage):
         self._create_raw_preset_save_worker_fn = create_raw_preset_save_worker
         self._create_raw_preset_activate_worker_fn = create_raw_preset_activate_worker
         self._create_raw_preset_action_worker_fn = create_raw_preset_action_worker
-        self._get_selected_raw_preset_name_fn = get_selected_raw_preset_name
-        self._get_selected_raw_preset_file_name_fn = get_selected_raw_preset_file_name
         self._save_timer = QTimer(self)
         self._save_timer.setSingleShot(True)
         self._save_timer.timeout.connect(self._save_file)
@@ -737,10 +735,19 @@ class PresetRawEditorPage(BasePage):
             self._preset_name = str(result.display_name or "").strip()
         self._preset_path = getattr(result, "path", None)
         self._preset_origin = str(getattr(result, "origin", "") or "user").strip().lower() or "user"
+        self._apply_raw_preset_active_state(
+            getattr(result, "active_file_name", ""),
+            getattr(result, "active_name", ""),
+        )
         set_plain_text_if_changed(self.editor, result.text)
         self._set_footer(result.footer_text)
         self._is_loading = False
         self._refresh_header()
+
+    def _apply_raw_preset_active_state(self, file_name: str, name: str = "") -> None:
+        active_file_name = str(file_name or "").strip()
+        self._active_preset_file_name = active_file_name
+        self._active_preset_name = str(name or "").strip() or (Path(active_file_name).stem if active_file_name else "")
 
     def _on_raw_preset_text_failed(self, request_id: int, error: str) -> None:
         if request_id != self._raw_load_request_id:
@@ -1226,6 +1233,7 @@ class PresetRawEditorPage(BasePage):
         if self.__dict__.get("_pending_raw_preset_activation"):
             return
         if activated:
+            self._apply_raw_preset_active_state(self._preset_file_name, self._preset_name)
             self._refresh_header()
             self._set_footer(self._activation_footer_text())
             self._show_success(f"Пресет «{self._preset_name}» активирован")
@@ -1496,16 +1504,10 @@ class PresetRawEditorPage(BasePage):
         )
 
     def _current_selected_name(self) -> str:
-        try:
-            return self._get_selected_raw_preset_name_fn(self._launch_method)
-        except Exception:
-            return ""
+        return str(self.__dict__.get("_active_preset_name", "") or "").strip()
 
     def _current_selected_file_name(self) -> str:
-        try:
-            return self._get_selected_raw_preset_file_name_fn(self._launch_method)
-        except Exception:
-            return ""
+        return str(self.__dict__.get("_active_preset_file_name", "") or "").strip()
 
     def _notify_preset_structure_changed(self) -> None:
         store = self._ui_state_store

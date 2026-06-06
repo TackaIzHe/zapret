@@ -27,12 +27,17 @@ class RawPresetEditorDependencyBoundaryTests(unittest.TestCase):
             "create_raw_preset_save_worker",
             "create_raw_preset_activate_worker",
             "create_raw_preset_action_worker",
-            "get_selected_raw_preset_name",
-            "get_selected_raw_preset_file_name",
         }
         for key in page_dependency_keys:
             self.assertIn(key, page_init_source)
             self.assertIn(key, deps_source)
+
+        for key in (
+            "get_selected_raw_preset_name",
+            "get_selected_raw_preset_file_name",
+        ):
+            self.assertNotIn(key, page_init_source)
+            self.assertNotIn(key, deps_source)
 
         workflow_method_names = {
             "save_preset_source_by_file_name",
@@ -63,6 +68,8 @@ class RawPresetEditorDependencyBoundaryTests(unittest.TestCase):
 
         for key in page_dependency_keys:
             self.assertIs(kwargs[key], getattr(presets, key))
+        self.assertNotIn("get_selected_raw_preset_name", kwargs)
+        self.assertNotIn("get_selected_raw_preset_file_name", kwargs)
         self.assertNotIn("presets_feature", kwargs)
 
     def test_raw_preset_editor_receives_runtime_actions_instead_of_runtime_feature(self) -> None:
