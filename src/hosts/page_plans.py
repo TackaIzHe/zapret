@@ -273,6 +273,16 @@ def get_direct_profile_name() -> str | None:
     return None
 
 
+def _normalize_active_domains_map(active_domains_map: dict[str, str]) -> dict[str, str]:
+    normalized: dict[str, str] = {}
+    for domain, ip in (active_domains_map or {}).items():
+        domain_key = str(domain or "").strip().casefold()
+        if not domain_key or domain_key in normalized:
+            continue
+        normalized[domain_key] = str(ip or "").strip()
+    return normalized
+
+
 def infer_profile_from_hosts(
     service_name: str,
     available_profiles: list[str],
@@ -280,7 +290,8 @@ def infer_profile_from_hosts(
 ) -> str | None:
     from hosts.proxy_domains import get_service_domain_ip_map
 
-    if not active_domains_map or not available_profiles:
+    normalized_active = _normalize_active_domains_map(active_domains_map)
+    if not normalized_active or not available_profiles:
         return None
 
     best_profile: str | None = None
@@ -300,11 +311,11 @@ def infer_profile_from_hosts(
         present = 0
         matches = 0
         for domain, ip in domain_map.items():
-            active_ip = active_domains_map.get(domain)
+            active_ip = normalized_active.get(str(domain or "").casefold())
             if active_ip is None:
                 continue
             present += 1
-            if (active_ip or "").strip() == (ip or "").strip():
+            if (active_ip or "").strip().casefold() == (ip or "").strip().casefold():
                 matches += 1
 
         if total and matches == total:
@@ -331,11 +342,12 @@ def infer_profile_from_hosts(
 def infer_direct_toggle_from_hosts(service_name: str, active_domains_map: dict[str, str]) -> bool:
     from hosts.proxy_domains import get_service_domain_names
 
-    if not active_domains_map:
+    normalized_active = _normalize_active_domains_map(active_domains_map)
+    if not normalized_active:
         return False
     try:
         for domain in (get_service_domain_names(service_name) or []):
-            if domain in active_domains_map:
+            if str(domain or "").strip().casefold() in normalized_active:
                 return True
     except Exception:
         pass

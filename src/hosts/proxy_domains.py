@@ -530,7 +530,10 @@ def get_service_domain_ip_map(service_name: str, profile_name: str) -> dict[str,
 
     out: dict[str, str] = {}
     for domain, ip in rows:
-        out[domain] = ip
+        domain_key = _clean_str(domain).casefold()
+        if not domain_key or domain_key in out:
+            continue
+        out[domain_key] = ip
     return out
 
 

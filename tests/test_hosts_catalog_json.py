@@ -146,6 +146,78 @@ class HostsCatalogJsonTests(unittest.TestCase):
                     ],
                 )
 
+    def test_multi_value_profile_ip_map_uses_top_hosts_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            catalog_path = self._write_catalog(root)
+            data = json.loads(catalog_path.read_text(encoding="utf-8"))
+            data["services"][0]["domains"][0]["ips"]["xbox_dns"] = ["2.23.88.118", "2.23.88.119"]
+            catalog_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+            fake_module = root / "public_zapretgui" / "src" / "hosts" / "proxy_domains.py"
+            fake_module.parent.mkdir(parents=True, exist_ok=True)
+            fake_module.write_text("", encoding="utf-8")
+
+            with patch.object(self.proxy_domains, "__file__", str(fake_module)):
+                self.proxy_domains.invalidate_hosts_catalog_cache()
+
+                self.assertEqual(
+                    self.proxy_domains.get_service_domain_ip_map("ChatGPT", "xbox_dns"),
+                    {"chat.openai.com": "2.23.88.118"},
+                )
+
+    def test_services_catalog_plan_matches_dns_domains_case_insensitively(self) -> None:
+        from hosts import page_plans
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            catalog_path = self._write_catalog(root)
+            data = json.loads(catalog_path.read_text(encoding="utf-8"))
+            data["services"][0]["domains"][0]["host"] = "Chat.OpenAI.com"
+            catalog_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+            fake_module = root / "public_zapretgui" / "src" / "hosts" / "proxy_domains.py"
+            fake_module.parent.mkdir(parents=True, exist_ok=True)
+            fake_module.write_text("", encoding="utf-8")
+
+            with patch.object(self.proxy_domains, "__file__", str(fake_module)):
+                self.proxy_domains.invalidate_hosts_catalog_cache()
+
+                plan = page_plans.build_services_catalog_plan(
+                    current_selection={},
+                    active_domains_map={"chat.openai.com": "72.56.93.144"},
+                    direct_title="Direct",
+                    ai_title="AI",
+                    other_title="Other",
+                )
+
+        self.assertEqual(plan.new_selection.get("ChatGPT"), "zapret_dns")
+
+    def test_services_catalog_plan_matches_direct_domains_case_insensitively(self) -> None:
+        from hosts import page_plans
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            catalog_path = self._write_catalog(root)
+            data = json.loads(catalog_path.read_text(encoding="utf-8"))
+            data["services"][1]["hosts"][0]["host"] = "Instagram.com"
+            catalog_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+            fake_module = root / "public_zapretgui" / "src" / "hosts" / "proxy_domains.py"
+            fake_module.parent.mkdir(parents=True, exist_ok=True)
+            fake_module.write_text("", encoding="utf-8")
+
+            with patch.object(self.proxy_domains, "__file__", str(fake_module)):
+                self.proxy_domains.invalidate_hosts_catalog_cache()
+
+                plan = page_plans.build_services_catalog_plan(
+                    current_selection={},
+                    active_domains_map={"instagram.com": "157.240.245.174"},
+                    direct_title="Direct",
+                    ai_title="AI",
+                    other_title="Other",
+                )
+
+        service_name = "IP для подмены заблокированных ресурсов"
+        self.assertEqual(plan.new_selection.get(service_name), "direct")
+
     def test_services_catalog_plan_keeps_saved_selection_when_hosts_is_empty(self) -> None:
         from hosts import page_plans
 
