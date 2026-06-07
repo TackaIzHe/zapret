@@ -25,6 +25,10 @@ class TelegramProxyUiTextsTests(unittest.TestCase):
         self.assertEqual(plan.upstream_title, "Дополнительно")
         self.assertEqual(plan.upstream_toggle_title, "Внешний прокси")
         self.assertEqual(
+            plan.proxy_mode_description,
+            "MTProxy — рекомендуемый режим. SOCKS5 оставлен для совместимости.",
+        )
+        self.assertEqual(
             plan.upstream_toggle_description,
             "Резервный SOCKS5, если часть серверов Telegram не отвечает.",
         )
@@ -52,6 +56,15 @@ class TelegramProxyUiTextsTests(unittest.TestCase):
         self.assertIn("Проверить", source)
         self.assertIn("DNS", source)
         self.assertIn("Код Worker", source)
+
+    def test_proxy_mode_choice_marks_mtproxy_as_recommended(self) -> None:
+        import inspect
+        from telegram_proxy.ui import settings_build
+
+        source = inspect.getsource(settings_build)
+
+        self.assertIn("MTProxy (рекомендуется)", source)
+        self.assertIn("SOCKS5 (совместимость)", source)
 
 
 if __name__ == "__main__":

@@ -49,6 +49,7 @@ from telegram_proxy.proxy.mtproto import (
     patch_init_dc as _patch_init_dc,
 )
 from telegram_proxy.proxy.mtproxy import (
+    MTProxyMsgSplitter,
     build_crypto_context,
     generate_relay_init,
     normalize_secret,
@@ -383,6 +384,7 @@ class TelegramWSProxy:
                 is_media,
                 relay_init,
                 crypto,
+                parsed.proto_tag,
                 target_host,
                 target_port,
                 label,
@@ -551,6 +553,7 @@ class TelegramWSProxy:
         is_media: bool,
         relay_init: bytes,
         crypto,
+        proto_tag: bytes,
         target_host: str,
         target_port: int,
         label: str,
@@ -559,6 +562,10 @@ class TelegramWSProxy:
         dc_key = (dc, is_media)
         now = time.monotonic()
         media_tag = " media" if is_media else ""
+        try:
+            splitter = MTProxyMsgSplitter(relay_init, proto_tag)
+        except Exception:
+            splitter = None
 
         if dc_key in self._ws_blacklist or now < self._dc_cooldown.get(dc_key, 0):
             if await self._cloudflare_fallback(
@@ -571,7 +578,7 @@ class TelegramWSProxy:
                 label,
                 dc,
                 is_media,
-                relay_wss_fn=lambda **kwargs: relay_mtproxy_wss(crypto=crypto, **kwargs),
+                relay_wss_fn=lambda **kwargs: relay_mtproxy_wss(crypto=crypto, splitter=splitter, **kwargs),
             ):
                 return
             await self._mtproxy_tcp_fallback(
@@ -618,7 +625,7 @@ class TelegramWSProxy:
                 label,
                 dc,
                 is_media,
-                relay_wss_fn=lambda **kwargs: relay_mtproxy_wss(crypto=crypto, **kwargs),
+                relay_wss_fn=lambda **kwargs: relay_mtproxy_wss(crypto=crypto, splitter=splitter, **kwargs),
             ):
                 return
             await self._mtproxy_tcp_fallback(
@@ -638,6 +645,7 @@ class TelegramWSProxy:
             log_fn=self._log,
             label=label,
             dc=dc,
+            splitter=splitter,
         )
 
     async def _cloudflare_fallback(

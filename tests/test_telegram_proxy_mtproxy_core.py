@@ -4,6 +4,7 @@ import hashlib
 import os
 import struct
 import unittest
+from types import SimpleNamespace
 
 
 def _xor_bytes(left: bytes, right: bytes) -> bytes:
@@ -112,6 +113,103 @@ class TelegramProxyMTProxyCoreTests(unittest.TestCase):
         self.assertEqual(len(client_response), 128)
         self.assertNotEqual(telegram_payload, client_payload)
 
+    def test_mtproxy_msg_splitter_splits_intermediate_packets(self) -> None:
+        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+        from telegram_proxy.proxy.mtproxy import (
+            MTProxyMsgSplitter,
+            PROTO_TAG_INTERMEDIATE,
+            generate_relay_init,
+        )
+
+        relay_init = generate_relay_init(PROTO_TAG_INTERMEDIATE, dc=4, is_media=False)
+        encryptor = Cipher(
+            algorithms.AES(relay_init[8:40]),
+            modes.CTR(relay_init[40:56]),
+        ).encryptor()
+        encryptor.update(b"\x00" * 64)
+
+        first_packet = struct.pack("<I", 8) + b"12345678"
+        second_packet = struct.pack("<I", 4) + b"abcd"
+        encrypted = encryptor.update(first_packet + second_packet)
+
+        splitter = MTProxyMsgSplitter(relay_init, PROTO_TAG_INTERMEDIATE)
+
+        self.assertEqual(
+            splitter.split(encrypted),
+            [encrypted[: len(first_packet)], encrypted[len(first_packet):]],
+        )
+
+    def test_mtproxy_relay_sends_split_packets_as_separate_ws_frames(self) -> None:
+        import asyncio
+
+        from telegram_proxy.proxy.mtproxy import relay_mtproxy_wss
+
+        class _Reader:
+            def __init__(self, chunks):
+                self._chunks = list(chunks)
+
+            async def read(self, _size):
+                if self._chunks:
+                    return self._chunks.pop(0)
+                return b""
+
+        class _Writer:
+            def write(self, _data):
+                return None
+
+            async def drain(self):
+                return None
+
+        class _Ws:
+            def __init__(self):
+                self.sent = []
+                self._closed = False
+
+            async def send(self, data):
+                self.sent.append(data)
+
+            async def send_batch(self, parts):
+                self.sent.extend(parts)
+
+            async def recv(self):
+                await asyncio.sleep(1)
+
+            async def close(self):
+                self._closed = True
+
+        class _Crypto:
+            def client_to_telegram(self, data):
+                return data
+
+            def telegram_to_client(self, data):
+                return data
+
+        class _Splitter:
+            def split(self, data):
+                midpoint = len(data) // 2
+                return [data[:midpoint], data[midpoint:]]
+
+            def flush(self):
+                return []
+
+        ws = _Ws()
+        asyncio.run(
+            relay_mtproxy_wss(
+                client_reader=_Reader([b"aaaabbbb"]),
+                client_writer=_Writer(),
+                ws=ws,
+                crypto=_Crypto(),
+                splitter=_Splitter(),
+                stats=SimpleNamespace(bytes_sent=0, bytes_received=0),
+                log_fn=lambda _message: None,
+                label="test",
+                dc=4,
+            )
+        )
+
+        self.assertEqual(ws.sent, [b"aaaa", b"bbbb"])
+
     def test_runtime_start_config_reads_mtproxy_mode_and_secret(self) -> None:
         from unittest.mock import patch
 
@@ -165,6 +263,8 @@ class TelegramProxyMTProxyCoreTests(unittest.TestCase):
         self.assertIn("build_crypto_context", handler_source)
         self.assertIn("relay_mtproxy_wss", tunnel_source)
         self.assertIn("_cloudflare_fallback", tunnel_source)
+        self.assertIn("MTProxyMsgSplitter", tunnel_source)
+        self.assertIn("splitter=splitter", tunnel_source)
 
 
 if __name__ == "__main__":

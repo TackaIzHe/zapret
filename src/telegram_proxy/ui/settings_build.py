@@ -190,11 +190,11 @@ def build_telegram_proxy_settings_panel(
         title=text.proxy_mode_title,
         description=text.proxy_mode_description,
         items=[
-            ("SOCKS5", "socks5"),
-            ("MTProxy", "mtproxy"),
+            ("MTProxy (рекомендуется)", "mtproxy"),
+            ("SOCKS5 (совместимость)", "socks5"),
         ],
     )
-    proxy_mode_row.combo.setFixedWidth(170)
+    proxy_mode_row.combo.setFixedWidth(250)
     settings_card.addSettingCard(proxy_mode_row)
 
     mtproxy_secret_row = QWidget(settings_card)

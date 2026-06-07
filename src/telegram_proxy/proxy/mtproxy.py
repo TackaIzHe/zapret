@@ -55,6 +55,94 @@ class MTProxyCryptoContext:
         return self.client_encryptor.update(plain)
 
 
+class MTProxyMsgSplitter:
+    """Делит MTProxy-поток на отдельные MTProto-пакеты для WebSocket."""
+
+    def __init__(self, relay_init: bytes, proto_tag: bytes):
+        self._decryptor = _cipher(
+            bytes(relay_init[SKIP_LEN:SKIP_LEN + PREKEY_LEN]),
+            bytes(relay_init[SKIP_LEN + PREKEY_LEN:SKIP_LEN + PREKEY_LEN + IV_LEN]),
+        )
+        self._decryptor.update(ZERO_64)
+        self._proto_tag = bytes(proto_tag or b"")
+        self._cipher_buf = bytearray()
+        self._plain_buf = bytearray()
+        self._disabled = False
+
+    def split(self, chunk: bytes) -> list[bytes]:
+        if not chunk:
+            return []
+        if self._disabled:
+            return [chunk]
+
+        self._cipher_buf.extend(chunk)
+        self._plain_buf.extend(self._decryptor.update(chunk))
+        parts: list[bytes] = []
+        offset = 0
+
+        while offset < len(self._cipher_buf):
+            packet_len = self._next_packet_len(offset, len(self._cipher_buf) - offset)
+            if packet_len is None:
+                break
+            if packet_len <= 0:
+                parts.append(bytes(self._cipher_buf[offset:]))
+                offset = len(self._cipher_buf)
+                self._disabled = True
+                break
+            parts.append(bytes(self._cipher_buf[offset:offset + packet_len]))
+            offset += packet_len
+
+        if offset:
+            del self._cipher_buf[:offset]
+            del self._plain_buf[:offset]
+        return parts
+
+    def flush(self) -> list[bytes]:
+        if not self._cipher_buf:
+            return []
+        tail = bytes(self._cipher_buf)
+        self._cipher_buf.clear()
+        self._plain_buf.clear()
+        return [tail]
+
+    def _next_packet_len(self, offset: int, available: int) -> int | None:
+        if available <= 0:
+            return None
+        if self._proto_tag == PROTO_TAG_ABRIDGED:
+            return self._next_abridged_len(offset, available)
+        if self._proto_tag in (PROTO_TAG_INTERMEDIATE, PROTO_TAG_SECURE):
+            return self._next_intermediate_len(offset, available)
+        return 0
+
+    def _next_abridged_len(self, offset: int, available: int) -> int | None:
+        first = self._plain_buf[offset]
+        if first in (0x7F, 0xFF):
+            if available < 4:
+                return None
+            payload_len = int.from_bytes(self._plain_buf[offset + 1:offset + 4], "little") * 4
+            header_len = 4
+        else:
+            payload_len = (first & 0x7F) * 4
+            header_len = 1
+        if payload_len <= 0:
+            return 0
+        packet_len = header_len + payload_len
+        if available < packet_len:
+            return None
+        return packet_len
+
+    def _next_intermediate_len(self, offset: int, available: int) -> int | None:
+        if available < 4:
+            return None
+        payload_len = struct.unpack_from("<I", self._plain_buf, offset)[0] & 0x7FFFFFFF
+        if payload_len <= 0:
+            return 0
+        packet_len = 4 + payload_len
+        if available < packet_len:
+            return None
+        return packet_len
+
+
 def normalize_secret(value: object) -> str:
     text = str(value or "").strip().lower()
     if len(text) != 32:
@@ -195,6 +283,7 @@ async def relay_mtproxy_wss(
     log_fn: Callable[[str], None],
     label: str,
     dc: int = 0,
+    splitter: MTProxyMsgSplitter | None = None,
 ) -> None:
     t0 = time.monotonic()
     sent_total = 0
@@ -209,7 +298,24 @@ async def relay_mtproxy_wss(
                     break
                 sent_total += len(data)
                 stats.bytes_sent += len(data)
-                await ws.send(crypto.client_to_telegram(data))
+                chunk = crypto.client_to_telegram(data)
+                if splitter is None:
+                    await ws.send(chunk)
+                    continue
+                parts = splitter.split(chunk)
+                if not parts:
+                    continue
+                if len(parts) == 1:
+                    await ws.send(parts[0])
+                else:
+                    await ws.send_batch(parts)
+            if splitter is not None:
+                tail = splitter.flush()
+                if tail:
+                    if len(tail) == 1:
+                        await ws.send(tail[0])
+                    else:
+                        await ws.send_batch(tail)
         except (asyncio.CancelledError, ConnectionError, OSError):
             pass
         except Exception as exc:
@@ -308,6 +414,7 @@ async def relay_mtproxy_tcp(
 __all__ = [
     "MTProxyClientInit",
     "MTProxyCryptoContext",
+    "MTProxyMsgSplitter",
     "build_crypto_context",
     "build_mtproxy_link",
     "generate_secret",
