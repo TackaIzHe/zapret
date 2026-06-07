@@ -191,7 +191,7 @@ PAGE_ROUTE_SPECS: dict[PageName, PageRouteSpec] = {
         is_hidden=False,
         launch_modes=_COMMON,
         breadcrumb_parent=None,
-        sidebar_group="diagnostics",
+        sidebar_group="system",
     ),
     PageName.BLOCKCHECK: PageRouteSpec(
         page_name=PageName.BLOCKCHECK,

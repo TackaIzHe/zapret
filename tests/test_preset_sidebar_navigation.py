@@ -250,6 +250,34 @@ class PresetSidebarNavigationTests(unittest.TestCase):
             self.assertIn(page_name, settings_plan.page_names)
             self.assertFalse(visibility[page_name])
 
+    def test_common_sidebar_groups_keep_tools_and_diagnostics_separate(self) -> None:
+        from app.page_names import PageName
+        from settings.mode import ZAPRET2_MODE
+        from ui.navigation.layout_plan import build_sidebar_group_plans
+
+        plans = {
+            group_plan.group_name: group_plan
+            for group_plan in build_sidebar_group_plans(ZAPRET2_MODE)
+        }
+
+        self.assertEqual(
+            plans["system"].page_names,
+            (
+                PageName.NETWORK,
+                PageName.HOSTS,
+                PageName.TELEGRAM_PROXY,
+            ),
+        )
+        self.assertEqual(plans["diagnostics"].page_names, (PageName.BLOCKCHECK,))
+
+    def test_common_sidebar_labels_use_dns_and_hosts_wording(self) -> None:
+        from app.page_names import PageName
+        from app.ui_texts import get_nav_page_label, tr
+
+        self.assertEqual(tr("nav.header.system", language="ru"), "Инструменты")
+        self.assertEqual(get_nav_page_label(PageName.NETWORK, language="ru"), "Настройка DNS")
+        self.assertEqual(get_nav_page_label(PageName.HOSTS, language="ru"), "Редактор hosts")
+
     def test_initial_sidebar_build_skips_secondary_and_hidden_other_mode_items(self) -> None:
         from app.page_names import PageName
         from settings.mode import ZAPRET2_MODE

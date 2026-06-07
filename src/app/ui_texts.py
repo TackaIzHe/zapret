@@ -26,8 +26,8 @@ TEXTS: dict[str, dict[str, str]] = {
         "en": "Zapret Settings",
     },
     "nav.header.system": {
-        "ru": "Система",
-        "en": "System",
+        "ru": "Инструменты",
+        "en": "Tools",
     },
     "nav.header.diagnostics": {
         "ru": "Диагностика",
@@ -62,12 +62,12 @@ TEXTS: dict[str, dict[str, str]] = {
         "en": "Autostart",
     },
     "nav.page.network": {
-        "ru": "Сеть",
-        "en": "Network",
+        "ru": "Настройка DNS",
+        "en": "DNS Settings",
     },
     "nav.page.hosts": {
-        "ru": "Редактор файла hosts",
-        "en": "Hosts File Editor",
+        "ru": "Редактор hosts",
+        "en": "Hosts Editor",
     },
     "nav.page.blockcheck": {
         "ru": "BlockCheck",
@@ -434,8 +434,8 @@ TEXTS: dict[str, dict[str, str]] = {
         "en": "Mode",
     },
     "page.network.title": {
-        "ru": "Сеть",
-        "en": "Network",
+        "ru": "Настройка DNS",
+        "en": "DNS Settings",
     },
     "page.network.dns": {
         "ru": "DNS",
@@ -450,8 +450,8 @@ TEXTS: dict[str, dict[str, str]] = {
         "en": "Utilities",
     },
     "page.hosts.title": {
-        "ru": "Hosts",
-        "en": "Hosts",
+        "ru": "Редактор hosts",
+        "en": "Hosts Editor",
     },
     "page.hosts.services": {
         "ru": "Сервисы",

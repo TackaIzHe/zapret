@@ -18,8 +18,8 @@ def _get_nav_labels():
     from app.page_names import PageName
 
     return {
-        PageName.NETWORK: "Сеть",
-        PageName.HOSTS: "Редактор файла hosts",
+        PageName.NETWORK: "Настройка DNS",
+        PageName.HOSTS: "Редактор hosts",
         PageName.BLOCKCHECK: "BlockCheck",
         PageName.APPEARANCE: "Оформление",
         PageName.PREMIUM: "Донат",
