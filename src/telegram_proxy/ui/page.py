@@ -159,10 +159,13 @@ class TelegramProxyPage(BasePage):
         self._btn_open_log_file = None
         self._btn_clear_logs = None
         self._log_edit = None
+        self._log_text_cache = ""
+        self._log_text_line_count = 0
         self._diag_desc_label = None
         self._btn_run_diag = None
         self._btn_copy_diag = None
         self._diag_edit = None
+        self._diag_text_cache = ""
         self._setup_ui()
         self._request_initial_state_load()
         self._after_ui_built()
@@ -448,6 +451,7 @@ class TelegramProxyPage(BasePage):
         self._diag_result = text
 
     def _update_diag(self, text: str):
+        self._diag_text_cache = str(text or "")
         self._diag_edit.setPlainText(text)
         sb = self._diag_edit.verticalScrollBar()
         if sb:
@@ -520,7 +524,7 @@ class TelegramProxyPage(BasePage):
         self._apply_ui_texts()
 
     def _on_copy_diag(self):
-        text = self._diag_edit.toPlainText()
+        text = str(self.__dict__.get("_diag_text_cache", "") or "")
         plan = self._telegram_proxy.copy_text(
             text,
             success_title="Скопировано",
@@ -690,6 +694,7 @@ class TelegramProxyPage(BasePage):
         new_lines = mgr.proxy_logger.drain()
         if not new_lines:
             return
+        self._append_log_text_cache(new_lines)
 
         self._log_edit.setUpdatesEnabled(False)
         try:
@@ -702,6 +707,17 @@ class TelegramProxyPage(BasePage):
         sb = self._log_edit.verticalScrollBar()
         if sb:
             sb.setValue(sb.maximum())
+
+    def _append_log_text_cache(self, lines) -> None:
+        normalized_lines = [str(line or "") for line in lines]
+        if not normalized_lines:
+            return
+        chunk = "\n".join(normalized_lines)
+        if self._log_text_cache:
+            self._log_text_cache = f"{self._log_text_cache}\n{chunk}"
+        else:
+            self._log_text_cache = chunk
+        self._log_text_line_count += len(normalized_lines)
 
     def _append_log_line(self, msg: str):
         """Append a single line to the log."""
@@ -782,11 +798,11 @@ class TelegramProxyPage(BasePage):
     def _on_copy_all_logs(self):
         if self._log_edit is None:
             return
-        text = self._log_edit.toPlainText()
+        text = str(self.__dict__.get("_log_text_cache", "") or "")
         plan = self._telegram_proxy.copy_text(
             text,
             success_title="Скопировано",
-            success_content=f"{len(text.splitlines())} строк",
+            success_content=f"{int(self.__dict__.get('_log_text_line_count', 0) or 0)} строк",
         )
         if plan.ok and InfoBar is not None:
             try:
@@ -875,6 +891,8 @@ class TelegramProxyPage(BasePage):
     def _on_clear_logs(self):
         if self._log_edit is not None:
             self._log_edit.clear()
+        self._log_text_cache = ""
+        self._log_text_line_count = 0
 
     # -- Handlers --
 

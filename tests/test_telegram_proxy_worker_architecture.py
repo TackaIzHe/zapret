@@ -341,6 +341,53 @@ class TelegramProxyWorkerArchitectureTests(unittest.TestCase):
         stop_runtime.start_qthread_worker.assert_not_called()
         self.assertEqual(feature._tray_toggle_state.pending_count, 1)
 
+    def test_copy_logs_uses_cached_text_without_reading_log_widget(self) -> None:
+        from telegram_proxy.ui import page as telegram_proxy_page_module
+        from telegram_proxy.ui.page import TelegramProxyPage
+
+        class LogEdit:
+            def toPlainText(self):
+                raise AssertionError("GUI log text should not be read during copy")
+
+        copy_text = Mock(return_value=SimpleNamespace(ok=False, log_line=""))
+        page = TelegramProxyPage.__new__(TelegramProxyPage)
+        page._log_edit = LogEdit()
+        page._log_text_cache = "one\ntwo\n"
+        page._log_text_line_count = 2
+        page._telegram_proxy = SimpleNamespace(copy_text=copy_text)
+
+        with patch.object(telegram_proxy_page_module, "InfoBar", None):
+            TelegramProxyPage._on_copy_all_logs(page)
+
+        copy_text.assert_called_once_with(
+            "one\ntwo\n",
+            success_title="Скопировано",
+            success_content="2 строк",
+        )
+
+    def test_copy_diag_uses_cached_text_without_reading_diag_widget(self) -> None:
+        from telegram_proxy.ui import page as telegram_proxy_page_module
+        from telegram_proxy.ui.page import TelegramProxyPage
+
+        class DiagEdit:
+            def toPlainText(self):
+                raise AssertionError("GUI diagnostics text should not be read during copy")
+
+        copy_text = Mock(return_value=SimpleNamespace(ok=False, log_line=""))
+        page = TelegramProxyPage.__new__(TelegramProxyPage)
+        page._diag_edit = DiagEdit()
+        page._diag_text_cache = "diag result"
+        page._telegram_proxy = SimpleNamespace(copy_text=copy_text)
+
+        with patch.object(telegram_proxy_page_module, "InfoBar", None):
+            TelegramProxyPage._on_copy_diag(page)
+
+        copy_text.assert_called_once_with(
+            "diag result",
+            success_title="Скопировано",
+            success_content="Результат диагностики",
+        )
+
     def test_start_worker_passes_command_loaded_upstream_config_to_manager(self) -> None:
         manager = Mock()
         manager.start_proxy.return_value = True
