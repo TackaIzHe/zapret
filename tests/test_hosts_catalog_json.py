@@ -33,6 +33,7 @@ class HostsCatalogJsonTests(unittest.TestCase):
                     "profiles": [
                         {"id": "zapret_dns", "name": "Zapret DNS"},
                         {"id": "xbox_dns", "name": "XBOX DNS"},
+                        {"id": "xbox_dns_old", "name": "XBOX DNS (old)"},
                         {"id": "direct", "name": "Вкл. (активировать hosts)"},
                     ],
                     "services": [
@@ -44,7 +45,8 @@ class HostsCatalogJsonTests(unittest.TestCase):
                                     "host": "chat.openai.com",
                                     "ips": {
                                         "zapret_dns": "72.56.93.144",
-                                        "xbox_dns": "45.155.204.190",
+                                        "xbox_dns": "2.23.88.118",
+                                        "xbox_dns_old": "45.155.204.190",
                                     },
                                 }
                             ],
@@ -92,7 +94,7 @@ class HostsCatalogJsonTests(unittest.TestCase):
 
                 self.assertEqual(
                     self.proxy_domains.get_dns_profiles(),
-                    ["zapret_dns", "xbox_dns", "direct"],
+                    ["zapret_dns", "xbox_dns", "xbox_dns_old", "direct"],
                 )
                 self.assertEqual(
                     self.proxy_domains.get_dns_profile_display_name("zapret_dns"),
