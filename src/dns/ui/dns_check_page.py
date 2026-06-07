@@ -50,6 +50,7 @@ class DNSCheckPage(BasePage):
         self._quick_runtime = OneShotWorkerRuntime()
         self._quick_check_pending = False
         self._quick_check_start_scheduled = False
+        self._results_plain_text_cache = ""
         self._status_tone = "muted"
         self._status_bold = False
         self._info_icon_labels = []
@@ -285,6 +286,7 @@ class DNSCheckPage(BasePage):
         self._cleanup_in_progress = False
         
         self.result_text.clear()
+        self._clear_results_plain_text_cache()
         start_plan = dns_check_page_plans.build_start_plan()
         self._apply_interaction_state(
             check_enabled=start_plan.check_enabled,
@@ -309,6 +311,7 @@ class DNSCheckPage(BasePage):
         """Добавляет текст в результаты с форматированием."""
         if self._cleanup_in_progress:
             return
+        self._append_results_plain_text_cache(text)
         tokens = get_theme_tokens()
         semantic = get_semantic_palette()
         plan = dns_check_page_plans.build_result_line_plan(text)
@@ -385,6 +388,7 @@ class DNSCheckPage(BasePage):
             return
         self._quick_check_pending = False
         self.result_text.clear()
+        self._clear_results_plain_text_cache()
         self._apply_interaction_state(
             check_enabled=False,
             quick_enabled=False,
@@ -499,10 +503,18 @@ class DNSCheckPage(BasePage):
     def _resolve_save_results_text(self, plain_text: str | None) -> str:
         if plain_text is not None:
             return str(plain_text or "")
-        result_text = self.__dict__.get("result_text")
-        if result_text is None:
-            return ""
-        return str(result_text.toPlainText() or "")
+        return str(self.__dict__.get("_results_plain_text_cache", "") or "")
+
+    def _clear_results_plain_text_cache(self) -> None:
+        self._results_plain_text_cache = ""
+
+    def _append_results_plain_text_cache(self, text) -> None:
+        line = str(text or "")
+        current = str(self.__dict__.get("_results_plain_text_cache", "") or "")
+        if current:
+            self._results_plain_text_cache = f"{current}\n{line}"
+        else:
+            self._results_plain_text_cache = line
 
     def _on_save_results_finished(self, request_id: int, plan) -> None:
         if not self._save_runtime.is_current(

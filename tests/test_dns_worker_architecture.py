@@ -900,6 +900,28 @@ class DnsWorkerArchitectureTests(unittest.TestCase):
         page._save_runtime.start_qthread_worker.assert_not_called()
         self.assertEqual(page._save_results_pending, {"file_path": "first.txt", "plain_text": None})
 
+    def test_dns_check_save_uses_cached_result_text_without_reading_widget(self) -> None:
+        page = DNSCheckPage.__new__(DNSCheckPage)
+        page._save_runtime = SimpleNamespace(is_running=Mock(return_value=False), start_qthread_worker=Mock())
+        page._save_results_pending = None
+        page._save_results_start_scheduled = False
+        page._results_plain_text_cache = "cached dns report"
+        page.result_text = _PlainTextResult("widget dns report")
+        page.create_dns_check_save_worker = Mock(return_value="worker")
+
+        DNSCheckPage._start_save_results_worker(page, file_path="first.txt", plain_text=None)
+
+        self.assertEqual(page.result_text.read_calls, 0)
+        page._save_runtime.start_qthread_worker.assert_called_once()
+        worker_factory = page._save_runtime.start_qthread_worker.call_args.kwargs["worker_factory"]
+
+        self.assertEqual(worker_factory(7), "worker")
+        page.create_dns_check_save_worker.assert_called_once_with(
+            7,
+            file_path="first.txt",
+            plain_text="cached dns report",
+        )
+
     def test_dns_check_pending_save_hides_previous_save_result(self) -> None:
         import dns.ui.dns_check_page as dns_check_page
 
