@@ -116,6 +116,22 @@ class HostsCatalogJsonTests(unittest.TestCase):
                     ],
                 )
 
+    def test_service_domains_uses_top_available_hosts_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_catalog(root)
+            fake_module = root / "public_zapretgui" / "src" / "hosts" / "proxy_domains.py"
+            fake_module.parent.mkdir(parents=True, exist_ok=True)
+            fake_module.write_text("", encoding="utf-8")
+
+            with patch.object(self.proxy_domains, "__file__", str(fake_module)):
+                self.proxy_domains.invalidate_hosts_catalog_cache()
+
+                self.assertEqual(
+                    self.proxy_domains.get_service_domains("IP для подмены заблокированных ресурсов"),
+                    {"instagram.com": "157.240.245.174"},
+                )
+
     def test_multi_value_profile_does_not_hide_single_value_profiles(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

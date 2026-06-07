@@ -382,12 +382,17 @@ def get_service_domain_names(service_name: str) -> list[str]:
 
 
 def get_service_domains(service_name: str) -> dict[str, str]:
-    cat = _load_catalog()
-    domains = cat.services.get(service_name, {}) or {}
     out: dict[str, str] = {}
-    for domain, ips in domains.items():
-        if ips and ips[0]:
-            out[domain] = ips[0]
+    entries = _load_catalog().service_entries.get(service_name, []) or []
+    for domain, ips in entries:
+        domain_key = _clean_str(domain).casefold()
+        if not domain_key or domain_key in out:
+            continue
+        for ip in ips or []:
+            ip_s = _clean_str(ip)
+            if ip_s:
+                out[domain_key] = ip_s
+                break
     return out
 
 
