@@ -48,7 +48,7 @@ from qfluentwidgets import (
 )
 from settings.mode import ZAPRET1_MODE, ZAPRET2_MODE, is_preset_launch_method, is_zapret2_launch_method
 from ui.pages.base_page import BasePage
-from ui.accessibility import set_control_accessibility
+from ui.accessibility import set_control_accessibility, set_state_text
 from ui.fluent_widgets import set_tooltip
 from ui.one_shot_worker_runtime import OneShotWorkerRuntime
 from app.ui_texts import tr as tr_catalog
@@ -1247,12 +1247,23 @@ class ProfileSetupPageBase(BasePage):
 
         self._enabled_checkbox = CheckBox("Включён")
         self._enabled_checkbox.stateChanged.connect(self._on_enabled_changed)
+        self._enabled_checkbox.stateChanged.connect(self._update_profile_setup_accessibility)
         header_layout.addWidget(self._enabled_checkbox, 0, Qt.AlignmentFlag.AlignRight)
         self._update_user_profile_button = PushButton("Изменить", icon=FluentIcon.EDIT)
+        set_control_accessibility(
+            self._update_user_profile_button,
+            name="Изменить пользовательский profile",
+            description="Открывает изменение пользовательского profile и обновляет связанные preset-ы.",
+        )
         self._update_user_profile_button.clicked.connect(self._on_update_user_profile_clicked)
         self._update_user_profile_button.hide()
         header_layout.addWidget(self._update_user_profile_button, 0, Qt.AlignmentFlag.AlignRight)
         self._delete_user_profile_button = PushButton("Удалить", icon=FluentIcon.DELETE)
+        set_control_accessibility(
+            self._delete_user_profile_button,
+            name="Удалить пользовательский profile",
+            description="Удаляет пользовательский profile, его списки и связанные записи из preset-ов.",
+        )
         self._delete_user_profile_button.clicked.connect(self._on_delete_user_profile_clicked)
         self._delete_user_profile_button.hide()
         header_layout.addWidget(self._delete_user_profile_button, 0, Qt.AlignmentFlag.AlignRight)
@@ -1274,6 +1285,11 @@ class ProfileSetupPageBase(BasePage):
         self._filter_value = LineEdit()
         self._filter_value.setMinimumWidth(0)
         self._filter_value.setPlaceholderText("lists/example.txt")
+        set_control_accessibility(
+            self._filter_value,
+            name="Файл списка profile",
+            description="Путь к hostlist или ipset файлу для текущего profile.",
+        )
         settings_layout.addWidget(self._filter_value, 1)
 
         self._in_range_mode = CompactDisplayComboBox()
@@ -1286,6 +1302,11 @@ class ProfileSetupPageBase(BasePage):
         self._in_range_value = LineEdit()
         self._in_range_value.setMinimumWidth(72)
         self._in_range_value.setPlaceholderText("8")
+        set_control_accessibility(
+            self._in_range_value,
+            name="Значение in-range",
+            description="Число или выражение для --in-range.",
+        )
         settings_layout.addWidget(self._in_range_value)
 
         self._out_range_mode = CompactDisplayComboBox()
@@ -1298,21 +1319,30 @@ class ProfileSetupPageBase(BasePage):
         self._out_range_value = LineEdit()
         self._out_range_value.setMinimumWidth(72)
         self._out_range_value.setPlaceholderText("8")
+        set_control_accessibility(
+            self._out_range_value,
+            name="Значение out-range",
+            description="Число или выражение для --out-range.",
+        )
         settings_layout.addWidget(self._out_range_value)
 
         self._in_range_mode.currentIndexChanged.connect(
             lambda _index: self._on_range_mode_changed(self._in_range_mode, self._in_range_value)
         )
+        self._in_range_mode.currentIndexChanged.connect(self._update_profile_setup_accessibility)
         self._out_range_mode.currentIndexChanged.connect(
             lambda _index: self._on_range_mode_changed(self._out_range_mode, self._out_range_value)
         )
+        self._out_range_mode.currentIndexChanged.connect(self._update_profile_setup_accessibility)
         self._filter_combo.currentIndexChanged.connect(lambda _index: self._on_filter_kind_changed())
+        self._filter_combo.currentIndexChanged.connect(self._update_profile_setup_accessibility)
         self._filter_value.textEdited.connect(lambda _text: self._schedule_settings_autosave())
         self._in_range_value.textEdited.connect(lambda _text: self._schedule_settings_autosave())
         self._out_range_value.textEdited.connect(lambda _text: self._schedule_settings_autosave())
 
         self.layout.addWidget(self._settings_container)
         self._install_profile_tooltips()
+        self._update_profile_setup_accessibility()
 
         self._strategy_stack = QStackedWidget(self)
         self._strategy_tabs = SegmentedWidget()
@@ -1331,6 +1361,7 @@ class ProfileSetupPageBase(BasePage):
         self._strategy_branch_combo = ComboBox()
         self._strategy_branch_combo.setMinimumWidth(260)
         self._strategy_branch_combo.currentIndexChanged.connect(self._on_strategy_branch_changed)
+        self._strategy_branch_combo.currentIndexChanged.connect(self._update_profile_setup_accessibility)
         branch_layout.addWidget(self._strategy_branch_combo, 1)
         self._strategy_branch_bar.hide()
         self.layout.addWidget(self._strategy_branch_bar)
@@ -1346,6 +1377,54 @@ class ProfileSetupPageBase(BasePage):
         self._strategy_stack.addWidget(self._match_tab_placeholder)
 
         self.layout.addWidget(self._strategy_stack, 1)
+        self._update_profile_setup_accessibility()
+
+    def _update_combo_accessibility(self, combo, *, name: str, description: str) -> None:
+        if combo is None:
+            return
+        current_text = getattr(combo, "currentText", None)
+        if not callable(current_text):
+            return
+        selected = str(current_text() or "").strip()
+        if selected:
+            accessible_name = f"{name}, выбрано: {selected}"
+        else:
+            accessible_name = f"{name}, не выбрано"
+        set_control_accessibility(
+            combo,
+            name=accessible_name,
+            description=description,
+        )
+
+    def _update_profile_setup_accessibility(self, *_args) -> None:
+        checkbox = self.__dict__.get("_enabled_checkbox")
+        if checkbox is not None:
+            state = "включено" if checkbox.isChecked() else "выключено"
+            set_control_accessibility(
+                checkbox,
+                name=f"Profile, {state}",
+                description="Включает или отключает этот profile в текущем preset.",
+            )
+        self._update_combo_accessibility(
+            self.__dict__.get("_filter_combo"),
+            name="Тип списка profile",
+            description="Выберите hostlist для доменов или ipset для IP-адресов.",
+        )
+        self._update_combo_accessibility(
+            self.__dict__.get("_in_range_mode"),
+            name="Режим in-range",
+            description="Выберите режим --in-range для входящих пакетов.",
+        )
+        self._update_combo_accessibility(
+            self.__dict__.get("_out_range_mode"),
+            name="Режим out-range",
+            description="Выберите режим --out-range для исходящих пакетов.",
+        )
+        self._update_combo_accessibility(
+            self.__dict__.get("_strategy_branch_combo"),
+            name="Ветка готовой стратегии",
+            description="Выберите ветку готовой стратегии для этого profile.",
+        )
 
     def _switch_strategy_tab(self, index: int) -> None:
         if index == 1 and not self._editor_tab_available:
@@ -1385,6 +1464,11 @@ class ProfileSetupPageBase(BasePage):
             self._list_file_base_text,
             "Системная часть списка. Она обновляется программой и показана только для просмотра.",
         )
+        set_control_accessibility(
+            self._list_file_base_text,
+            name="Базовая часть списка profile",
+            description="Системная часть списка. Она обновляется программой и доступна только для чтения.",
+        )
         editor_layout.addWidget(self._list_file_base_text, 1)
 
         self._list_file_user_title = CaptionLabel("Ваши записи")
@@ -1399,6 +1483,11 @@ class ProfileSetupPageBase(BasePage):
             self._list_file_text,
             "Пользовательская часть списка. Сохраняется в lists/user и добавляется к базе.",
         )
+        set_control_accessibility(
+            self._list_file_text,
+            name="Ваши записи списка profile",
+            description="Пользовательская часть списка. Эти строки можно редактировать и сохранить.",
+        )
         editor_layout.addWidget(self._list_file_text, 1)
 
         self._list_file_error_label = CaptionLabel("")
@@ -1411,9 +1500,15 @@ class ProfileSetupPageBase(BasePage):
         editor_actions_layout.setContentsMargins(0, 0, 0, 0)
         editor_actions_layout.setSpacing(12)
         self._list_file_save_button = PushButton("Сохранить список", icon=FluentIcon.SAVE)
+        set_control_accessibility(
+            self._list_file_save_button,
+            name="Сохранить список profile",
+            description="Проверяет и сохраняет пользовательскую часть списка profile.",
+        )
         self._list_file_save_button.clicked.connect(self._on_list_file_save_clicked)
         editor_actions_layout.addWidget(self._list_file_save_button)
         self._list_file_status_label = CaptionLabel("Загрузка файла списка...")
+        set_state_text(self._list_file_status_label, "Статус списка profile: Загрузка файла списка...")
         self._list_file_status_label.setWordWrap(True)
         editor_actions_layout.addWidget(self._list_file_status_label, 1)
         editor_layout.addWidget(editor_actions)
@@ -1435,6 +1530,11 @@ class ProfileSetupPageBase(BasePage):
             self._match_text,
             "Подробности текущего profile: условия применения и выбранная готовая стратегия.",
         )
+        set_control_accessibility(
+            self._match_text,
+            name="Условия применения profile",
+            description="Здесь показаны условия применения profile и выбранная готовая стратегия.",
+        )
         match_layout.addWidget(self._match_text, 1)
 
         match_layout.addWidget(BodyLabel("Текст profile в текущем preset"))
@@ -1444,6 +1544,11 @@ class ProfileSetupPageBase(BasePage):
         set_tooltip(
             self._raw_profile_text,
             "Сырой текст profile. Сохраняется только в текущий preset и не меняет пользовательский шаблон.",
+        )
+        set_control_accessibility(
+            self._raw_profile_text,
+            name="Текст profile в текущем preset",
+            description="Сырой текст profile. Сохраняется только в текущий preset.",
         )
         self._raw_profile_text.textChanged.connect(self._on_raw_profile_text_changed)
         match_layout.addWidget(self._raw_profile_text)
@@ -1458,6 +1563,11 @@ class ProfileSetupPageBase(BasePage):
             self._raw_profile_save_button,
             "Проверяет текст как один profile и записывает его в текущий preset.",
         )
+        set_control_accessibility(
+            self._raw_profile_save_button,
+            name="Сохранить текст profile",
+            description="Проверяет текст как один profile и записывает его в текущий preset.",
+        )
         raw_actions_layout.addWidget(self._raw_profile_save_button)
         raw_actions_layout.addStretch(1)
         match_layout.addWidget(raw_actions)
@@ -1469,21 +1579,41 @@ class ProfileSetupPageBase(BasePage):
 
         self._work_button = PushButton("Работает", icon=FluentIcon.ACCEPT)
         set_tooltip(self._work_button, "Пометить текущую готовую стратегию как рабочую для этого profile.")
+        set_control_accessibility(
+            self._work_button,
+            name="Отметить стратегию как рабочую",
+            description="Помечает текущую готовую стратегию как рабочую для этого profile.",
+        )
         self._work_button.clicked.connect(lambda: self._set_current_strategy_feedback(rating="work"))
         feedback_actions_layout.addWidget(self._work_button)
 
         self._notwork_button = PushButton("Не работает", icon=FluentIcon.CLOSE)
         set_tooltip(self._notwork_button, "Пометить текущую готовую стратегию как нерабочую для этого profile.")
+        set_control_accessibility(
+            self._notwork_button,
+            name="Отметить стратегию как нерабочую",
+            description="Помечает текущую готовую стратегию как нерабочую для этого profile.",
+        )
         self._notwork_button.clicked.connect(lambda: self._set_current_strategy_feedback(rating="notwork"))
         feedback_actions_layout.addWidget(self._notwork_button)
 
         self._favorite_button = PushButton("В избранное", icon=FluentIcon.HEART)
         set_tooltip(self._favorite_button, "Добавить текущую готовую стратегию в избранное или убрать её оттуда.")
+        set_control_accessibility(
+            self._favorite_button,
+            name="Добавить стратегию в избранное",
+            description="Добавляет текущую готовую стратегию в избранное или убирает её оттуда.",
+        )
         self._favorite_button.clicked.connect(self._toggle_current_strategy_favorite)
         feedback_actions_layout.addWidget(self._favorite_button)
 
         self._clear_feedback_button = PushButton("Убрать оценку", icon=FluentIcon.RETURN)
         set_tooltip(self._clear_feedback_button, "Очистить вашу оценку для текущей готовой стратегии.")
+        set_control_accessibility(
+            self._clear_feedback_button,
+            name="Убрать оценку стратегии",
+            description="Очищает вашу оценку для текущей готовой стратегии.",
+        )
         self._clear_feedback_button.clicked.connect(lambda: self._set_current_strategy_feedback(rating=""))
         feedback_actions_layout.addWidget(self._clear_feedback_button)
         feedback_actions_layout.addStretch(1)
@@ -2466,6 +2596,7 @@ class ProfileSetupPageBase(BasePage):
             combo.setCurrentIndex(selected_index)
         finally:
             combo.blockSignals(False)
+        self._update_profile_setup_accessibility()
 
     def _on_strategy_branch_changed(self, _index: int) -> None:
         if self._loading or self._payload is None or self._strategy_branch_combo is None:
@@ -2957,9 +3088,16 @@ class ProfileSetupPageBase(BasePage):
             if button is not None:
                 set_widget_enabled_if_changed(button, editable)
         if self._favorite_button is not None:
-            set_widget_text_if_changed(
+            favorite_text = "Убрать из избранного" if state.favorite else "В избранное"
+            set_widget_text_if_changed(self._favorite_button, favorite_text)
+            set_control_accessibility(
                 self._favorite_button,
-                "Убрать из избранного" if state.favorite else "В избранное",
+                name=(
+                    "Убрать стратегию из избранного"
+                    if state.favorite
+                    else "Добавить стратегию в избранное"
+                ),
+                description="Добавляет текущую готовую стратегию в избранное или убирает её оттуда.",
             )
         if self._work_button is not None:
             set_widget_property_if_changed(self._work_button, "selected", state.rating == "work")
@@ -3000,6 +3138,7 @@ class ProfileSetupPageBase(BasePage):
         set_range_controls(self._in_range_mode, self._in_range_value, getattr(payload, "in_range", "") or "x")
         set_range_controls(self._out_range_mode, self._out_range_value, getattr(payload, "out_range", "") or "a")
         self._update_all_range_tooltips()
+        self._update_profile_setup_accessibility()
 
     def _rebuild_filter_kind_combo(self, available_kinds: tuple[str, ...], current_kind: str) -> None:
         labels = {
