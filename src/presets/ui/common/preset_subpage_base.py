@@ -362,7 +362,7 @@ class PresetRawEditorPage(BasePage):
         if kind == "save":
             self._start_raw_preset_save_worker(
                 file_name=str(operation.get("file_name") or ""),
-                source_text=str(operation.get("source_text") or ""),
+                source_text=self._resolve_raw_preset_save_text(operation.get("source_text")),
                 publish_content_changed=bool(operation.get("publish_content_changed")),
             )
             return True
@@ -825,7 +825,7 @@ class PresetRawEditorPage(BasePage):
             return False
         if self._preset_path is None:
             return False
-        if self._raw_worker_runtime_is_running("_raw_save_runtime"):
+        if self._raw_preset_write_is_running():
             return self._request_raw_preset_save(
                 file_name=self._preset_file_name,
                 source_text=None,
@@ -860,7 +860,7 @@ class PresetRawEditorPage(BasePage):
                 {
                     "kind": "save",
                     "file_name": str(file_name or "").strip(),
-                    "source_text": "" if source_text is None else str(source_text or ""),
+                    "source_text": None if source_text is None else str(source_text or ""),
                     "publish_content_changed": bool(publish_content_changed),
                 }
             )
@@ -876,12 +876,13 @@ class PresetRawEditorPage(BasePage):
         self,
         *,
         file_name: str,
-        source_text: str,
+        source_text: str | None,
         publish_content_changed: bool,
     ) -> None:
         runtime = self._raw_worker_runtime("_raw_save_runtime")
         self._raw_save_request_id += 1
         request_id = self._raw_save_request_id
+        source_text = self._resolve_raw_preset_save_text(source_text)
         self._raw_save_succeeded = False
         self._set_footer("Сохранение...")
         _request_id, worker = runtime.start_qthread_worker(
@@ -898,6 +899,15 @@ class PresetRawEditorPage(BasePage):
             loaded_signal_name="saved",
         )
         self._raw_save_runtime_worker = worker
+
+    def _resolve_raw_preset_save_text(self, source_text) -> str:
+        if source_text is not None:
+            text = str(source_text or "")
+        else:
+            editor = self.__dict__.get("editor")
+            text = "" if editor is None else str(editor.toPlainText() or "")
+        self._raw_editor_text_snapshot = text
+        return text
 
     def _on_raw_preset_save_finished(
         self,
@@ -980,12 +990,9 @@ class PresetRawEditorPage(BasePage):
         if pending is None or self.__dict__.get("_cleanup_in_progress", False):
             return
         file_name, source_text, publish_content_changed = pending
-        if source_text is None:
-            self._save_file(publish_content_changed=bool(publish_content_changed))
-            return
         self._start_raw_preset_save_worker(
             file_name=str(file_name or ""),
-            source_text=str(source_text or ""),
+            source_text=None if source_text is None else str(source_text or ""),
             publish_content_changed=bool(publish_content_changed),
         )
 

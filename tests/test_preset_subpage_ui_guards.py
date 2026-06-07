@@ -80,6 +80,15 @@ class _RunningRuntime:
         return True
 
 
+class _StartRuntime:
+    def is_running(self) -> bool:
+        return False
+
+    def start_qthread_worker(self, *, worker_factory, **_kwargs):
+        worker = worker_factory(0)
+        return 0, worker
+
+
 class PresetSubpageUiGuardTests(unittest.TestCase):
     def test_raw_preset_load_while_worker_runs_queues_latest_request(self) -> None:
         from presets.ui.common.preset_subpage_base import PresetRawEditorPage
@@ -411,11 +420,17 @@ class PresetSubpageUiGuardTests(unittest.TestCase):
     def test_pending_raw_preset_save_restarts_after_worker_signal(self) -> None:
         from presets.ui.common.preset_subpage_base import PresetRawEditorPage
 
+        worker = object()
         page = PresetRawEditorPage.__new__(PresetRawEditorPage)
         page._cleanup_in_progress = False
         page._pending_raw_preset_save = ("Default.txt", None, True)
         page._after_raw_preset_save = None
-        page._save_file = Mock(return_value=True)
+        page._raw_save_runtime = _StartRuntime()
+        page._raw_save_request_id = 0
+        page._raw_save_succeeded = True
+        page._set_footer = Mock()
+        page.editor = _PlainTextEditor("--new\n--filter-tcp=443\n")
+        page.create_raw_preset_save_worker = Mock(return_value=worker)
         callbacks = []
 
         with patch(
@@ -424,12 +439,20 @@ class PresetSubpageUiGuardTests(unittest.TestCase):
         ):
             PresetRawEditorPage._on_raw_preset_save_worker_finished(page, object())
 
-        page._save_file.assert_not_called()
+        page.create_raw_preset_save_worker.assert_not_called()
+        self.assertEqual(page.editor.plain_text_read_calls, [])
         self.assertEqual(len(callbacks), 1)
 
         callbacks[0]()
 
-        page._save_file.assert_called_once_with(publish_content_changed=True)
+        self.assertEqual(page.editor.plain_text_read_calls, ["--new\n--filter-tcp=443\n"])
+        page.create_raw_preset_save_worker.assert_called_once_with(
+            1,
+            file_name="Default.txt",
+            source_text="--new\n--filter-tcp=443\n",
+            publish_content_changed=True,
+            parent=page,
+        )
 
     def test_status_message_update_skips_runtime_toggle_render(self) -> None:
         from app.state_store import AppUiState
