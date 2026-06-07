@@ -80,6 +80,7 @@ class TelegramProxyFeature:
         host: str,
         upstream_config=None,
         cloudflare_config=None,
+        mtproxy_secret: str = "",
         parent=None,
     ):
         from telegram_proxy.runtime.workers import TelegramProxyStartWorker
@@ -91,6 +92,7 @@ class TelegramProxyFeature:
             host=host,
             upstream_config=upstream_config,
             cloudflare_config=cloudflare_config,
+            mtproxy_secret=mtproxy_secret,
             build_upstream_config=self.build_upstream_config,
             build_cloudflare_config=self.build_cloudflare_config,
             parent=parent,
@@ -229,6 +231,7 @@ class TelegramProxyFeature:
                     host=config.host,
                     upstream_config=config.upstream_config,
                     cloudflare_config=config.cloudflare_config,
+                    mtproxy_secret=config.mtproxy_secret,
                 ),
                 on_finished=self._on_tray_toggle_worker_finished,
                 signal_includes_request_id=False,

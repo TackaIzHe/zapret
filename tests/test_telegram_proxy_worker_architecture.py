@@ -413,6 +413,7 @@ class TelegramProxyWorkerArchitectureTests(unittest.TestCase):
             host="127.0.0.1",
             upstream_config=upstream_config,
             cloudflare_config=cloudflare_config,
+            mtproxy_secret="",
         )
 
     def test_external_links_are_queued_while_worker_runs(self) -> None:

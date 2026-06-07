@@ -32,6 +32,7 @@ from telegram_proxy.proxy.dc_map import (
     WSS_DOMAINS,
     WSS_RELAY_IP,
     WSS_PATH,
+    TCP_ENDPOINTS,
     # TRANSPARENT_PORT_BASE,  # Transparent mode removed
 )
 from telegram_proxy.proxy import socks5
@@ -46,6 +47,14 @@ from telegram_proxy.proxy.mtproto import (
     dc_from_init as _dc_from_init,
     is_http_transport as _is_http_transport,
     patch_init_dc as _patch_init_dc,
+)
+from telegram_proxy.proxy.mtproxy import (
+    build_crypto_context,
+    generate_relay_init,
+    normalize_secret,
+    parse_client_init,
+    relay_mtproxy_tcp,
+    relay_mtproxy_wss,
 )
 from telegram_proxy.proxy.pool import (
     WsPool as _WsPool,
@@ -90,6 +99,7 @@ class TelegramWSProxy:
         host: str = "127.0.0.1",
         upstream_config: Optional[UpstreamProxyConfig] = None,
         cloudflare_config: Optional[CloudflareFallbackConfig] = None,
+        mtproxy_secret: str = "",
     ):
         self._port = port
         self._mode = mode
@@ -97,6 +107,7 @@ class TelegramWSProxy:
         self._on_log = on_log
         self._upstream = upstream_config or UpstreamProxyConfig()
         self._cloudflare = cloudflare_config or CloudflareFallbackConfig()
+        self._mtproxy_secret = normalize_secret(mtproxy_secret)
         self._servers: list[asyncio.Server] = []
         self._tasks: set[asyncio.Task] = set()
         self._running = False
@@ -135,11 +146,9 @@ class TelegramWSProxy:
         # Reset semaphore for fresh event loop
         reset_wss_semaphore()
 
-        # NOTE: Transparent mode was removed. WinDivert cannot intercept
-        # inbound loopback packets (kernel driver limitation), making Lua NAT
-        # redirect impossible. Only SOCKS5 mode is supported.
+        handler = self._handle_mtproxy_client if self._mode == "mtproxy" else self._handle_socks5_client
         server = await asyncio.start_server(
-            self._handle_socks5_client,
+            handler,
             self._host,
             self._port,
         )
@@ -150,7 +159,8 @@ class TelegramWSProxy:
 
         # Mark running AFTER server is successfully bound and listening
         self._running = True
-        self._log(f"SOCKS5 proxy started on {self._host}:{self._port}")
+        mode_label = "MTProxy" if self._mode == "mtproxy" else "SOCKS5"
+        self._log(f"{mode_label} proxy started on {self._host}:{self._port}")
 
         # Pre-fill WebSocket connection pool (non-blocking)
         asyncio.create_task(self._ws_pool.warmup())
@@ -325,6 +335,73 @@ class TelegramWSProxy:
             if task:
                 self._tasks.discard(task)
 
+    async def _handle_mtproxy_client(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+    ) -> None:
+        """Handle incoming MTProxy secret connection."""
+        task = asyncio.current_task()
+        if task:
+            self._tasks.add(task)
+        self.stats.total_connections += 1
+        self.stats.active_connections += 1
+        peer = writer.get_extra_info("peername", ("?", 0))
+        label = f"{peer[0]}:{peer[1]}"
+
+        try:
+            if not self._mtproxy_secret:
+                self.stats.failed_connections += 1
+                self._log(f"[{label}] MTProxy secret is not configured")
+                return
+
+            try:
+                client_init = await asyncio.wait_for(reader.readexactly(64), timeout=15.0)
+            except (asyncio.IncompleteReadError, asyncio.TimeoutError) as exc:
+                self._log(f"[{label}] no MTProxy init packet: {type(exc).__name__}")
+                return
+
+            parsed = parse_client_init(client_init, self._mtproxy_secret)
+            if parsed is None:
+                self.stats.failed_connections += 1
+                self._log(f"[{label}] bad MTProxy handshake")
+                return
+
+            dc = parsed.dc
+            is_media = parsed.is_media
+            relay_init = generate_relay_init(parsed.proto_tag, dc=dc, is_media=is_media)
+            crypto = build_crypto_context(parsed.client_prekey_iv, self._mtproxy_secret, relay_init)
+
+            target_host, target_port = TCP_ENDPOINTS.get(dc, TCP_ENDPOINTS[2])
+            media_tag = " media" if is_media else ""
+            self._log(f"[{label}] MTProxy DC{dc}{media_tag} -> {target_host}:{target_port}")
+
+            await self._tunnel_mtproxy_via_wss(
+                reader,
+                writer,
+                dc,
+                is_media,
+                relay_init,
+                crypto,
+                target_host,
+                target_port,
+                label,
+            )
+        except (asyncio.CancelledError, ConnectionError, OSError):
+            pass
+        except Exception:
+            self.stats.failed_connections += 1
+            log.exception("[%s] MTProxy handler error", label)
+        finally:
+            self.stats.active_connections -= 1
+            try:
+                writer.close()
+                await writer.wait_closed()
+            except Exception:
+                pass
+            if task:
+                self._tasks.discard(task)
+
     # ---- Core tunneling ----
 
     async def _tunnel_via_wss(
@@ -466,6 +543,103 @@ class TelegramWSProxy:
         # Bidirectional bridge
         await self._relay_wss(client_reader, client_writer, ws, splitter, label, dc=dc)
 
+    async def _tunnel_mtproxy_via_wss(
+        self,
+        client_reader: asyncio.StreamReader,
+        client_writer: asyncio.StreamWriter,
+        dc: int,
+        is_media: bool,
+        relay_init: bytes,
+        crypto,
+        target_host: str,
+        target_port: int,
+        label: str,
+    ) -> None:
+        """Try WSS tunnel for MTProxy, fall back to Cloudflare/TCP."""
+        dc_key = (dc, is_media)
+        now = time.monotonic()
+        media_tag = " media" if is_media else ""
+
+        if dc_key in self._ws_blacklist or now < self._dc_cooldown.get(dc_key, 0):
+            if await self._cloudflare_fallback(
+                client_reader,
+                client_writer,
+                target_host,
+                target_port,
+                relay_init,
+                False,
+                label,
+                dc,
+                is_media,
+                relay_wss_fn=lambda **kwargs: relay_mtproxy_wss(crypto=crypto, **kwargs),
+            ):
+                return
+            await self._mtproxy_tcp_fallback(
+                client_reader, client_writer, target_host, target_port, relay_init, crypto, label, dc, is_media
+            )
+            return
+
+        domains = ws_domains_for_dc(dc, is_media)
+        ws = await self._ws_pool.get(dc, is_media, WSS_RELAY_IP, domains)
+        if ws is not None:
+            self._log(f"[{label}] MTProxy DC{dc}{media_tag} WSS from pool")
+
+        all_redirects = True
+        any_redirect = False
+        sem = _get_wss_semaphore()
+        for domain in domains if ws is None else []:
+            relay_ip = _relay_ip_for_domain(domain)
+            try:
+                self._log(f"[{label}] MTProxy DC{dc}{media_tag} -> wss://{domain}{WSS_PATH}")
+                async with sem:
+                    ws = await RawWebSocket.connect(relay_ip, domain, WSS_PATH, timeout=CONNECT_TIMEOUT)
+                all_redirects = False
+                break
+            except WsHandshakeError as exc:
+                if exc.is_redirect:
+                    any_redirect = True
+                    continue
+                all_redirects = False
+            except Exception:
+                all_redirects = False
+
+        if ws is None:
+            if any_redirect and all_redirects:
+                self._ws_blacklist.add(dc_key)
+            else:
+                self._dc_cooldown[dc_key] = now + DC_FAIL_COOLDOWN
+            if await self._cloudflare_fallback(
+                client_reader,
+                client_writer,
+                target_host,
+                target_port,
+                relay_init,
+                False,
+                label,
+                dc,
+                is_media,
+                relay_wss_fn=lambda **kwargs: relay_mtproxy_wss(crypto=crypto, **kwargs),
+            ):
+                return
+            await self._mtproxy_tcp_fallback(
+                client_reader, client_writer, target_host, target_port, relay_init, crypto, label, dc, is_media
+            )
+            return
+
+        self._dc_cooldown.pop(dc_key, None)
+        self.stats.wss_connections += 1
+        await ws.send(relay_init)
+        await relay_mtproxy_wss(
+            client_reader=client_reader,
+            client_writer=client_writer,
+            ws=ws,
+            crypto=crypto,
+            stats=self.stats,
+            log_fn=self._log,
+            label=label,
+            dc=dc,
+        )
+
     async def _cloudflare_fallback(
         self,
         client_reader: asyncio.StreamReader,
@@ -477,6 +651,7 @@ class TelegramWSProxy:
         label: str,
         dc: int,
         is_media: bool,
+        relay_wss_fn=None,
     ) -> bool:
         """Try Cloudflare Worker/domain fallback before plain TCP fallback."""
         if not should_try_cloudflare(self._cloudflare):
@@ -507,7 +682,18 @@ class TelegramWSProxy:
                     self.stats.cloudflare_connections += 1
                     self.stats.cloudflare_worker_connections += 1
                     await ws.send(init)
-                    await self._relay_wss(client_reader, client_writer, ws, splitter, label, dc=dc)
+                    if relay_wss_fn is None:
+                        await self._relay_wss(client_reader, client_writer, ws, splitter, label, dc=dc)
+                    else:
+                        await relay_wss_fn(
+                            client_reader=client_reader,
+                            client_writer=client_writer,
+                            ws=ws,
+                            stats=self.stats,
+                            log_fn=self._log,
+                            label=label,
+                            dc=dc,
+                        )
                     return True
                 except Exception as exc:
                     log.warning(
@@ -531,7 +717,18 @@ class TelegramWSProxy:
                     )
                     self.stats.cloudflare_connections += 1
                     await ws.send(init)
-                    await self._relay_wss(client_reader, client_writer, ws, splitter, label, dc=dc)
+                    if relay_wss_fn is None:
+                        await self._relay_wss(client_reader, client_writer, ws, splitter, label, dc=dc)
+                    else:
+                        await relay_wss_fn(
+                            client_reader=client_reader,
+                            client_writer=client_writer,
+                            ws=ws,
+                            stats=self.stats,
+                            log_fn=self._log,
+                            label=label,
+                            dc=dc,
+                        )
                     return True
                 except Exception as exc:
                     log.warning(
@@ -545,6 +742,44 @@ class TelegramWSProxy:
 
         self.stats.cloudflare_failures += 1
         return False
+
+    async def _mtproxy_tcp_fallback(
+        self,
+        client_reader: asyncio.StreamReader,
+        client_writer: asyncio.StreamWriter,
+        target_host: str,
+        target_port: int,
+        relay_init: bytes,
+        crypto,
+        label: str,
+        dc: int,
+        is_media: bool,
+    ) -> None:
+        media_tag = " media" if is_media else ""
+        self._log(f"[{label}] MTProxy DC{dc}{media_tag} TCP fallback -> {target_host}:{target_port}")
+        try:
+            rr, rw = await asyncio.wait_for(
+                asyncio.open_connection(target_host, target_port),
+                timeout=CONNECT_TIMEOUT,
+            )
+        except Exception as exc:
+            self.stats.failed_connections += 1
+            self._log(f"[{label}] MTProxy TCP fallback failed: {type(exc).__name__}")
+            return
+
+        self.stats.tcp_fallback_connections += 1
+        rw.write(relay_init)
+        await rw.drain()
+        await relay_mtproxy_tcp(
+            client_reader=client_reader,
+            client_writer=client_writer,
+            remote_reader=rr,
+            remote_writer=rw,
+            crypto=crypto,
+            stats=self.stats,
+            log_fn=self._log,
+            label=label,
+        )
 
     async def _tcp_fallback(
         self,

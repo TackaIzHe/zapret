@@ -23,6 +23,7 @@ class TelegramProxyStartConfig:
     mode: str
     upstream_config: object | None
     cloudflare_config: object | None
+    mtproxy_secret: str
 
 
 def get_proxy_manager():
@@ -38,15 +39,16 @@ def start_proxy_if_enabled_async() -> bool:
 
 
 def get_start_config() -> TelegramProxyStartConfig:
-    from settings.store import get_tg_proxy_host, get_tg_proxy_port
+    from settings.store import get_tg_proxy_host, get_tg_proxy_mode, get_tg_proxy_mtproxy_secret, get_tg_proxy_port
     from telegram_proxy.config.settings import build_cloudflare_config, build_upstream_config
 
     return TelegramProxyStartConfig(
         host=str(get_tg_proxy_host() or "127.0.0.1"),
         port=int(get_tg_proxy_port() or 1353),
-        mode="socks5",
+        mode=str(get_tg_proxy_mode() or "socks5"),
         upstream_config=build_upstream_config(),
         cloudflare_config=build_cloudflare_config(),
+        mtproxy_secret=str(get_tg_proxy_mtproxy_secret() or ""),
     )
 
 

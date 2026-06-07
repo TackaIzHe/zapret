@@ -40,6 +40,7 @@ class TelegramProxyStartWorker(QThread):
         build_cloudflare_config,
         upstream_config=None,
         cloudflare_config=None,
+        mtproxy_secret: str = "",
         parent=None,
     ):
         super().__init__(parent)
@@ -51,6 +52,7 @@ class TelegramProxyStartWorker(QThread):
         self._build_cloudflare_config = build_cloudflare_config
         self._upstream_config = upstream_config
         self._cloudflare_config = cloudflare_config
+        self._mtproxy_secret = str(mtproxy_secret or "")
 
     def run(self) -> None:
         try:
@@ -66,6 +68,7 @@ class TelegramProxyStartWorker(QThread):
                 host=self._host,
                 upstream_config=upstream_config,
                 cloudflare_config=cloudflare_config,
+                mtproxy_secret=self._mtproxy_secret,
             )
         except Exception as exc:
             log(f"TelegramProxyStartWorker: ошибка запуска proxy: {exc}", "WARNING")

@@ -100,6 +100,7 @@ class TelegramProxyRuntime:
         host: str = "127.0.0.1",
         upstream_config: Optional[UpstreamProxyConfig] = None,
         cloudflare_config: Optional[CloudflareFallbackConfig] = None,
+        mtproxy_secret: str = "",
     ):
         self._port = port
         self._mode = mode
@@ -107,6 +108,7 @@ class TelegramProxyRuntime:
         self._host = host
         self._upstream_config = upstream_config
         self._cloudflare_config = cloudflare_config
+        self._mtproxy_secret = str(mtproxy_secret or "")
         self._proxy: Optional[TelegramWSProxy] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._thread: Optional[threading.Thread] = None
@@ -148,6 +150,7 @@ class TelegramProxyRuntime:
             host=self._host,
             upstream_config=self._upstream_config,
             cloudflare_config=self._cloudflare_config,
+            mtproxy_secret=self._mtproxy_secret,
         )
         self._started.clear()
         self._thread = threading.Thread(
@@ -191,7 +194,8 @@ class TelegramProxyRuntime:
 
     def update_config(self, port: int = None, mode: str = None, host: str = None,
                       upstream_config: Optional[UpstreamProxyConfig] = None,
-                      cloudflare_config: Optional[CloudflareFallbackConfig] = None) -> None:
+                      cloudflare_config: Optional[CloudflareFallbackConfig] = None,
+                      mtproxy_secret: Optional[str] = None) -> None:
         """Update config. Requires restart to take effect."""
         if port is not None:
             self._port = port
@@ -203,6 +207,8 @@ class TelegramProxyRuntime:
             self._upstream_config = upstream_config
         if cloudflare_config is not None:
             self._cloudflare_config = cloudflare_config
+        if mtproxy_secret is not None:
+            self._mtproxy_secret = str(mtproxy_secret or "")
 
     def restart(self) -> bool:
         """Restart with current config."""

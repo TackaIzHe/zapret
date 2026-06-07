@@ -59,7 +59,8 @@ class TelegramProxyManager(QThread):
 
     def start_proxy(self, port: int = 1353, mode: str = "socks5", host: str = "127.0.0.1",
                     upstream_config: Optional[UpstreamProxyConfig] = None,
-                    cloudflare_config: Optional[CloudflareFallbackConfig] = None) -> bool:
+                    cloudflare_config: Optional[CloudflareFallbackConfig] = None,
+                    mtproxy_secret: str = "") -> bool:
         """Start the proxy. Thread-safe, non-blocking."""
         if self.is_running:
             return False
@@ -71,6 +72,7 @@ class TelegramProxyManager(QThread):
             host=host,
             upstream_config=upstream_config,
             cloudflare_config=cloudflare_config,
+            mtproxy_secret=mtproxy_secret,
         )
         ok = self._runtime.start()
         if ok:
@@ -101,7 +103,8 @@ class TelegramProxyManager(QThread):
 
     def restart_proxy(self, port: int = 1353, mode: str = "socks5", host: str = "127.0.0.1",
                       upstream_config: Optional[UpstreamProxyConfig] = None,
-                      cloudflare_config: Optional[CloudflareFallbackConfig] = None) -> bool:
+                      cloudflare_config: Optional[CloudflareFallbackConfig] = None,
+                      mtproxy_secret: str = "") -> bool:
         """Restart with new config."""
         self.stop_proxy()
         return self.start_proxy(
@@ -110,6 +113,7 @@ class TelegramProxyManager(QThread):
             host,
             upstream_config=upstream_config,
             cloudflare_config=cloudflare_config,
+            mtproxy_secret=mtproxy_secret,
         )
 
     def cleanup(self) -> None:
@@ -155,6 +159,8 @@ def start_proxy_if_enabled_async() -> bool:
         from settings.store import (
             get_tg_proxy_enabled,
             get_tg_proxy_host,
+            get_tg_proxy_mode,
+            get_tg_proxy_mtproxy_secret,
             get_tg_proxy_port,
         )
     except Exception:
@@ -170,6 +176,8 @@ def start_proxy_if_enabled_async() -> bool:
 
         port = get_tg_proxy_port()
         host = get_tg_proxy_host()
+        mode = get_tg_proxy_mode()
+        mtproxy_secret = get_tg_proxy_mtproxy_secret()
         upstream_config = build_upstream_proxy_config_from_settings()
         cloudflare_config = build_cloudflare_proxy_config_from_settings()
 
@@ -177,10 +185,11 @@ def start_proxy_if_enabled_async() -> bool:
             try:
                 manager.start_proxy(
                     port=port,
-                    mode="socks5",
+                    mode=mode,
                     host=host,
                     upstream_config=upstream_config,
                     cloudflare_config=cloudflare_config,
+                    mtproxy_secret=mtproxy_secret,
                 )
             except Exception:
                 pass
