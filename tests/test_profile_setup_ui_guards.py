@@ -1195,7 +1195,9 @@ class ProfileSetupUiGuardTests(unittest.TestCase):
         page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
         page._payload = payload
         page._match_tab_built = True
-        page._match_text = _PlainTextWidget(_match_tab_text(payload))
+        match_text = _match_tab_text(payload)
+        page._match_text = _PlainTextWidget(match_text)
+        page._match_text_snapshot = match_text
         page._raw_profile_text = _PlainTextWidget(payload.raw_profile_text, read_only=False)
         page._raw_profile_text_cache = payload.raw_profile_text
         page._raw_profile_save_button = _BoolWidget(enabled=True)
@@ -1204,6 +1206,7 @@ class ProfileSetupUiGuardTests(unittest.TestCase):
         ProfileSetupPageBase._apply_match_tab_payload(page)
 
         self.assertEqual(page._match_text.plain_text_calls, [])
+        self.assertEqual(page._match_text.plain_text_read_calls, [])
         self.assertEqual(page._raw_profile_text.plain_text_read_calls, [])
         self.assertEqual(page._raw_profile_text.plain_text_calls, [])
         self.assertEqual(page._raw_profile_text.read_only_calls, [])
@@ -1241,6 +1244,34 @@ class ProfileSetupUiGuardTests(unittest.TestCase):
         self.assertEqual(page._raw_profile_text.plain_text_read_calls, [])
         self.assertEqual(page._raw_profile_text.plain_text_calls, [])
         page._apply_feedback_buttons.assert_called_once_with(payload)
+
+    def test_match_tab_payload_sets_match_text_without_reading_editor(self) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+
+        from profile.ui.profile_setup_page import ProfileSetupPageBase, _match_tab_text
+
+        payload = SimpleNamespace(
+            item=SimpleNamespace(in_preset=True, strategy_id="tls_fake", strategy_name="Fake TLS"),
+            strategy_entries={"tls_fake": SimpleNamespace(args="--lua-desync=fake")},
+            match_summary="hostlist: youtube.txt",
+            raw_profile_text="--new\n--lua-desync=fake",
+        )
+        match_text = _match_tab_text(payload)
+        page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        page._payload = payload
+        page._match_tab_built = True
+        page._match_text = _PlainTextWidget("old match text")
+        page._match_text_snapshot = "old match text"
+        page._raw_profile_text = None
+        page._raw_profile_save_button = None
+        page._apply_feedback_buttons = Mock()
+
+        ProfileSetupPageBase._apply_match_tab_payload(page)
+
+        self.assertEqual(page._match_text.plain_text_read_calls, [])
+        self.assertEqual(page._match_text.plain_text_calls, [match_text])
+        self.assertEqual(page._match_text_snapshot, match_text)
 
     def test_match_tab_payload_sets_raw_profile_text_without_reading_editor(self) -> None:
         from types import SimpleNamespace

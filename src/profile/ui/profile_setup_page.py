@@ -1076,6 +1076,7 @@ class ProfileSetupPageBase(BasePage):
         self._match_tab_built = False
         self._list_file_dirty = True
         self._match_text = None
+        self._match_text_snapshot = ""
         self._settings_container = None
         self._work_button = None
         self._notwork_button = None
@@ -1506,7 +1507,10 @@ class ProfileSetupPageBase(BasePage):
             return
         item = payload.item
         if self._match_text is not None:
-            set_plain_text_if_changed(self._match_text, _match_tab_text(payload))
+            match_text = _match_tab_text(payload)
+            if self.__dict__.get("_match_text_snapshot") != match_text:
+                self._match_text.setPlainText(match_text)
+                self._match_text_snapshot = match_text
         if self._raw_profile_text is not None:
             self._set_raw_profile_text_from_payload(str(getattr(payload, "raw_profile_text", "") or ""))
             raw_editable = bool(getattr(item, "in_preset", False))
