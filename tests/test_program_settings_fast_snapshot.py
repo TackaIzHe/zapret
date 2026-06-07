@@ -139,6 +139,18 @@ class ProgramSettingsFastSnapshotTests(unittest.TestCase):
         self.assertTrue(runtime_service.subscribe.call_args.kwargs["emit_initial"])
         self.assertEqual(applied, ["ready"])
 
+    def test_load_program_settings_snapshot_refreshes_fast_settings_after_save(self) -> None:
+        from program_settings.runtime import load_program_settings_snapshot
+
+        runtime_service = SimpleNamespace(
+            read_snapshot=Mock(return_value="stale"),
+            refresh_fast=Mock(return_value="fresh"),
+        )
+
+        self.assertEqual(load_program_settings_snapshot(runtime_service), "fresh")
+        runtime_service.refresh_fast.assert_called_once_with()
+        runtime_service.read_snapshot.assert_not_called()
+
     def test_gui_autostart_is_not_window_level_ui_state(self) -> None:
         import app.state_store as state_store
 

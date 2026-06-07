@@ -25,7 +25,7 @@ def refresh_program_settings_system_status(runtime_service):
 
 
 def load_program_settings_snapshot(runtime_service):
-    return runtime_service.read_snapshot()
+    return runtime_service.refresh_fast()
 
 
 def publish_program_settings_snapshot(runtime_service, snapshot) -> bool:
