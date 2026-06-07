@@ -31,6 +31,7 @@ class TelegramProxyActionResult:
     info_title: str
     info_content: str
 
+
 def build_diagnostics_start_plan() -> TelegramProxyDiagnosticsStartPlan:
     return TelegramProxyDiagnosticsStartPlan(
         button_enabled=False,
@@ -39,6 +40,7 @@ def build_diagnostics_start_plan() -> TelegramProxyDiagnosticsStartPlan:
         poll_interval_ms=200,
     )
 
+
 def build_diagnostics_poll_plan(*, result_text: str | None, thread_done: bool) -> TelegramProxyDiagnosticsPollPlan:
     return TelegramProxyDiagnosticsPollPlan(
         updated_text=result_text if result_text is not None else None,
@@ -46,32 +48,9 @@ def build_diagnostics_poll_plan(*, result_text: str | None, thread_done: bool) -
         should_finish=bool(thread_done),
     )
 
+
 def build_diagnostics_finish_plan() -> TelegramProxyDiagnosticsFinishPlan:
     return TelegramProxyDiagnosticsFinishPlan(
         button_enabled=True,
         button_text="Запустить диагностику",
     )
-
-def copy_text(text: str, *, success_title: str, success_content: str, success_log: str = "") -> TelegramProxyActionResult:
-    from PyQt6.QtGui import QGuiApplication
-
-    payload = str(text or "")
-    clipboard = QGuiApplication.clipboard()
-    if clipboard is None or not payload:
-        return TelegramProxyActionResult(False, "", "", "")
-    clipboard.setText(payload)
-    return TelegramProxyActionResult(
-        ok=True,
-        log_line=success_log,
-        info_title=success_title,
-        info_content=success_content,
-    )
-
-def ensure_telegram_hosts() -> TelegramProxyActionResult:
-    try:
-        from telegram_proxy.telegram_hosts import ensure_telegram_hosts
-
-        ensure_telegram_hosts()
-        return TelegramProxyActionResult(True, "", "", "")
-    except Exception as e:
-        return TelegramProxyActionResult(False, f"Telegram hosts check error: {e}", "", "")

@@ -71,7 +71,7 @@ class TelegramProxyFeature:
             pass
 
     def create_start_worker(self, *, manager, port: int, mode: str, host: str, upstream_config=None, parent=None):
-        from telegram_proxy.workers import TelegramProxyStartWorker
+        from telegram_proxy.runtime.workers import TelegramProxyStartWorker
 
         return TelegramProxyStartWorker(
             manager=manager,
@@ -92,7 +92,7 @@ class TelegramProxyFeature:
         enabled_after_stop=None,
         parent=None,
     ):
-        from telegram_proxy.workers import TelegramProxyStopRuntimeWorker
+        from telegram_proxy.runtime.workers import TelegramProxyStopRuntimeWorker
 
         return TelegramProxyStopRuntimeWorker(
             manager=manager,
@@ -103,7 +103,7 @@ class TelegramProxyFeature:
         )
 
     def create_open_log_file_worker(self, *, path: str, parent=None):
-        from telegram_proxy.workers import TelegramProxyOpenLogFileWorker
+        from telegram_proxy.runtime.workers import TelegramProxyOpenLogFileWorker
 
         return TelegramProxyOpenLogFileWorker(
             open_log_file_fn=self.open_log_file,
@@ -112,7 +112,7 @@ class TelegramProxyFeature:
         )
 
     def create_external_link_worker(self, *, url: str, success_log: str, error_prefix: str, parent=None):
-        from telegram_proxy.workers import TelegramProxyExternalLinkWorker
+        from telegram_proxy.runtime.workers import TelegramProxyExternalLinkWorker
 
         return TelegramProxyExternalLinkWorker(
             open_external_link_fn=self.open_external_link,
@@ -123,7 +123,7 @@ class TelegramProxyFeature:
         )
 
     def create_log_line_worker(self, request_id: int, *, message: str, parent=None):
-        from telegram_proxy.workers import TelegramProxyLogLineWorker
+        from telegram_proxy.runtime.workers import TelegramProxyLogLineWorker
 
         return TelegramProxyLogLineWorker(
             request_id,
@@ -133,7 +133,7 @@ class TelegramProxyFeature:
         )
 
     def create_auto_deeplink_worker(self, request_id: int, *, parent=None):
-        from telegram_proxy.workers import TelegramProxyAutoDeeplinkWorker
+        from telegram_proxy.runtime.workers import TelegramProxyAutoDeeplinkWorker
 
         return TelegramProxyAutoDeeplinkWorker(
             request_id,
@@ -142,7 +142,7 @@ class TelegramProxyFeature:
         )
 
     def create_relay_check_worker(self, *, generation: int, get_zapret_running, parent=None):
-        from telegram_proxy.workers import TelegramProxyRelayCheckWorker
+        from telegram_proxy.runtime.workers import TelegramProxyRelayCheckWorker
 
         return TelegramProxyRelayCheckWorker(
             generation=generation,
@@ -153,7 +153,7 @@ class TelegramProxyFeature:
         )
 
     def create_diagnostics_worker(self, *, proxy_port: int, parent=None):
-        from telegram_proxy.workers import TelegramProxyDiagnosticsWorker
+        from telegram_proxy.runtime.workers import TelegramProxyDiagnosticsWorker
 
         return TelegramProxyDiagnosticsWorker(
             run_diagnostics_fn=self.run_diagnostics,
@@ -162,7 +162,7 @@ class TelegramProxyFeature:
         )
 
     def create_ensure_hosts_worker(self, request_id: int, *, parent=None):
-        from telegram_proxy.workers import TelegramHostsEnsureWorker
+        from telegram_proxy.runtime.workers import TelegramHostsEnsureWorker
 
         return TelegramHostsEnsureWorker(
             request_id,
@@ -171,7 +171,7 @@ class TelegramProxyFeature:
         )
 
     def create_settings_save_worker(self, request_id: int, **kwargs):
-        from telegram_proxy.workers import TelegramProxySettingsSaveWorker
+        from telegram_proxy.runtime.workers import TelegramProxySettingsSaveWorker
 
         return TelegramProxySettingsSaveWorker(
             request_id,
@@ -180,7 +180,7 @@ class TelegramProxyFeature:
         )
 
     def create_page_initial_state_worker(self, request_id: int, *, parent=None):
-        from telegram_proxy.workers import TelegramProxyInitialStateWorker
+        from telegram_proxy.runtime.workers import TelegramProxyInitialStateWorker
 
         return TelegramProxyInitialStateWorker(
             request_id,
@@ -302,7 +302,7 @@ class TelegramProxyFeature:
 
 def build_telegram_proxy_feature() -> TelegramProxyFeature:
     def _commands():
-        from telegram_proxy import commands as telegram_proxy_commands
+        from telegram_proxy.runtime import commands as telegram_proxy_commands
 
         return telegram_proxy_commands
 

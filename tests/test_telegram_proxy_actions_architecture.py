@@ -5,20 +5,20 @@ import inspect
 from pathlib import Path
 import unittest
 
-import telegram_proxy.actions as telegram_actions
-import telegram_proxy.commands as telegram_commands
 import telegram_proxy.manager as telegram_manager
+import telegram_proxy.runtime.commands as telegram_commands
+import telegram_proxy.runtime.plans as telegram_plans
 
 
 class TelegramProxyActionsArchitectureTests(unittest.TestCase):
     def test_external_open_actions_live_in_commands_not_actions(self) -> None:
-        actions_source = inspect.getsource(telegram_actions)
         commands_source = inspect.getsource(telegram_commands)
+        plans_source = inspect.getsource(telegram_plans)
 
-        self.assertNotIn("subprocess", actions_source)
-        self.assertNotIn("webbrowser.open", actions_source)
-        self.assertNotIn("open_log_file", actions_source)
-        self.assertNotIn("open_external_link", actions_source)
+        self.assertNotIn("subprocess", plans_source)
+        self.assertNotIn("webbrowser.open", plans_source)
+        self.assertNotIn("open_log_file", plans_source)
+        self.assertNotIn("open_external_link", plans_source)
 
         self.assertIn("def open_log_file", commands_source)
         self.assertIn("def open_external_link", commands_source)
@@ -111,6 +111,30 @@ class TelegramProxyActionsArchitectureTests(unittest.TestCase):
         self.assertFalse((telegram_proxy_root / "settings.py").exists())
         self.assertFalse((telegram_proxy_root / "upstream_catalog.py").exists())
         self.assertFalse((telegram_proxy_root / "diagnostics.py").exists())
+
+    def test_runtime_layer_lives_in_runtime_package(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        telegram_proxy_root = root / "src" / "telegram_proxy"
+        runtime_root = telegram_proxy_root / "runtime"
+
+        commands = importlib.import_module("telegram_proxy.runtime.commands")
+        plans = importlib.import_module("telegram_proxy.runtime.plans")
+        workers = importlib.import_module("telegram_proxy.runtime.workers")
+        public = importlib.import_module("telegram_proxy.public")
+
+        self.assertTrue((runtime_root / "__init__.py").exists())
+        self.assertTrue((runtime_root / "commands.py").exists())
+        self.assertTrue((runtime_root / "plans.py").exists())
+        self.assertTrue((runtime_root / "workers.py").exists())
+
+        self.assertTrue(hasattr(commands, "get_start_config"))
+        self.assertTrue(hasattr(plans, "TelegramProxyActionResult"))
+        self.assertTrue(hasattr(workers, "TelegramProxyStartWorker"))
+        self.assertIs(public.TelegramProxyStartConfig, commands.TelegramProxyStartConfig)
+
+        self.assertFalse((telegram_proxy_root / "actions.py").exists())
+        self.assertFalse((telegram_proxy_root / "commands.py").exists())
+        self.assertFalse((telegram_proxy_root / "workers.py").exists())
 
 
 if __name__ == "__main__":

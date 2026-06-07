@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from telegram_proxy.commands import (
+from telegram_proxy.runtime.commands import (
     TelegramProxyActionResult,
     TelegramProxyDiagnosticsFinishPlan,
     TelegramProxyDiagnosticsPollPlan,

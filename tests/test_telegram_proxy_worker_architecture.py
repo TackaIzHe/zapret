@@ -3,8 +3,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from telegram_proxy import commands as telegram_proxy_commands
-from telegram_proxy import workers as telegram_proxy_workers
+from telegram_proxy.runtime import commands as telegram_proxy_commands
+from telegram_proxy.runtime import workers as telegram_proxy_workers
 import app.feature_facades.telegram_proxy as telegram_proxy_feature_module
 from app.feature_facades.telegram_proxy import TelegramProxyFeature
 from telegram_proxy.ui.worker_state import (
@@ -162,7 +162,7 @@ class TelegramProxyWorkerArchitectureTests(unittest.TestCase):
 
         self.assertIn("check_relay_reachable=self.check_relay_reachable", feature_source)
         self.assertIn("_check_relay_reachable", worker_source)
-        self.assertNotIn("telegram_proxy.commands", worker_source)
+        self.assertNotIn("telegram_proxy.runtime.commands", worker_source)
         self.assertNotIn("telegram_proxy.wss_proxy", worker_source)
         self.assertIn("telegram_proxy.wss_proxy", command_source)
         self.assertIn("check_relay_reachable", command_source)
@@ -186,7 +186,7 @@ class TelegramProxyWorkerArchitectureTests(unittest.TestCase):
         self.assertNotIn("worker.start()", toggle_source)
         self.assertNotIn("_tray_start_worker =", feature_source)
         self.assertIn("_build_upstream_config", worker_source)
-        self.assertNotIn("telegram_proxy.commands", worker_source)
+        self.assertNotIn("telegram_proxy.runtime.commands", worker_source)
 
     def test_tray_toggle_stops_proxy_through_worker_runtime(self) -> None:
         feature_source = inspect.getsource(TelegramProxyFeature)

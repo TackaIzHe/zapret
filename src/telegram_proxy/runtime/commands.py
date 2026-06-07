@@ -5,7 +5,7 @@ import subprocess
 import webbrowser
 from dataclasses import dataclass
 
-from telegram_proxy.actions import (
+from telegram_proxy.runtime.plans import (
     TelegramProxyActionResult,
     TelegramProxyDiagnosticsFinishPlan,
     TelegramProxyDiagnosticsPollPlan,
@@ -13,8 +13,6 @@ from telegram_proxy.actions import (
     build_diagnostics_finish_plan,
     build_diagnostics_poll_plan,
     build_diagnostics_start_plan,
-    copy_text,
-    ensure_telegram_hosts,
 )
 
 
@@ -54,6 +52,32 @@ def build_upstream_config():
     from telegram_proxy.config.settings import build_upstream_config as _build_upstream_config
 
     return _build_upstream_config()
+
+
+def copy_text(text: str, *, success_title: str, success_content: str, success_log: str = "") -> TelegramProxyActionResult:
+    from PyQt6.QtGui import QGuiApplication
+
+    payload = str(text or "")
+    clipboard = QGuiApplication.clipboard()
+    if clipboard is None or not payload:
+        return TelegramProxyActionResult(False, "", "", "")
+    clipboard.setText(payload)
+    return TelegramProxyActionResult(
+        ok=True,
+        log_line=success_log,
+        info_title=success_title,
+        info_content=success_content,
+    )
+
+
+def ensure_telegram_hosts() -> TelegramProxyActionResult:
+    try:
+        from telegram_proxy.telegram_hosts import ensure_telegram_hosts
+
+        ensure_telegram_hosts()
+        return TelegramProxyActionResult(True, "", "", "")
+    except Exception as e:
+        return TelegramProxyActionResult(False, f"Telegram hosts check error: {e}", "", "")
 
 
 def set_enabled(enabled: bool) -> None:

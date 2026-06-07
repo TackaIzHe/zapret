@@ -86,14 +86,14 @@ from dns.page_workers import DnsPageLoadWorker
 import telegram_proxy.ui.diagnostics_workflow as telegram_diag_workflow
 import telegram_proxy.ui.proxy_runtime_workflow as telegram_runtime_workflow
 import telegram_proxy.ui.page as telegram_page
-import telegram_proxy.commands as telegram_proxy_commands
+import telegram_proxy.runtime.commands as telegram_proxy_commands
 import telegram_proxy.config.settings as telegram_proxy_settings
 import telegram_proxy.ui.settings_build as telegram_proxy_settings_build
 from app.feature_facades.telegram_proxy import TelegramProxyFeature
 import telegram_proxy.ui.upstream_workflow as telegram_upstream_workflow
-import telegram_proxy.workers as telegram_proxy_workers
+import telegram_proxy.runtime.workers as telegram_proxy_workers
 from telegram_proxy.ui.page import TelegramProxyPage
-from telegram_proxy.workers import TelegramProxyDiagnosticsWorker
+from telegram_proxy.runtime.workers import TelegramProxyDiagnosticsWorker
 from diagnostics.ui.page import ConnectionTestPage
 import diagnostics.ui.runtime_helpers as diagnostics_runtime_helpers
 import app.feature_facades.diagnostics as diagnostics_feature_facade
@@ -2426,7 +2426,7 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertFalse(plan.snowflakes_enabled)
 
     def test_telegram_proxy_initial_state_is_backend_plan_not_ui_loading(self) -> None:
-        telegram_proxy_workers = importlib.import_module("telegram_proxy.workers")
+        telegram_proxy_workers = importlib.import_module("telegram_proxy.runtime.workers")
 
         init_source = inspect.getsource(TelegramProxyPage.__init__)
         after_source = inspect.getsource(TelegramProxyPage._after_ui_built)
@@ -2464,7 +2464,7 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertNotIn("get_tg_proxy_upstream_enabled", settings_source)
         self.assertIn("load_page_initial_state=self.load_page_initial_state", feature_source)
         self.assertIn("_load_page_initial_state", worker_source)
-        self.assertNotIn("telegram_proxy.commands", worker_source)
+        self.assertNotIn("telegram_proxy.runtime.commands", worker_source)
         self.assertNotIn("telegram_proxy.settings", worker_source)
         self.assertIn("load_page_initial_state", worker_source)
 
@@ -2687,7 +2687,7 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         feature_source = inspect.getsource(TelegramProxyFeature)
         self.assertIn("save_settings_action=self.save_settings_action", feature_source)
         self.assertIn("_save_settings_action", worker_source)
-        self.assertNotIn("telegram_proxy.commands", worker_source)
+        self.assertNotIn("telegram_proxy.runtime.commands", worker_source)
         self.assertNotIn("telegram_proxy.settings", worker_source)
         self.assertIn("save_settings_action", worker_source)
         self.assertIn("set_host", command_source)
@@ -2710,7 +2710,7 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("check_relay_http=self.check_relay_http", feature_source)
         self.assertIn("_check_relay_reachable", worker_source)
         self.assertIn("_check_relay_http", worker_source)
-        self.assertNotIn("telegram_proxy.commands", worker_source)
+        self.assertNotIn("telegram_proxy.runtime.commands", worker_source)
         self.assertIn("check_relay_http", worker_source)
         self.assertIn("socket.create_connection", command_source)
 
