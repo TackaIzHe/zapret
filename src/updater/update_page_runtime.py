@@ -73,10 +73,14 @@ class UpdateLatestValueWorkerState:
         single_shot,
         run_scheduled,
         cleanup_in_progress: bool = False,
+        should_schedule_pending=None,
     ) -> None:
         if not is_current_worker_finish(self.runtime, worker):
             return
         if cleanup_in_progress or not self.has_pending():
+            return
+        if callable(should_schedule_pending) and not should_schedule_pending(self.pending):
+            self.pending = self.empty_value
             return
         self.schedule_start(single_shot, run_scheduled, cleanup_in_progress=cleanup_in_progress)
 
@@ -213,11 +217,10 @@ class UpdatePageRuntime:
         self._cleanup_in_progress = False
         self._auto_check_load_pending = False
         self._auto_check_load_start_scheduled = False
-        self._auto_check_save_pending: bool | None = None
+        self._auto_check_save_state = UpdateLatestValueWorkerState(self._auto_check_save_runtime, empty_value=None)
         self._cache_invalidate_state = UpdateLatestValueWorkerState(self._cache_invalidate_runtime, empty_value=None)
         self._update_channel_open_state = UpdateLatestValueWorkerState(self._update_channel_open_runtime, empty_value="")
         self._server_check_gate_pending: bool | None = None
-        self._auto_check_save_start_scheduled = False
         self._server_check_gate_start_scheduled = False
         self._auto_check_user_changed = False
         self._dpi_restart_after = ""
@@ -258,6 +261,33 @@ class UpdatePageRuntime:
     @_update_channel_open_start_scheduled.setter
     def _update_channel_open_start_scheduled(self, value: bool) -> None:
         self._update_channel_open_state_obj().start_scheduled = bool(value)
+
+    def _auto_check_save_state_obj(self) -> UpdateLatestValueWorkerState:
+        state = self.__dict__.get("_auto_check_save_state")
+        if state is None:
+            state = UpdateLatestValueWorkerState(
+                self.__dict__.get("_auto_check_save_runtime"),
+                empty_value=None,
+            )
+            self.__dict__["_auto_check_save_state"] = state
+        return state
+
+    @property
+    def _auto_check_save_pending(self) -> bool | None:
+        pending = self._auto_check_save_state_obj().pending
+        return None if pending is None else bool(pending)
+
+    @_auto_check_save_pending.setter
+    def _auto_check_save_pending(self, value: bool | None) -> None:
+        self._auto_check_save_state_obj().pending = None if value is None else bool(value)
+
+    @property
+    def _auto_check_save_start_scheduled(self) -> bool:
+        return bool(self._auto_check_save_state_obj().start_scheduled)
+
+    @_auto_check_save_start_scheduled.setter
+    def _auto_check_save_start_scheduled(self, value: bool) -> None:
+        self._auto_check_save_state_obj().start_scheduled = bool(value)
 
     def _cache_invalidate_state_obj(self) -> UpdateLatestValueWorkerState:
         state = self.__dict__.get("_cache_invalidate_state")
@@ -761,10 +791,7 @@ class UpdatePageRuntime:
         log(f"Автопроверка при запуске: {'включена' if enabled else 'отключена'}", "🔄 UPDATE")
 
     def _request_auto_check_save(self, enabled: bool) -> None:
-        if self._auto_check_save_runtime.is_running() or self.__dict__.get("_auto_check_save_start_scheduled", False):
-            self._auto_check_save_pending = bool(enabled)
-            return
-        self._start_auto_check_save_worker(bool(enabled))
+        self._auto_check_save_state_obj().request_or_start(bool(enabled), self._start_auto_check_save_worker)
 
     def _start_auto_check_save_worker(self, enabled: bool) -> None:
         self._auto_check_save_pending = None
@@ -781,37 +808,31 @@ class UpdatePageRuntime:
     def _on_auto_check_save_failed(self, request_id: int, error: str) -> None:
         if not self._auto_check_save_runtime.is_current(request_id, cleanup_in_progress=self._cleanup_in_progress):
             return
-        if self.__dict__.get("_auto_check_save_pending") is not None:
+        if self._auto_check_save_state_obj().has_pending():
             return
         log(f"Не удалось сохранить автопроверку обновлений: {error}", "WARNING")
 
     def _on_auto_check_save_finished(self, _worker=None) -> None:
-        if not self._is_current_worker_finish(self.__dict__.get("_auto_check_save_runtime"), _worker):
-            return
-        if self._cleanup_in_progress:
-            return
-        pending = self._auto_check_save_pending
-        if pending is None:
-            return
-        if bool(pending) == bool(self._auto_check_enabled):
-            self._schedule_auto_check_save_start()
-        else:
-            self._auto_check_save_pending = None
+        self._auto_check_save_state_obj().schedule_pending_after_finish(
+            _worker,
+            is_current_worker_finish=self._is_current_worker_finish,
+            single_shot=QTimer.singleShot,
+            run_scheduled=self._run_scheduled_auto_check_save_start,
+            cleanup_in_progress=self._cleanup_in_progress,
+            should_schedule_pending=lambda pending: bool(pending) == bool(self._auto_check_enabled),
+        )
 
     def _schedule_auto_check_save_start(self) -> None:
-        if self.__dict__.get("_cleanup_in_progress", False):
-            return
-        if self.__dict__.get("_auto_check_save_start_scheduled", False):
-            return
-        self._auto_check_save_start_scheduled = True
-        QTimer.singleShot(0, self._run_scheduled_auto_check_save_start)
+        self._auto_check_save_state_obj().schedule_start(
+            QTimer.singleShot,
+            self._run_scheduled_auto_check_save_start,
+            cleanup_in_progress=self.__dict__.get("_cleanup_in_progress", False),
+        )
 
     def _run_scheduled_auto_check_save_start(self) -> None:
-        self._auto_check_save_start_scheduled = False
-        if self.__dict__.get("_cleanup_in_progress", False):
-            return
-        pending = self.__dict__.get("_auto_check_save_pending")
-        self._auto_check_save_pending = None
+        pending = self._auto_check_save_state_obj().take_pending_for_scheduled_start(
+            cleanup_in_progress=self.__dict__.get("_cleanup_in_progress", False),
+        )
         if pending is None:
             return
         if bool(pending) != bool(self._auto_check_enabled):
@@ -1132,8 +1153,7 @@ class UpdatePageRuntime:
         self._version_worker_runtime.cancel()
 
     def _teardown_auto_check_save_worker(self) -> None:
-        self._auto_check_save_pending = None
-        self._auto_check_save_start_scheduled = False
+        self._auto_check_save_state_obj().reset()
         self._auto_check_save_runtime.stop(
             blocking=_updater_cleanup_blocking("auto_check_save_worker"),
             log_fn=log,
