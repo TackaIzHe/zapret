@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QListView, QSizePolicy
 from qfluentwidgets import FluentIcon, PrimaryPushButton
 
 from ui.fluent_widgets import SettingsCard, set_tooltip
+from presets.ui.common.user_presets_accessibility import apply_user_presets_accessibility
 from ui.presets_menu.delegate import PresetListDelegate
 from ui.presets_menu.model import PresetListModel
 from ui.presets_menu.toolbar import PresetsToolbarLayout
@@ -159,6 +160,18 @@ def build_user_presets_page_shell(
     preset_search_input.setFixedHeight(34)
     preset_search_input.setProperty("noDrag", True)
     preset_search_input.textChanged.connect(on_preset_search_text_changed)
+    apply_user_presets_accessibility(
+        tr_fn=tr_fn,
+        tr_prefix=tr_prefix,
+        get_configs_btn=get_configs_btn,
+        create_btn=create_btn,
+        import_btn=import_btn,
+        open_folder_btn=open_folder_btn,
+        reset_all_btn=reset_all_btn,
+        presets_info_btn=presets_info_btn,
+        info_btn=info_btn,
+        preset_search_input=preset_search_input,
+    )
 
     toolbar_layout.set_buttons([
         create_btn,

@@ -6,6 +6,7 @@ import time
 
 from qfluentwidgets import FluentIcon
 
+from presets.ui.common.user_presets_accessibility import apply_user_presets_accessibility
 from ui.fluent_widgets import set_tooltip
 
 
@@ -307,6 +308,18 @@ def apply_user_presets_language(
             preset_search_input,
             tr_fn(f"{tr_prefix}.search.placeholder", "Поиск пресетов по имени...")
         )
+    apply_user_presets_accessibility(
+        tr_fn=tr_fn,
+        tr_prefix=tr_prefix,
+        get_configs_btn=get_configs_btn,
+        create_btn=create_btn,
+        import_btn=import_btn,
+        open_folder_btn=open_folder_btn,
+        reset_all_btn=reset_all_btn,
+        presets_info_btn=presets_info_btn,
+        info_btn=info_btn,
+        preset_search_input=preset_search_input,
+    )
 
     if presets_delegate is not None:
         presets_delegate.set_ui_language(ui_language)
