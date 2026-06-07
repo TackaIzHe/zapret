@@ -40,6 +40,66 @@ class UpdateDownloadState:
 
 
 @dataclass(slots=True)
+class UpdateLatestValueWorkerState:
+    runtime: object
+    empty_value: object = ""
+    pending: object = ""
+    start_scheduled: bool = False
+
+    def is_busy(self) -> bool:
+        if self.start_scheduled:
+            return True
+        is_running = getattr(self.runtime, "is_running", None)
+        if callable(is_running):
+            return bool(is_running())
+        return False
+
+    def request_or_start(self, value, start) -> bool:
+        if self.is_busy():
+            self.pending = value
+            return False
+        self.pending = self.empty_value
+        start(value)
+        return True
+
+    def has_pending(self) -> bool:
+        return self.pending != self.empty_value
+
+    def schedule_pending_after_finish(
+        self,
+        worker,
+        *,
+        is_current_worker_finish,
+        single_shot,
+        run_scheduled,
+        cleanup_in_progress: bool = False,
+    ) -> None:
+        if not is_current_worker_finish(self.runtime, worker):
+            return
+        if cleanup_in_progress or not self.has_pending():
+            return
+        self.schedule_start(single_shot, run_scheduled, cleanup_in_progress=cleanup_in_progress)
+
+    def schedule_start(self, single_shot, run_scheduled, *, cleanup_in_progress: bool = False) -> None:
+        if cleanup_in_progress or self.start_scheduled:
+            return
+        self.start_scheduled = True
+        single_shot(0, run_scheduled)
+
+    def take_pending_for_scheduled_start(self, *, cleanup_in_progress: bool = False):
+        self.start_scheduled = False
+        pending = self.pending
+        self.pending = self.empty_value
+        if cleanup_in_progress:
+            return self.empty_value
+        return pending
+
+    def reset(self) -> None:
+        self.pending = self.empty_value
+        self.start_scheduled = False
+
+
+@dataclass(slots=True)
 class UpdateIdleViewDecision:
     action: str
     elapsed_seconds: float
@@ -155,11 +215,10 @@ class UpdatePageRuntime:
         self._auto_check_load_start_scheduled = False
         self._auto_check_save_pending: bool | None = None
         self._cache_invalidate_pending_context: str | None = None
-        self._update_channel_open_pending = ""
+        self._update_channel_open_state = UpdateLatestValueWorkerState(self._update_channel_open_runtime, empty_value="")
         self._server_check_gate_pending: bool | None = None
         self._auto_check_save_start_scheduled = False
         self._cache_invalidate_start_scheduled = False
-        self._update_channel_open_start_scheduled = False
         self._server_check_gate_start_scheduled = False
         self._auto_check_user_changed = False
         self._dpi_restart_after = ""
@@ -174,6 +233,32 @@ class UpdatePageRuntime:
     @property
     def auto_check_enabled(self) -> bool:
         return bool(self._auto_check_enabled)
+
+    def _update_channel_open_state_obj(self) -> UpdateLatestValueWorkerState:
+        state = self.__dict__.get("_update_channel_open_state")
+        if state is None:
+            state = UpdateLatestValueWorkerState(
+                self.__dict__.get("_update_channel_open_runtime"),
+                empty_value="",
+            )
+            self.__dict__["_update_channel_open_state"] = state
+        return state
+
+    @property
+    def _update_channel_open_pending(self) -> str:
+        return str(self._update_channel_open_state_obj().pending or "")
+
+    @_update_channel_open_pending.setter
+    def _update_channel_open_pending(self, value: str) -> None:
+        self._update_channel_open_state_obj().pending = str(value or "")
+
+    @property
+    def _update_channel_open_start_scheduled(self) -> bool:
+        return bool(self._update_channel_open_state_obj().start_scheduled)
+
+    @_update_channel_open_start_scheduled.setter
+    def _update_channel_open_start_scheduled(self, value: bool) -> None:
+        self._update_channel_open_state_obj().start_scheduled = bool(value)
 
     @staticmethod
     def build_responsibility_map() -> UpdateResponsibilityMap:
@@ -713,17 +798,25 @@ class UpdatePageRuntime:
 
     def _request_update_channel_open(self, channel: str) -> None:
         target = str(channel or "")
-        if (
-            self._update_channel_open_runtime.is_running()
-            or self.__dict__.get("_update_channel_open_start_scheduled", False)
-        ):
-            self._update_channel_open_pending = target
+        state = self._update_channel_open_state_obj()
+        state.request_or_start(target, self._start_update_channel_open_worker)
+
+    def _update_channel_open_has_pending(self) -> bool:
+        return self._update_channel_open_state_obj().has_pending()
+
+    def _start_scheduled_update_channel_open(self) -> None:
+        pending = self._update_channel_open_state_obj().take_pending_for_scheduled_start(
+            cleanup_in_progress=self.__dict__.get("_cleanup_in_progress", False),
+        )
+        if not pending:
             return
-        self._update_channel_open_pending = ""
+        self._request_update_channel_open(str(pending or ""))
+
+    def _start_update_channel_open_worker(self, target: str) -> None:
         self._update_channel_open_runtime.start_qthread_worker(
             worker_factory=lambda request_id: self._updater_feature.create_update_channel_open_worker(
                 request_id,
-                channel=target,
+                channel=str(target or ""),
                 parent=self._view.window(),
             ),
             on_loaded=self._on_update_channel_open_finished,
@@ -737,7 +830,7 @@ class UpdatePageRuntime:
             cleanup_in_progress=self._cleanup_in_progress,
         ):
             return
-        if self.__dict__.get("_update_channel_open_pending"):
+        if self._update_channel_open_has_pending():
             return
         if bool(getattr(result, "ok", False)):
             return
@@ -749,36 +842,28 @@ class UpdatePageRuntime:
             cleanup_in_progress=self._cleanup_in_progress,
         ):
             return
-        if self.__dict__.get("_update_channel_open_pending"):
+        if self._update_channel_open_has_pending():
             return
         self._view.show_update_channel_open_error(str(error or ""))
 
     def _on_update_channel_open_worker_finished(self, _worker) -> None:
-        if not self._is_current_worker_finish(self.__dict__.get("_update_channel_open_runtime"), _worker):
-            return
-        if self._cleanup_in_progress:
-            return
-        pending = str(self.__dict__.get("_update_channel_open_pending") or "")
-        if pending:
-            self._schedule_update_channel_open_start()
+        self._update_channel_open_state_obj().schedule_pending_after_finish(
+            _worker,
+            is_current_worker_finish=self._is_current_worker_finish,
+            single_shot=QTimer.singleShot,
+            run_scheduled=self._start_scheduled_update_channel_open,
+            cleanup_in_progress=self._cleanup_in_progress,
+        )
 
     def _schedule_update_channel_open_start(self) -> None:
-        if self.__dict__.get("_cleanup_in_progress", False):
-            return
-        if self.__dict__.get("_update_channel_open_start_scheduled", False):
-            return
-        self._update_channel_open_start_scheduled = True
-        QTimer.singleShot(0, self._run_scheduled_update_channel_open_start)
+        self._update_channel_open_state_obj().schedule_start(
+            QTimer.singleShot,
+            self._start_scheduled_update_channel_open,
+            cleanup_in_progress=self.__dict__.get("_cleanup_in_progress", False),
+        )
 
     def _run_scheduled_update_channel_open_start(self) -> None:
-        self._update_channel_open_start_scheduled = False
-        if self.__dict__.get("_cleanup_in_progress", False):
-            return
-        pending = str(self.__dict__.get("_update_channel_open_pending") or "")
-        self._update_channel_open_pending = ""
-        if not pending:
-            return
-        self._request_update_channel_open(pending)
+        self._start_scheduled_update_channel_open()
 
     def _is_current_worker_finish(self, runtime, worker) -> bool:
         if self.__dict__.get("_cleanup_in_progress", False):
@@ -1041,8 +1126,7 @@ class UpdatePageRuntime:
         self._auto_check_load_runtime.cancel()
 
     def _teardown_update_channel_open_worker(self) -> None:
-        self._update_channel_open_pending = ""
-        self._update_channel_open_start_scheduled = False
+        self._update_channel_open_state_obj().reset()
         self._update_channel_open_runtime.stop(
             blocking=_updater_cleanup_blocking("update_channel_open_worker"),
             log_fn=log,

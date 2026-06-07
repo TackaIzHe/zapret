@@ -204,6 +204,17 @@ class UpdaterSettingsWorkerArchitectureTests(unittest.TestCase):
         self.assertNotIn("updater_commands.open_update_channel", worker_source)
         self.assertNotIn("import updater.commands", worker_source)
 
+    def test_update_channel_open_queue_state_lives_in_state_object(self) -> None:
+        self.assertTrue(hasattr(update_page_runtime, "UpdateLatestValueWorkerState"))
+
+        state_source = inspect.getsource(update_page_runtime.UpdateLatestValueWorkerState)
+        init_source = inspect.getsource(update_page_runtime.UpdatePageRuntime.__init__)
+        finished_source = inspect.getsource(update_page_runtime.UpdatePageRuntime._on_update_channel_open_worker_finished)
+
+        self.assertIn("_update_channel_open_state = UpdateLatestValueWorkerState", init_source)
+        self.assertIn("schedule_pending_after_finish", finished_source)
+        self.assertIn("def schedule_pending_after_finish", state_source)
+
     def test_update_channel_open_queues_while_worker_runs(self) -> None:
         runtime = update_page_runtime.UpdatePageRuntime.__new__(update_page_runtime.UpdatePageRuntime)
         runtime._cleanup_in_progress = False
