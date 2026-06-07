@@ -931,6 +931,7 @@ class HostsManager:
             allow_ipv6 = is_ipv6_available()
             desired_rows: list[tuple[str, str]] = []
             seen_rows: set[tuple[str, str]] = set()
+            had_requested_rows = False
             for row in (domain_ip_rows or []):
                 if not isinstance(row, (tuple, list)) or len(row) < 2:
                     continue
@@ -938,6 +939,7 @@ class HostsManager:
                 ip = str(row[1]).strip()
                 if not domain or not ip:
                     continue
+                had_requested_rows = True
                 if is_ipv6_address(ip) and not allow_ipv6:
                     continue
                 row_key = (domain.casefold(), ip.casefold())
@@ -945,6 +947,11 @@ class HostsManager:
                     continue
                 seen_rows.add(row_key)
                 desired_rows.append((domain, ip))
+
+            if had_requested_rows and not desired_rows:
+                self.set_status("Нет подходящих hosts-записей для применения")
+                log("apply_domain_ip_rows: все выбранные записи отфильтрованы перед записью", "WARNING")
+                return False
 
             # Ничего не добавляем — просто очищаем блок ZapretGUI
             if not desired_rows:
