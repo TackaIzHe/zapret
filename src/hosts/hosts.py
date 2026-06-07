@@ -162,6 +162,49 @@ def _remove_managed_hosts_block(lines: list[str]) -> tuple[list[str], int]:
     return new_lines, removed_entries
 
 
+def _format_hosts_mapping_line(ip: str, domains: list[str], comment: str) -> str:
+    line = f"{ip} {' '.join(domains)}"
+    if comment:
+        line += f" # {comment}"
+    return line + "\n"
+
+
+def _remove_top_domain_entries(lines: list[str], domain_keys: set[str]) -> tuple[list[str], set[str], int | None]:
+    """Убирает первое вхождение каждого нужного домена и возвращает место для нового блока."""
+    if not domain_keys:
+        return lines, set(), None
+
+    new_lines: list[str] = []
+    removed_keys: set[str] = set()
+    insert_at: int | None = None
+
+    for line in lines:
+        parsed = _parse_hosts_mapping_line(line)
+        if parsed is None:
+            new_lines.append(line)
+            continue
+
+        ip, domains, comment = parsed
+        matched_keys = {
+            domain.casefold()
+            for domain in domains
+            if domain.casefold() in domain_keys and domain.casefold() not in removed_keys
+        }
+        if not matched_keys:
+            new_lines.append(line)
+            continue
+
+        if insert_at is None:
+            insert_at = len(new_lines)
+        removed_keys.update(matched_keys)
+
+        remaining_domains = [domain for domain in domains if domain.casefold() not in matched_keys]
+        if remaining_domains:
+            new_lines.append(_format_hosts_mapping_line(ip, remaining_domains, comment))
+
+    return new_lines, removed_keys, insert_at
+
+
 def _iter_managed_hosts_block_rows(lines: list[str]) -> list[tuple[str, str]]:
     """Возвращает строки (domain, ip), которые лежат внутри блока ZapretGUI."""
     rows: list[tuple[str, str]] = []
@@ -189,16 +232,18 @@ def _iter_managed_hosts_block_rows(lines: list[str]) -> list[tuple[str, str]]:
     return rows
 
 
-def _insert_managed_hosts_block(new_lines: list[str], rows: list[tuple[str, str]]) -> None:
+def _insert_managed_hosts_block(new_lines: list[str], rows: list[tuple[str, str]], insert_at: int | None = None) -> None:
     """Добавляет блок ZapretGUI перед обычными строками hosts."""
     if not rows:
         return
 
-    insert_at = len(new_lines)
-    for index, line in enumerate(new_lines):
-        if _parse_hosts_mapping_line(line) is not None:
-            insert_at = index
-            break
+    if insert_at is None:
+        insert_at = len(new_lines)
+        for index, line in enumerate(new_lines):
+            if _parse_hosts_mapping_line(line) is not None:
+                insert_at = index
+                break
+    insert_at = max(0, min(insert_at, len(new_lines)))
 
     block: list[str] = []
     if insert_at > 0 and new_lines[insert_at - 1].strip() != "":
@@ -896,14 +941,21 @@ class HostsManager:
                 self.set_status(f"Файл hosts обновлён: удалено {removed_count} записей")
                 return True
 
-            _insert_managed_hosts_block(new_lines, desired_rows)
+            domain_keys = {domain.casefold() for domain, _ip in desired_rows}
+            new_lines, replaced_domains, replacement_insert_at = _remove_top_domain_entries(new_lines, domain_keys)
+
+            _insert_managed_hosts_block(new_lines, desired_rows, insert_at=replacement_insert_at)
 
             if not safe_write_hosts_file("".join(new_lines)):
                 self.set_status("Не удалось записать файл hosts")
                 return False
 
             self.set_status(f"Файл hosts обновлён: добавлено {len(desired_rows)} записей")
-            log(f"✅ apply_domain_ip_rows: removed={removed_count}, added={len(desired_rows)}", "DEBUG")
+            log(
+                f"✅ apply_domain_ip_rows: removed={removed_count}, "
+                f"replaced_top={len(replaced_domains)}, added={len(desired_rows)}",
+                "DEBUG",
+            )
             return True
 
         except PermissionError:

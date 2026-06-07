@@ -236,7 +236,7 @@ class HostsCatalogJsonTests(unittest.TestCase):
         original = "\n".join(
             [
                 "# user header",
-                "10.0.0.1 chatgpt.com",
+                "10.0.0.1 manual.example",
                 "10.0.0.2 another.example",
                 "",
             ]
@@ -254,12 +254,73 @@ class HostsCatalogJsonTests(unittest.TestCase):
 
         self.assertEqual(len(written), 1)
         self.assertIn("# user header", written[0])
-        self.assertIn("10.0.0.1 chatgpt.com", written[0])
+        self.assertIn("10.0.0.1 manual.example", written[0])
         self.assertIn("10.0.0.2 another.example", written[0])
         self.assertIn("2.2.2.2 chatgpt.com", written[0])
         self.assertLess(written[0].index("# user header"), written[0].index("# >>> zapretgui:hosts managed begin >>>"))
-        self.assertLess(written[0].index("2.2.2.2 chatgpt.com"), written[0].index("10.0.0.1 chatgpt.com"))
+        self.assertLess(written[0].index("2.2.2.2 chatgpt.com"), written[0].index("10.0.0.1 manual.example"))
         self.assertLess(written[0].index("2.2.2.2 chatgpt.com"), written[0].index("10.0.0.2 another.example"))
+
+    def test_apply_domain_rows_updates_top_domain_entry_without_adding_duplicate(self) -> None:
+        from hosts import hosts as hosts_module
+
+        original = "\n".join(
+            [
+                "# user header",
+                "10.0.0.1 chatgpt.com",
+                "10.0.0.2 another.example",
+                "10.0.0.3 chatgpt.com",
+                "",
+            ]
+        )
+        written: list[str] = []
+        manager = hosts_module.HostsManager()
+        manager.is_hosts_file_accessible = lambda: True
+
+        with (
+            patch.object(hosts_module, "safe_read_hosts_file", return_value=original),
+            patch.object(hosts_module, "safe_write_hosts_file", side_effect=lambda text: written.append(text) or True),
+            patch.object(hosts_module, "is_ipv6_available", return_value=True),
+        ):
+            self.assertTrue(manager.apply_domain_ip_rows([("chatgpt.com", "2.2.2.2")]))
+
+        self.assertEqual(len(written), 1)
+        chatgpt_lines = [
+            line
+            for line in written[0].splitlines()
+            if line.strip()
+            and not line.lstrip().startswith("#")
+            and "chatgpt.com" in line.split()[1:]
+        ]
+        self.assertEqual(chatgpt_lines, ["2.2.2.2 chatgpt.com", "10.0.0.3 chatgpt.com"])
+        self.assertIn("10.0.0.2 another.example", written[0])
+
+    def test_apply_domain_rows_keeps_other_domains_from_same_hosts_line(self) -> None:
+        from hosts import hosts as hosts_module
+
+        original = "\n".join(
+            [
+                "# user header",
+                "10.0.0.1 chatgpt.com manual.example # keep",
+                "10.0.0.3 chatgpt.com",
+                "",
+            ]
+        )
+        written: list[str] = []
+        manager = hosts_module.HostsManager()
+        manager.is_hosts_file_accessible = lambda: True
+
+        with (
+            patch.object(hosts_module, "safe_read_hosts_file", return_value=original),
+            patch.object(hosts_module, "safe_write_hosts_file", side_effect=lambda text: written.append(text) or True),
+            patch.object(hosts_module, "is_ipv6_available", return_value=True),
+        ):
+            self.assertTrue(manager.apply_domain_ip_rows([("chatgpt.com", "2.2.2.2")]))
+
+        self.assertEqual(len(written), 1)
+        self.assertIn("2.2.2.2 chatgpt.com", written[0])
+        self.assertIn("10.0.0.1 manual.example # keep", written[0])
+        self.assertNotIn("10.0.0.1 chatgpt.com manual.example", written[0])
 
     def test_apply_service_selection_with_unknown_rows_does_not_clear_existing_block(self) -> None:
         from hosts import hosts as hosts_module
