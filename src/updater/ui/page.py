@@ -231,6 +231,7 @@ class ServersPage(BasePage):
         self._toggle_label = settings_widgets.toggle_label
         self._version_info_label = settings_widgets.version_info_label
         self.add_widget(self._settings_card)
+        self.add_widget(self._version_info_label)
 
         # Telegram card
         telegram_widgets = build_servers_telegram_section(

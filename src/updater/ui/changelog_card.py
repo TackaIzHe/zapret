@@ -288,6 +288,8 @@ class ChangelogCard(CardWidget):
             last_speed_time=self._last_speed_time,
             last_speed_bytes=self._last_speed_bytes,
             smoothed_speed=self._smoothed_speed,
+            download_speed_kb=self._download_speed_kb,
+            download_eta_seconds=self._download_eta_seconds,
             language=self._ui_language,
             now=time.time(),
             progress_bar_visible=self.progress_bar.isVisible(),

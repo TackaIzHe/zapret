@@ -54,20 +54,13 @@ def build_servers_settings_section(
     auto_check_toggle = auto_check_card
     settings_card.addSettingCard(auto_check_card)
 
-    version_card = settings_card_cls()
-    version_layout = qhbox_layout_cls()
-    version_layout.setContentsMargins(10, 6, 12, 6)
-    version_layout.setSpacing(8)
+    _ = settings_card_cls, qhbox_layout_cls
     version_info_label = caption_label_cls(
         tr_fn("page.servers.settings.version_channel_template", "v{version} · {channel}").format(
             version=app_version,
             channel=channel,
         )
     )
-    version_layout.addWidget(version_info_label)
-    version_layout.addStretch()
-    version_card.add_layout(version_layout)
-    settings_card.addSettingCard(version_card)
     toggle_label = None
 
     return ServersSettingsWidgets(

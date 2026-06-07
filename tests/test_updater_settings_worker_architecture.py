@@ -483,6 +483,26 @@ class UpdaterSettingsWorkerArchitectureTests(unittest.TestCase):
 
         runtime._continue_after_update_cache_invalidate.assert_not_called()
 
+    def test_install_update_enters_download_ui_before_cache_invalidate_finishes(self) -> None:
+        runtime = update_page_runtime.UpdatePageRuntime.__new__(update_page_runtime.UpdatePageRuntime)
+        runtime._cleanup_in_progress = False
+        runtime._found_state = update_page_runtime.UpdateFoundState(
+            is_available=True,
+            version="21.0.0.144",
+            release_notes="",
+        )
+        runtime._download_state = update_page_runtime.UpdateDownloadState()
+        runtime._is_download_in_progress = Mock(return_value=False)
+        runtime._request_update_cache_invalidate = Mock()
+        runtime._view = Mock()
+
+        update_page_runtime.UpdatePageRuntime.install_update(runtime)
+
+        runtime._view.start_update_download.assert_called_once_with("21.0.0.144")
+        runtime._view.hide_update_status_card.assert_called_once_with()
+        runtime._view.set_update_check_enabled.assert_called_once_with(False)
+        runtime._request_update_cache_invalidate.assert_called_once_with("install_update")
+
     def test_cache_invalidate_error_ignored_when_new_context_is_pending(self) -> None:
         runtime = update_page_runtime.UpdatePageRuntime.__new__(update_page_runtime.UpdatePageRuntime)
         runtime._cleanup_in_progress = False

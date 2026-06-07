@@ -541,13 +541,15 @@ class UpdatePageRuntime:
         self._download_state.is_installing = True
         log(f"Запуск установки обновления v{self._found_state.version}", "🔄 UPDATE")
 
+        self._present_download_prepare_ui()
         self._request_update_cache_invalidate("install_update")
 
-    def _start_update_download(self) -> None:
+    def _present_download_prepare_ui(self) -> None:
         self._view.start_update_download(self._found_state.version)
         self._view.hide_update_status_card()
         self._view.set_update_check_enabled(False)
 
+    def _start_update_download(self) -> None:
         try:
             self._update_install_runtime.start_qobject_worker(
                 parent=self._view.window(),

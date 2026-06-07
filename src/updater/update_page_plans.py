@@ -541,6 +541,8 @@ def build_changelog_progress_plan(
     last_speed_time: float,
     last_speed_bytes: int,
     smoothed_speed: float,
+    download_speed_kb: float | None = None,
+    download_eta_seconds: float | None = None,
     language: str,
     now: float,
     progress_bar_visible: bool,
@@ -560,10 +562,34 @@ def build_changelog_progress_plan(
     next_last_speed_time = float(last_speed_time)
     next_last_speed_bytes = int(last_speed_bytes)
     next_smoothed_speed = float(smoothed_speed)
-    download_speed_kb: float | None = None
-    download_eta_seconds: float | None = None
+    next_download_speed_kb: float | None = download_speed_kb
+    next_download_eta_seconds: float | None = download_eta_seconds
     speed_label_text = tr("page.servers.changelog.progress.speed_unknown", "Скорость: —")
     eta_label_text = tr("page.servers.changelog.progress.eta_unknown", "Осталось: —")
+
+    if next_download_speed_kb is not None:
+        if next_download_speed_kb > 1024:
+            speed_label_text = tr(
+                "page.servers.changelog.progress.speed_mb_template",
+                "Скорость: {value:.1f} МБ/с",
+            ).format(value=next_download_speed_kb / 1024)
+        else:
+            speed_label_text = tr(
+                "page.servers.changelog.progress.speed_kb_template",
+                "Скорость: {value:.0f} КБ/с",
+            ).format(value=next_download_speed_kb)
+
+    if next_download_eta_seconds is not None:
+        if next_download_eta_seconds < 60:
+            eta_label_text = tr(
+                "page.servers.changelog.progress.eta_sec_template",
+                "Осталось: {seconds} сек",
+            ).format(seconds=int(next_download_eta_seconds))
+        else:
+            eta_label_text = tr(
+                "page.servers.changelog.progress.eta_min_template",
+                "Осталось: {minutes} мин",
+            ).format(minutes=int(next_download_eta_seconds / 60))
 
     dt = float(now) - float(last_speed_time)
     if dt >= 1.0 and done_bytes > 0:
@@ -572,6 +598,8 @@ def build_changelog_progress_plan(
             next_smoothed_speed = 0.0
             next_last_speed_time = float(now)
             next_last_speed_bytes = int(done_bytes)
+            next_download_speed_kb = None
+            next_download_eta_seconds = None
         else:
             instant_speed = delta_bytes / dt
             if next_smoothed_speed <= 0:
@@ -583,21 +611,21 @@ def build_changelog_progress_plan(
             next_last_speed_bytes = int(done_bytes)
 
             speed = next_smoothed_speed
-            download_speed_kb = speed / 1024
-            if download_speed_kb > 1024:
+            next_download_speed_kb = speed / 1024
+            if next_download_speed_kb > 1024:
                 speed_label_text = tr(
                     "page.servers.changelog.progress.speed_mb_template",
                     "Скорость: {value:.1f} МБ/с",
-                ).format(value=download_speed_kb / 1024)
+                ).format(value=next_download_speed_kb / 1024)
             else:
                 speed_label_text = tr(
                     "page.servers.changelog.progress.speed_kb_template",
                     "Скорость: {value:.0f} КБ/с",
-                ).format(value=download_speed_kb)
+                ).format(value=next_download_speed_kb)
 
             if speed > 0:
                 remaining = (total_bytes - done_bytes) / speed
-                download_eta_seconds = remaining
+                next_download_eta_seconds = remaining
                 if remaining < 60:
                     eta_label_text = tr(
                         "page.servers.changelog.progress.eta_sec_template",
@@ -625,8 +653,8 @@ def build_changelog_progress_plan(
         last_speed_time=next_last_speed_time,
         last_speed_bytes=next_last_speed_bytes,
         smoothed_speed=next_smoothed_speed,
-        download_speed_kb=download_speed_kb,
-        download_eta_seconds=download_eta_seconds,
+        download_speed_kb=next_download_speed_kb,
+        download_eta_seconds=next_download_eta_seconds,
     )
 
 def build_changelog_terminal_plan(
