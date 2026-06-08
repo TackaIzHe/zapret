@@ -1222,6 +1222,9 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
                 }
             ]
         )
+        page._presets_model.find_preset_row = Mock(
+            side_effect=AssertionError("builtin check should use model builtin cache")
+        )
 
         self.assertTrue(page._is_builtin_preset_file("visible.txt"))
         self.assertTrue(page._is_builtin_preset_file("cached.txt"))

@@ -357,12 +357,11 @@ class UserPresetsPageBase(BasePage):
 
         model = getattr(self, "_presets_model", None)
         try:
-            row = model.find_preset_row(candidate) if model is not None else -1
-            if row >= 0:
-                index = model.index(row, 0)
-                builtin_role = getattr(type(model), "BuiltinRole", None)
-                if index.isValid() and builtin_role is not None:
-                    return bool(index.data(builtin_role))
+            builtin_getter = getattr(model, "preset_is_builtin", None)
+            if callable(builtin_getter):
+                cached_builtin = builtin_getter(candidate)
+                if cached_builtin is not None:
+                    return bool(cached_builtin)
         except Exception:
             pass
 

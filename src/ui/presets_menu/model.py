@@ -29,6 +29,7 @@ class PresetListModel(QAbstractListModel):
         self._rows: list[dict[str, object]] = []
         self._preset_row_by_file_name: dict[str, int] = {}
         self._preset_name_by_file_name: dict[str, str] = {}
+        self._preset_builtin_by_file_name: dict[str, bool] = {}
         self._active_preset_file_names: set[str] = set()
         self._first_preset_row = -1
 
@@ -82,6 +83,7 @@ class PresetListModel(QAbstractListModel):
     def _rebuild_row_index(self) -> None:
         self._preset_row_by_file_name = {}
         self._preset_name_by_file_name = {}
+        self._preset_builtin_by_file_name = {}
         self._active_preset_file_names = set()
         self._first_preset_row = -1
         for row_index, row in enumerate(self._rows):
@@ -96,6 +98,7 @@ class PresetListModel(QAbstractListModel):
             display_name = str(row.get("name") or "").strip()
             if display_name:
                 self._preset_name_by_file_name[file_name] = display_name
+            self._preset_builtin_by_file_name[file_name] = bool(row.get("is_builtin", False))
             if bool(row.get("is_active", False)):
                 self._active_preset_file_names.add(file_name)
 
@@ -110,6 +113,12 @@ class PresetListModel(QAbstractListModel):
         if not candidate:
             return ""
         return str(self._preset_name_by_file_name.get(candidate, "") or "").strip()
+
+    def preset_is_builtin(self, file_name: str) -> bool | None:
+        candidate = str(file_name or "").strip()
+        if not candidate:
+            return None
+        return self._preset_builtin_by_file_name.get(candidate)
 
     def active_preset_file_name(self) -> str:
         for file_name in self._active_preset_file_names:
@@ -231,6 +240,10 @@ class PresetListModel(QAbstractListModel):
                         self._active_preset_file_names.add(file_name)
                     else:
                         self._active_preset_file_names.discard(file_name)
+            if key == "is_builtin":
+                file_name = str(row.get("file_name") or "").strip()
+                if file_name:
+                    self._preset_builtin_by_file_name[file_name] = bool(value)
             changed_roles.update(role_map[key])
 
         if not changed_roles:
