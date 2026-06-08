@@ -62,9 +62,10 @@ def get_start_config() -> TelegramProxyStartConfig:
         normalize_buffer_kb,
         normalize_fake_tls_domain,
         normalize_pool_size,
+        normalize_proxy_mode,
     )
 
-    mode = str(get_tg_proxy_mode() or "mtproxy")
+    mode = normalize_proxy_mode(get_tg_proxy_mode())
     mtproxy_secret = ensure_mtproxy_secret_for_mode(mode, get_tg_proxy_mtproxy_secret())
 
     return TelegramProxyStartConfig(

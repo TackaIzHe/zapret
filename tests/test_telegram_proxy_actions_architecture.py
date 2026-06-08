@@ -58,6 +58,8 @@ class TelegramProxyActionsArchitectureTests(unittest.TestCase):
         self.assertNotIn("def _patch_init_dc", wss_source)
         self.assertNotIn("class _MsgSplitter", wss_source)
         self.assertNotIn("class _WsPool", wss_source)
+        self.assertNotIn("transparent_port_to_dc", wss_source)
+        self.assertNotIn("TRANSPARENT_PORT_BASE", wss_source)
         self.assertNotIn("telegram_proxy.raw_websocket", wss_source)
         self.assertNotIn("telegram_proxy.relay", wss_source)
         self.assertNotIn("telegram_proxy.routing", wss_source)
@@ -87,6 +89,13 @@ class TelegramProxyActionsArchitectureTests(unittest.TestCase):
         self.assertFalse((telegram_proxy_root / "stats.py").exists())
         self.assertFalse((telegram_proxy_root / "dc_map.py").exists())
         self.assertFalse((telegram_proxy_root / "socks5.py").exists())
+
+    def test_removed_transparent_mode_has_no_proxy_helpers(self) -> None:
+        dc_map = importlib.import_module("telegram_proxy.proxy.dc_map")
+
+        self.assertFalse(hasattr(dc_map, "TRANSPARENT_PORT_BASE"))
+        self.assertFalse(hasattr(dc_map, "dc_to_transparent_port"))
+        self.assertFalse(hasattr(dc_map, "transparent_port_to_dc"))
 
     def test_config_and_diagnostics_live_in_focused_packages(self) -> None:
         root = Path(__file__).resolve().parents[1]

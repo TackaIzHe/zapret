@@ -66,7 +66,7 @@ class TelegramProxyMTProxyCoreTests(unittest.TestCase):
 
         defaults = default_telegram_proxy()
 
-        self.assertIn("mtproxy", VALID_TG_PROXY_MODES)
+        self.assertEqual(VALID_TG_PROXY_MODES, frozenset({"socks5", "mtproxy"}))
         self.assertIn("mtproxy_secret", defaults)
         self.assertIn("dc_ip", defaults)
         self.assertEqual(defaults["pool_size"], 4)
@@ -75,6 +75,8 @@ class TelegramProxyMTProxyCoreTests(unittest.TestCase):
         self.assertEqual(normalize_telegram_proxy({})["mode"], "socks5")
         self.assertEqual(default_state().mode, "socks5")
         self.assertEqual(normalize_proxy_mode("bad"), "socks5")
+        self.assertEqual(normalize_telegram_proxy({"mode": "transparent"})["mode"], "socks5")
+        self.assertEqual(normalize_telegram_proxy({"mode": "both"})["mode"], "socks5")
         self.assertEqual(default_state().mtproxy_secret, "")
 
         normalized = normalize_telegram_proxy(
@@ -349,6 +351,31 @@ class TelegramProxyMTProxyCoreTests(unittest.TestCase):
         self.assertEqual(config.mode, "mtproxy")
         self.assertEqual(config.mtproxy_secret, generated)
         save_secret.assert_called_once_with(generated)
+
+    def test_runtime_start_config_falls_back_to_socks5_for_empty_mode(self) -> None:
+        from unittest.mock import patch
+
+        import telegram_proxy.runtime.commands as commands
+
+        with (
+            patch("settings.store.get_tg_proxy_host", return_value="127.0.0.1"),
+            patch("settings.store.get_tg_proxy_port", return_value=1353),
+            patch("settings.store.get_tg_proxy_mode", return_value=""),
+            patch("settings.store.get_tg_proxy_mtproxy_secret", return_value=""),
+            patch("settings.store.get_tg_proxy_pool_size", return_value=4),
+            patch("settings.store.get_tg_proxy_buffer_kb", return_value=256),
+            patch("settings.store.get_tg_proxy_fake_tls_domain", return_value=""),
+            patch("settings.store.get_tg_proxy_proxy_protocol", return_value=False),
+            patch("telegram_proxy.config.settings.ensure_mtproxy_secret_for_mode", return_value="") as ensure_secret,
+            patch("telegram_proxy.config.settings.build_dc_endpoint_overrides", return_value={}),
+            patch("telegram_proxy.config.settings.build_upstream_config", return_value=None),
+            patch("telegram_proxy.config.settings.build_cloudflare_config", return_value=None),
+        ):
+            config = commands.get_start_config()
+
+        self.assertEqual(config.mode, "socks5")
+        self.assertEqual(config.mtproxy_secret, "")
+        ensure_secret.assert_called_once_with("socks5", "")
 
     def test_mtproxy_performance_settings_reach_proxy_pools(self) -> None:
         from telegram_proxy.wss_proxy import TelegramWSProxy

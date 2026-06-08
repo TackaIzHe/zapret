@@ -27,13 +27,11 @@ from telegram_proxy.proxy.dc_map import (
     ip_to_dc,
     is_telegram_ip,
     ws_domains_for_dc,
-    # transparent_port_to_dc,  # Transparent mode removed (WinDivert loopback limitation)
     IP_TO_DC,
     WSS_DOMAINS,
     WSS_RELAY_IP,
     WSS_PATH,
     dc_to_tcp_endpoint,
-    # TRANSPARENT_PORT_BASE,  # Transparent mode removed
 )
 from telegram_proxy.proxy import socks5
 from telegram_proxy.proxy.cloudflare import (

@@ -9,7 +9,6 @@ DC2/DC4 WSS relays which read the real DC id from the MTProto init packet.
 import socket as _socket
 import struct
 from ipaddress import IPv4Network, IPv4Address, IPv6Network, IPv6Address
-from typing import Optional
 
 
 # ---- WebSocket relay configuration ----
@@ -314,19 +313,3 @@ def dc_to_tcp_endpoint(
     if is_media:
         return TCP_MEDIA_ENDPOINTS.get(dc, TCP_MEDIA_ENDPOINTS[2])
     return TCP_ENDPOINTS.get(dc, TCP_ENDPOINTS[2])
-
-
-# Transparent mode: port encoding
-# DC1 -> port 1351, DC2 -> 1352, ..., DC5 -> 1355
-TRANSPARENT_PORT_BASE = 1350
-
-def dc_to_transparent_port(dc: int) -> int:
-    """Get local port for transparent mode per-DC listener."""
-    return TRANSPARENT_PORT_BASE + dc
-
-def transparent_port_to_dc(port: int) -> Optional[int]:
-    """Get DC number from transparent mode port. Returns None if not a DC port."""
-    dc = port - TRANSPARENT_PORT_BASE
-    if 1 <= dc <= 5:
-        return dc
-    return None

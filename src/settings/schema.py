@@ -24,7 +24,7 @@ VALID_DISPLAY_MODES = frozenset({"dark", "light", "system"})
 VALID_UI_LANGUAGES = frozenset({"ru", "en"})
 VALID_BACKGROUND_PRESETS = frozenset({"standard", "amoled", "rkn_chan"})
 VALID_SIDEBAR_ICON_STYLES = frozenset({"standard", "windows11_fluent"})
-VALID_TG_PROXY_MODES = frozenset({"socks5", "transparent", "both", "mtproxy"})
+VALID_TG_PROXY_MODES = frozenset({"socks5", "mtproxy"})
 VALID_TG_PROXY_UPSTREAM_MODES = frozenset({"fallback", "always"})
 ORCHESTRA_ASKEYS = (
     "tls",
