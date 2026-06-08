@@ -20,6 +20,7 @@ from ui.pages.about_page_tabs_build import build_about_page_tabs
 from app.state_store import AppUiState, MainWindowStateStore
 from app.ui_texts import tr as tr_catalog
 from ui.one_shot_worker_runtime import OneShotWorkerRuntime
+from ui.queued_worker_state import QueuedWorkerState
 from ui.theme import get_cached_qta_pixmap, get_theme_tokens, get_themed_qta_icon
 from log.log import log
 
@@ -65,8 +66,7 @@ class AboutPage(BasePage):
         self._open_updates_callback = open_updates
         self._create_about_open_action_worker = create_open_action_worker
         self._about_open_runtime = OneShotWorkerRuntime()
-        self._about_open_pending: list[tuple[str, str, str]] = []
-        self._about_open_start_scheduled = False
+        self._about_open_state = QueuedWorkerState[tuple[str, str, str]](self._about_open_runtime)
         self._support_icon_label: QLabel | None = None
         self._support_discussions_card = None
         self._support_telegram_card = None
@@ -565,16 +565,13 @@ class AboutPage(BasePage):
             str(error_default),
             str(raw_error_message or ""),
         )
-        if self._about_open_runtime.is_running() or self.__dict__.get("_about_open_start_scheduled", False):
+        if self._about_open_state_obj().is_busy():
             self._queue_about_open_action(request)
             return
         self._start_about_open_action_worker(*request)
 
     def _queue_about_open_action(self, request) -> None:
-        pending = self.__dict__.setdefault("_about_open_pending", [])
-        if request in pending:
-            return
-        pending.append(request)
+        self._about_open_state_obj().append_unique(request, key=lambda item: item)
 
     def _start_about_open_action_worker(
         self,
@@ -612,7 +609,7 @@ class AboutPage(BasePage):
     ) -> None:
         if not self._about_open_runtime.is_current(request_id, cleanup_in_progress=self._cleanup_in_progress):
             return
-        if self.__dict__.get("_about_open_pending"):
+        if self._about_open_state_obj().has_pending():
             return
         if result.ok:
             return
@@ -632,29 +629,31 @@ class AboutPage(BasePage):
     ) -> None:
         if not self._about_open_runtime.is_current(request_id, cleanup_in_progress=self._cleanup_in_progress):
             return
-        if self.__dict__.get("_about_open_pending"):
+        if self._about_open_state_obj().has_pending():
             return
         self._show_about_open_error(str(error), error_default=error_default, raw_error_message=raw_error_message)
 
     def _on_about_open_action_worker_finished(self, _worker) -> None:
-        if not self._is_current_worker_finish(self.__dict__.get("_about_open_runtime"), _worker):
-            return
-        pending_actions = self.__dict__.setdefault("_about_open_pending", [])
-        pending = pending_actions.pop(0) if pending_actions else None
-        if pending is not None and not self._cleanup_in_progress:
-            self._schedule_about_open_action_worker_start(pending)
+        self._about_open_state_obj().schedule_next_after_finish(
+            _worker,
+            is_current_worker_finish=self._is_current_worker_finish,
+            single_shot=QTimer.singleShot,
+            start=lambda request: self._run_scheduled_about_open_action_worker_start(request),
+            queue_item=self._queue_about_open_action,
+            is_cleanup_in_progress=lambda: self.__dict__.get("_cleanup_in_progress", False),
+        )
 
     def _schedule_about_open_action_worker_start(self, request) -> None:
-        if self.__dict__.get("_cleanup_in_progress", False):
-            return
-        if self.__dict__.get("_about_open_start_scheduled", False):
-            self._queue_about_open_action(request)
-            return
-        self._about_open_start_scheduled = True
-        QTimer.singleShot(0, lambda value=request: self._run_scheduled_about_open_action_worker_start(value))
+        self._about_open_state_obj().schedule_start(
+            request,
+            QTimer.singleShot,
+            lambda value: self._run_scheduled_about_open_action_worker_start(value),
+            queue_item=self._queue_about_open_action,
+            is_cleanup_in_progress=lambda: self.__dict__.get("_cleanup_in_progress", False),
+        )
 
     def _run_scheduled_about_open_action_worker_start(self, request) -> None:
-        self._about_open_start_scheduled = False
+        self._about_open_state_obj().start_scheduled = False
         if self.__dict__.get("_cleanup_in_progress", False):
             return
         if request is not None:
@@ -679,6 +678,38 @@ class AboutPage(BasePage):
             return int(request_id) == int(getattr(runtime, "request_id", -1))
         except (TypeError, ValueError):
             return False
+
+    def _about_open_state_obj(self) -> QueuedWorkerState[tuple[str, str, str]]:
+        state = self.__dict__.get("_about_open_state")
+        runtime = self.__dict__.get("_about_open_runtime")
+        if state is None:
+            pending = self.__dict__.pop("_about_open_pending", None)
+            start_scheduled = bool(self.__dict__.pop("_about_open_start_scheduled", False))
+            state = QueuedWorkerState(
+                runtime,
+                pending=list(pending or []),
+                start_scheduled=start_scheduled,
+            )
+            self.__dict__["_about_open_state"] = state
+        elif getattr(state, "runtime", None) is None and runtime is not None:
+            state.runtime = runtime
+        return state
+
+    @property
+    def _about_open_pending(self):
+        return self._about_open_state_obj().pending
+
+    @_about_open_pending.setter
+    def _about_open_pending(self, value) -> None:
+        self._about_open_state_obj().pending = list(value or [])
+
+    @property
+    def _about_open_start_scheduled(self) -> bool:
+        return bool(self._about_open_state_obj().start_scheduled)
+
+    @_about_open_start_scheduled.setter
+    def _about_open_start_scheduled(self, value: bool) -> None:
+        self._about_open_state_obj().start_scheduled = bool(value)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Theme
@@ -719,8 +750,7 @@ class AboutPage(BasePage):
     def cleanup(self) -> None:
         self._cleanup_in_progress = True
         self._pending_tab_key = None
-        self.__dict__.setdefault("_about_open_pending", []).clear()
-        self._about_open_start_scheduled = False
+        self._about_open_state_obj().reset()
         self._about_open_runtime.stop(blocking=False, warning_prefix="About open action worker")
         self._about_open_runtime.cancel()
 

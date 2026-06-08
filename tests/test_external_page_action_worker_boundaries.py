@@ -69,6 +69,24 @@ class ExternalPageActionWorkerBoundaryTests(unittest.TestCase):
         self.assertIn("schedule_next_after_finish", finished_source)
         self.assertIn("_support_open_state_obj().reset()", cleanup_source)
 
+    def test_about_open_queue_state_uses_shared_ui_helper(self) -> None:
+        import ui.pages.about_page as about_page
+        from ui.queued_worker_state import QueuedWorkerState
+
+        init_source = inspect.getsource(AboutPage.__init__)
+        request_source = inspect.getsource(AboutPage._request_about_open_action)
+        queue_source = inspect.getsource(AboutPage._queue_about_open_action)
+        finished_source = inspect.getsource(AboutPage._on_about_open_action_worker_finished)
+        cleanup_source = inspect.getsource(AboutPage.cleanup)
+
+        self.assertTrue(hasattr(about_page, "QueuedWorkerState"))
+        self.assertIs(about_page.QueuedWorkerState, QueuedWorkerState)
+        self.assertIn("_about_open_state = QueuedWorkerState", init_source)
+        self.assertIn("_about_open_state_obj()", request_source)
+        self.assertIn("_about_open_state_obj()", queue_source)
+        self.assertIn("schedule_next_after_finish", finished_source)
+        self.assertIn("_about_open_state_obj().reset()", cleanup_source)
+
     def test_support_open_actions_are_queued_while_worker_runs(self) -> None:
         class _Runtime:
             def is_running(self) -> bool:
