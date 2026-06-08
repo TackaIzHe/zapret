@@ -1288,8 +1288,9 @@ class ProfileSetupUiGuardTests(unittest.TestCase):
         from types import SimpleNamespace
         from unittest.mock import Mock
 
-        from profile.ui.profile_setup_page import ProfileSetupPageBase, _match_tab_text
+        from profile.ui.profile_setup_page import ProfileSetupPageBase
 
+        match_text = "prepared match text"
         payload = SimpleNamespace(
             item=SimpleNamespace(
                 in_preset=True,
@@ -1301,11 +1302,11 @@ class ProfileSetupUiGuardTests(unittest.TestCase):
             },
             match_summary="hostlist: youtube.txt",
             raw_profile_text="--new\n--lua-desync=fake",
+            match_tab_text=match_text,
         )
         page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
         page._payload = payload
         page._match_tab_built = True
-        match_text = _match_tab_text(payload)
         page._match_text = _PlainTextWidget(match_text)
         page._match_text_snapshot = match_text
         page._raw_profile_text = _PlainTextWidget(payload.raw_profile_text, read_only=False)
@@ -1339,6 +1340,7 @@ class ProfileSetupUiGuardTests(unittest.TestCase):
             strategy_entries={},
             match_summary="hostlist: youtube.txt",
             raw_profile_text=raw_text,
+            match_tab_text="prepared match text",
         )
         page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
         page._payload = payload
@@ -1359,15 +1361,16 @@ class ProfileSetupUiGuardTests(unittest.TestCase):
         from types import SimpleNamespace
         from unittest.mock import Mock
 
-        from profile.ui.profile_setup_page import ProfileSetupPageBase, _match_tab_text
+        from profile.ui.profile_setup_page import ProfileSetupPageBase
 
+        match_text = "prepared match text"
         payload = SimpleNamespace(
             item=SimpleNamespace(in_preset=True, strategy_id="tls_fake", strategy_name="Fake TLS"),
             strategy_entries={"tls_fake": SimpleNamespace(args="--lua-desync=fake")},
             match_summary="hostlist: youtube.txt",
             raw_profile_text="--new\n--lua-desync=fake",
+            match_tab_text=match_text,
         )
-        match_text = _match_tab_text(payload)
         page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
         page._payload = payload
         page._match_tab_built = True

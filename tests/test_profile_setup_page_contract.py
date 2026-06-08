@@ -11,10 +11,10 @@ from profile.ui.profile_setup_page import (
     ProfileStrategyListDelegate,
     ProfileStrategyListWidget,
     _profile_has_list_file_editor,
-    _match_tab_text,
     _profile_editor_tab_title,
     set_segmented_current_item_if_changed,
 )
+from profile.setup_match_text import build_profile_setup_match_tab_text
 from profile.profile_setup_loader import (
     ProfileEnabledSaveWorker,
     ProfileListFileValidationWorker,
@@ -3529,20 +3529,12 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         self.assertEqual(tuple(activated.parameters), ("self", "item"))
 
     def test_match_tab_text_contains_match_strategy_and_raw_profile(self) -> None:
-        payload = SimpleNamespace(
-            item=SimpleNamespace(
-                strategy_id="tls_fake",
-                strategy_name="TLS Fake",
-            ),
+        text = build_profile_setup_match_tab_text(
             match_summary="TCP • TCP 80,443 • hostlist",
-            strategy_entries={
-                "tls_fake": SimpleNamespace(args="--lua-desync=fake")
-            },
+            strategy_id="tls_fake",
+            strategy_name="TLS Fake",
             raw_strategy_text="--lua-desync=fake",
-            raw_profile_text="--filter-tcp=80,443\n--hostlist=lists/youtube.txt\n--lua-desync=fake",
         )
-
-        text = _match_tab_text(payload)
 
         self.assertIn("Когда profile применяется", text)
         self.assertIn("TCP • TCP 80,443 • hostlist", text)
@@ -3550,6 +3542,14 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         self.assertIn("TLS Fake", text)
         self.assertIn("--lua-desync=fake", text)
         self.assertNotIn("--hostlist=lists/youtube.txt", text)
+
+    def test_match_tab_payload_uses_worker_prepared_text(self) -> None:
+        apply_match = inspect.getsource(ProfileSetupPageBase._apply_match_tab_payload)
+
+        self.assertIn("match_tab_text", apply_match)
+        self.assertNotIn("strategy_entries", apply_match)
+        self.assertNotIn("raw_strategy_text", apply_match)
+        self.assertNotIn("_match_tab_text(", apply_match)
 
     def test_profile_setup_page_has_raw_profile_editor_for_current_preset(self) -> None:
         build = inspect.getsource(ProfileSetupPageBase._build_content)

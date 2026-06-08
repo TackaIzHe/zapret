@@ -31,6 +31,7 @@ class ProfileStrategyBranch:
     strategy_id: str
     strategy_name: str
     raw_strategy_text: str
+    match_tab_text: str = ""
 
 
 @dataclass(frozen=True)
@@ -74,6 +75,7 @@ class ProfileSetupPayload:
     raw_profile_text: str
     raw_strategy_text: str
     match_summary: str
+    match_tab_text: str = ""
     strategy_branches: tuple[ProfileStrategyBranch, ...] = ()
     current_strategy_branch_id: str = ""
     editable_filter_kind: str = ""

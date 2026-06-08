@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -46,6 +46,7 @@ from .serializer import (
     with_profile_strategy_lines,
     with_profile_user_match,
 )
+from .setup_match_text import build_profile_setup_match_tab_text
 from .strategy_state import ProfileStrategyState, ProfileStrategyStateStore
 from .strategy_catalog import StrategyEntry, load_strategy_catalogs
 from .state import ProfileListFileEditorState, ProfileListItem, ProfileListPayload, ProfileSetupPayload, ProfileStrategyBranch
@@ -403,12 +404,21 @@ class ProfilePresetService:
             user_template_key=getattr(source, "user_template_key", ""),
         )
         strategy_entries = dict(_basic_strategy_entries(profile, catalogs))
-        strategy_branches = _strategy_branches_for_profile(profile, strategy_entries)
+        match_summary = _match_summary(profile, list_type=item.list_type)
+        strategy_branches = _strategy_branches_with_match_text(
+            _strategy_branches_for_profile(profile, strategy_entries),
+            match_summary=match_summary,
+        )
         current_branch = strategy_branches[0] if strategy_branches else None
         current_strategy_id = (
             str(current_branch.strategy_id or "").strip()
             if current_branch is not None
             else str(item.strategy_id or "").strip()
+        )
+        raw_strategy_text = (
+            current_branch.raw_strategy_text
+            if current_branch is not None
+            else "\n".join(getattr(profile.strategy, "strategy_lines", ()) or ())
         )
         editable = read_editable_profile_settings(profile)
         strategy_states = self._state_store.get_strategy_states(
@@ -420,12 +430,18 @@ class ProfilePresetService:
             strategy_entries=strategy_entries,
             strategy_states=strategy_states,
             raw_profile_text=_profile_raw_text(profile),
-            raw_strategy_text=(
-                current_branch.raw_strategy_text
+            raw_strategy_text=raw_strategy_text,
+            match_summary=match_summary,
+            match_tab_text=(
+                str(current_branch.match_tab_text or "")
                 if current_branch is not None
-                else "\n".join(getattr(profile.strategy, "strategy_lines", ()) or ())
+                else build_profile_setup_match_tab_text(
+                    match_summary=match_summary,
+                    strategy_id=item.strategy_id,
+                    strategy_name=item.strategy_name,
+                    raw_strategy_text=raw_strategy_text,
+                )
             ),
-            match_summary=_match_summary(profile, list_type=item.list_type),
             strategy_branches=strategy_branches,
             current_strategy_branch_id=str(getattr(current_branch, "branch_id", "") or ""),
             editable_filter_kind=editable.filter_kind,
@@ -1378,6 +1394,25 @@ def _strategy_branches_for_profile(profile: Profile, entries: dict[str, Strategy
 
     flush()
     return tuple(branches)
+
+
+def _strategy_branches_with_match_text(
+    branches: tuple[ProfileStrategyBranch, ...],
+    *,
+    match_summary: str,
+) -> tuple[ProfileStrategyBranch, ...]:
+    return tuple(
+        replace(
+            branch,
+            match_tab_text=build_profile_setup_match_tab_text(
+                match_summary=match_summary,
+                strategy_id=branch.strategy_id,
+                strategy_name=branch.strategy_name,
+                raw_strategy_text=branch.raw_strategy_text,
+            ),
+        )
+        for branch in branches
+    )
 
 
 def _strategy_branch_scope_lines(*, payload: str, in_range: str, out_range: str) -> tuple[str, ...]:

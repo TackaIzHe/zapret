@@ -76,6 +76,10 @@ class Winws2PayloadStrategyBranchTests(unittest.TestCase):
                 [(branch.payload, branch.strategy_id) for branch in setup.strategy_branches],
                 [("tls_client_hello", "tls_ozon"), ("http_req", "http_ozon")],
             )
+            self.assertIn("TLS Ozon", setup.match_tab_text)
+            self.assertIn("--payload=tls_client_hello", setup.match_tab_text)
+            self.assertIn("HTTP Ozon", setup.strategy_branches[1].match_tab_text)
+            self.assertIn("--payload=http_req", setup.strategy_branches[1].match_tab_text)
 
             result = service.apply_strategy("profile:0", "http_vk", strategy_branch_id="branch:1")
 

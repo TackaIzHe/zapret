@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
 from log.log import log
 from profile.match_filters import filter_values
 from profile.editable_settings import normalize_filter_value
+from profile.setup_match_text import build_profile_setup_match_tab_text
 from profile.ui.profile_setup_controls import (
     range_expression_from_controls,
     set_combo_by_data,
@@ -770,35 +771,6 @@ def _single_strategy_order_move(
     return candidates[0]
 
 
-def _match_tab_text(payload) -> str:
-    item = getattr(payload, "item", None)
-    branch = _current_strategy_branch(payload)
-    strategy_id = str(getattr(branch, "strategy_id", "") or getattr(item, "strategy_id", "") or "").strip()
-    strategy_name = str(getattr(branch, "strategy_name", "") or getattr(item, "strategy_name", "") or "").strip()
-    strategy_entries = getattr(payload, "strategy_entries", {}) or {}
-    entry = strategy_entries.get(strategy_id)
-    strategy_args = str(getattr(payload, "raw_strategy_text", "") or getattr(entry, "args", "") or "").strip()
-
-    if not strategy_name or strategy_id in {"", "none"}:
-        strategy_name = "Стратегия не выбрана"
-    elif strategy_id == "custom":
-        strategy_name = "Своя стратегия"
-
-    blocks = [
-        ("Когда profile применяется", str(getattr(payload, "match_summary", "") or "без явных условий").strip()),
-        ("Текущая готовая стратегия", strategy_name),
-        ("Аргументы готовой стратегии", strategy_args or "Стратегия не выбрана"),
-    ]
-
-    lines: list[str] = []
-    for title, text in blocks:
-        lines.append(title)
-        lines.append("=" * len(title))
-        lines.append(text)
-        lines.append("")
-    return "\n".join(lines).strip()
-
-
 def _current_strategy_branch(payload):
     branches = tuple(getattr(payload, "strategy_branches", ()) or ())
     if not branches:
@@ -842,6 +814,7 @@ def _payload_with_strategy_branch(payload, branch_id: str):
         payload,
         current_strategy_branch_id=clean_branch_id,
         raw_strategy_text=str(getattr(branch, "raw_strategy_text", "") or ""),
+        match_tab_text=str(getattr(branch, "match_tab_text", "") or ""),
         current_strategy_state=states.get(strategy_id, ProfileStrategyState()),
     )
 
@@ -891,8 +864,19 @@ def _branch_raw_strategy_text(branch, strategy_args: str) -> str:
         lines.append(f"--out-range={out_range}")
     if payload != "all":
         lines.append(f"--payload={payload}")
-    lines.extend(line for line in str(strategy_args or "").splitlines() if line.strip())
+    clean_strategy_args = str(strategy_args or "").strip()
+    if clean_strategy_args:
+        lines.append(clean_strategy_args)
     return "\n".join(lines).strip()
+
+
+def _branch_match_tab_text(payload, branch, raw_strategy_text: str) -> str:
+    return build_profile_setup_match_tab_text(
+        match_summary=str(getattr(payload, "match_summary", "") or ""),
+        strategy_id=str(getattr(branch, "strategy_id", "") or ""),
+        strategy_name=str(getattr(branch, "strategy_name", "") or ""),
+        raw_strategy_text=raw_strategy_text,
+    )
 
 
 def _profile_editor_tab_title(payload) -> str:
@@ -1627,7 +1611,7 @@ class ProfileSetupPageBase(BasePage):
             return
         item = payload.item
         if self._match_text is not None:
-            match_text = _match_tab_text(payload)
+            match_text = str(getattr(payload, "match_tab_text", "") or "")
             if self.__dict__.get("_match_text_snapshot") != match_text:
                 self._match_text.setPlainText(match_text)
                 self._match_text_snapshot = match_text
@@ -2645,6 +2629,7 @@ class ProfileSetupPageBase(BasePage):
             self._payload,
             current_strategy_branch_id=branch_id,
             raw_strategy_text=str(getattr(branch, "raw_strategy_text", "") or ""),
+            match_tab_text=str(getattr(branch, "match_tab_text", "") or ""),
             current_strategy_state=state,
         )
         self._strategy_list.set_current_strategy_id(str(getattr(branch, "strategy_id", "") or "none").strip() or "none")
@@ -3771,18 +3756,25 @@ class ProfileSetupPageBase(BasePage):
         current_branch_id = _current_strategy_branch_id(payload)
         if branches and current_branch_id:
             entry_args = str(getattr(entry, "args", "") or "").strip()
-            next_raw_strategy_text = ""
-            updated_branches = tuple(
-                replace(
+            updated_branch_items = []
+            for branch in branches:
+                if str(getattr(branch, "branch_id", "") or "").strip() != current_branch_id:
+                    updated_branch_items.append(branch)
+                    continue
+                raw_strategy_text = _branch_raw_strategy_text(branch, entry_args)
+                updated_branch = replace(
                     branch,
                     strategy_id=strategy_id,
                     strategy_name=str(getattr(entry, "name", "") or strategy_id),
-                    raw_strategy_text=_branch_raw_strategy_text(branch, entry_args),
+                    raw_strategy_text=raw_strategy_text,
                 )
-                if str(getattr(branch, "branch_id", "") or "").strip() == current_branch_id
-                else branch
-                for branch in branches
-            )
+                updated_branch_items.append(
+                    replace(
+                        updated_branch,
+                        match_tab_text=_branch_match_tab_text(payload, updated_branch, raw_strategy_text),
+                    )
+                )
+            updated_branches = tuple(updated_branch_items)
             selected_branch = next(
                 (
                     branch
@@ -3796,6 +3788,7 @@ class ProfileSetupPageBase(BasePage):
                 payload,
                 strategy_branches=updated_branches,
                 raw_strategy_text=next_raw_strategy_text,
+                match_tab_text=str(getattr(selected_branch, "match_tab_text", "") or ""),
                 current_strategy_state=state,
             )
             self._strategy_list.set_current_strategy_id(strategy_id)
@@ -3817,6 +3810,12 @@ class ProfileSetupPageBase(BasePage):
             payload,
             item=updated_item,
             raw_strategy_text=str(getattr(entry, "args", "") or ""),
+            match_tab_text=build_profile_setup_match_tab_text(
+                match_summary=str(getattr(payload, "match_summary", "") or ""),
+                strategy_id=strategy_id,
+                strategy_name=str(getattr(entry, "name", "") or strategy_id),
+                raw_strategy_text=str(getattr(entry, "args", "") or ""),
+            ),
             current_strategy_state=state,
         )
         self._strategy_list.set_current_strategy_id(strategy_id)
