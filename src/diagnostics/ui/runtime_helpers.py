@@ -6,7 +6,8 @@ from PyQt6.QtCore import QTimer
 
 import diagnostics.page_plans as connection_page_plans
 from app.ui_texts import tr as tr_catalog
-from ui.accessibility import set_control_accessibility
+from diagnostics.ui.components import clean_connection_status_text
+from ui.accessibility import set_control_accessibility, set_state_text
 from ui.fluent_widgets import set_tooltip
 
 
@@ -37,6 +38,9 @@ def apply_interaction_state(
 
 def set_connection_status(*, status_label, status_badge, text: str, status: str = "muted") -> None:
     status_label.setText(text)
+    value = clean_connection_status_text(text)
+    if value:
+        set_state_text(status_label, f"Статус диагностики: {value}")
     status_badge.set_status(text, status)
 
 

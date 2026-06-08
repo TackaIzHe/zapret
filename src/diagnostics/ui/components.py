@@ -4,7 +4,18 @@ from __future__ import annotations
 
 from qfluentwidgets import CaptionLabel, TextEdit
 
+from ui.accessibility import set_state_text
 from ui.smooth_scroll import apply_editor_smooth_scroll_preference
+
+
+_STATUS_MARKERS = ("🔄", "✅", "⏹", "⚠", "❌", "ℹ", "️")
+
+
+def clean_connection_status_text(text: object) -> str:
+    value = " ".join(str(text or "").strip().split())
+    for marker in _STATUS_MARKERS:
+        value = value.replace(marker, "")
+    return " ".join(value.split())
 
 
 class ScrollBlockingConnectionTextEdit(TextEdit):
@@ -33,8 +44,11 @@ class ConnectionStatusBadge(CaptionLabel):
 
     def __init__(self, text: str = "", status: str = "muted", parent=None):
         super().__init__(parent)
-        self.setText(text)
+        self.set_status(text, status)
 
     def set_status(self, text: str, status: str = "muted"):
         _ = status
         self.setText(text)
+        value = clean_connection_status_text(text)
+        if value:
+            set_state_text(self, f"Индикатор диагностики: {value}")

@@ -9,7 +9,8 @@ from PyQt6.QtWidgets import QApplication, QVBoxLayout, QWidget
 from qfluentwidgets import BodyLabel, CaptionLabel, ComboBox, ProgressBar, PushButton
 
 from diagnostics.ui.build import build_connection_controls
-from diagnostics.ui.runtime_helpers import apply_connection_language, refresh_test_combo_items
+from diagnostics.ui.components import ConnectionStatusBadge
+from diagnostics.ui.runtime_helpers import apply_connection_language, refresh_test_combo_items, set_connection_status
 
 
 class DiagnosticsControlsAccessibilityTests(unittest.TestCase):
@@ -56,6 +57,25 @@ class DiagnosticsControlsAccessibilityTests(unittest.TestCase):
         combo.setCurrentIndex(1)
 
         self.assertEqual(combo.accessibleName(), "Сценарий диагностики, выбрано: Только Discord")
+
+    def test_status_text_is_exposed_as_screen_reader_state(self) -> None:
+        status_label = CaptionLabel()
+        status_badge = ConnectionStatusBadge()
+
+        set_connection_status(
+            status_label=status_label,
+            status_badge=status_badge,
+            text="🔄 Тестирование в процессе...",
+            status="info",
+        )
+
+        self.assertEqual(status_label.text(), "🔄 Тестирование в процессе...")
+        self.assertEqual(status_label.accessibleName(), "Статус диагностики: Тестирование в процессе...")
+        self.assertEqual(
+            status_label.property("screenReaderStateText"),
+            "Статус диагностики: Тестирование в процессе...",
+        )
+        self.assertEqual(status_badge.accessibleName(), "Индикатор диагностики: Тестирование в процессе...")
 
     def test_connection_language_refresh_keeps_screen_reader_descriptions(self) -> None:
         parent = QWidget()
