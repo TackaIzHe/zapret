@@ -4,6 +4,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from ui.queued_worker_state import QueuedWorkerState
+
 
 class _SaveRuntime:
     def __init__(self, *, running: bool) -> None:
@@ -42,11 +44,24 @@ class ControlProgramSettingsSaveQueueTests(unittest.TestCase):
         page._cleanup_in_progress = False
         page._refresh_runtime = ModeControlRefreshRuntime()
         page._refresh_runtime.program_settings_save_runtime = save_runtime
+        page._refresh_runtime.program_settings_save_state.runtime = save_runtime
         page.create_program_settings_save_worker = Mock(return_value=object())
         page._on_program_settings_save_finished = Mock()
         page._on_program_settings_save_failed = Mock()
         page._bind_program_settings_save_worker = Mock()
         return page, save_runtime
+
+    def test_program_settings_save_queue_uses_shared_queued_worker_state(self) -> None:
+        import inspect
+
+        from presets.ui.control.refresh_runtime_state import ModeControlRefreshRuntime
+
+        runtime = ModeControlRefreshRuntime()
+        runtime_source = inspect.getsource(ModeControlRefreshRuntime.__init__)
+
+        self.assertIsInstance(runtime.program_settings_save_state, QueuedWorkerState)
+        self.assertNotIn("self.program_settings_save_pending: list", runtime_source)
+        self.assertNotIn("self.program_settings_save_start_scheduled = False", runtime_source)
 
     def test_program_settings_save_keeps_pending_actions_for_different_settings(self) -> None:
         page, save_runtime = self._make_page(running=True)

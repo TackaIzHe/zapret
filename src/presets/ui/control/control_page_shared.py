@@ -426,10 +426,8 @@ class ControlPageActionMixin:
 
     def _request_program_settings_save(self, action: str, enabled: bool) -> None:
         runtime = self._refresh_runtime
-        if (
-            runtime.program_settings_save_runtime.is_running()
-            or bool(getattr(runtime, "program_settings_save_start_scheduled", False))
-        ):
+        state = runtime.program_settings_save_state
+        if state.is_busy():
             runtime.queue_program_settings_save(action, bool(enabled))
             return
 
@@ -458,7 +456,7 @@ class ControlPageActionMixin:
             cleanup_in_progress=bool(getattr(self, "_cleanup_in_progress", False)),
         ):
             return
-        if runtime.program_settings_save_pending:
+        if runtime.program_settings_save_state.has_pending():
             return
         self._set_status(str(message or ""))
 
@@ -469,7 +467,7 @@ class ControlPageActionMixin:
             cleanup_in_progress=bool(getattr(self, "_cleanup_in_progress", False)),
         ):
             return
-        if runtime.program_settings_save_pending:
+        if runtime.program_settings_save_state.has_pending():
             return
         try:
             if action == "auto_dpi":
@@ -504,7 +502,7 @@ class ControlPageActionMixin:
             cleanup_in_progress=bool(getattr(self, "_cleanup_in_progress", False)),
         ):
             return
-        if runtime.program_settings_save_pending:
+        if runtime.program_settings_save_state.has_pending():
             return
         from qfluentwidgets import InfoBar
 
@@ -515,29 +513,49 @@ class ControlPageActionMixin:
 
     def _on_program_settings_save_worker_finished(self, _worker) -> None:
         runtime = self._refresh_runtime
-        if not self._is_current_worker_finish(runtime.program_settings_save_runtime, _worker):
+        state = runtime.program_settings_save_state
+        next_save = state.schedule_next_after_finish(
+            _worker,
+            is_current_worker_finish=self._is_current_worker_finish,
+            single_shot=QTimer.singleShot,
+            start=lambda item: self._run_scheduled_program_settings_save_start(
+                str(item[0]),
+                bool(item[1]),
+            ),
+            queue_item=lambda item: runtime.queue_program_settings_save(
+                str(item[0]),
+                bool(item[1]),
+                front=True,
+            ),
+            is_cleanup_in_progress=lambda: bool(getattr(self, "_cleanup_in_progress", False)),
+        )
+        if next_save is None:
             return
-        pending = runtime.program_settings_save_pending
-        if pending and not bool(getattr(self, "_cleanup_in_progress", False)):
-            next_save = pending.pop(0)
-            self._schedule_program_settings_save_start(str(next_save[0]), bool(next_save[1]))
 
     def _schedule_program_settings_save_start(self, action: str, enabled: bool) -> None:
         runtime = self._refresh_runtime
-        if bool(getattr(runtime, "program_settings_save_start_scheduled", False)):
-            runtime.queue_program_settings_save(action, bool(enabled), front=True)
-            return
-        runtime.program_settings_save_start_scheduled = True
+        state = runtime.program_settings_save_state
+        item = (str(action or ""), bool(enabled))
         try:
-            QTimer.singleShot(
-                0,
-                lambda: self._run_scheduled_program_settings_save_start(str(action or ""), bool(enabled)),
+            state.schedule_start(
+                item,
+                QTimer.singleShot,
+                lambda pending: self._run_scheduled_program_settings_save_start(
+                    str(pending[0]),
+                    bool(pending[1]),
+                ),
+                queue_item=lambda pending: runtime.queue_program_settings_save(
+                    str(pending[0]),
+                    bool(pending[1]),
+                    front=True,
+                ),
+                is_cleanup_in_progress=lambda: bool(getattr(self, "_cleanup_in_progress", False)),
             )
         except Exception:
             self._run_scheduled_program_settings_save_start(str(action or ""), bool(enabled))
 
     def _run_scheduled_program_settings_save_start(self, action: str, enabled: bool) -> None:
-        self._refresh_runtime.program_settings_save_start_scheduled = False
+        self._refresh_runtime.program_settings_save_state.start_scheduled = False
         if bool(getattr(self, "_cleanup_in_progress", False)):
             return
         self._request_program_settings_save(str(action or ""), bool(enabled))

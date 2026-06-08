@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from ui.latest_value_worker_state import LatestValueWorkerState
 from ui.one_shot_worker_runtime import OneShotWorkerRuntime
+from ui.queued_worker_state import QueuedWorkerState
 
 
 class ModeControlRefreshRuntime:
@@ -28,8 +29,9 @@ class ModeControlRefreshRuntime:
             empty_value=False,
         )
         self.program_settings_save_runtime = OneShotWorkerRuntime()
-        self.program_settings_save_pending: list[tuple[str, bool]] = []
-        self.program_settings_save_start_scheduled = False
+        self.program_settings_save_state = QueuedWorkerState[tuple[str, bool]](
+            self.program_settings_save_runtime,
+        )
 
     def queue_additional_settings_save(
         self,
@@ -52,13 +54,14 @@ class ModeControlRefreshRuntime:
 
     def queue_program_settings_save(self, action: str, enabled: bool, *, front: bool = False) -> None:
         item = (str(action or ""), bool(enabled))
-        self.program_settings_save_pending = [
-            pending for pending in self.program_settings_save_pending if pending[0] != item[0]
+        pending = self.program_settings_save_state.pending
+        pending[:] = [
+            queued for queued in pending if queued[0] != item[0]
         ]
         if front:
-            self.program_settings_save_pending.insert(0, item)
+            pending.insert(0, item)
         else:
-            self.program_settings_save_pending.append(item)
+            pending.append(item)
 
     def has_pending_refresh(self) -> bool:
         return bool(self.additional_settings_dirty)
@@ -133,6 +136,25 @@ class ModeControlRefreshRuntime:
     @program_settings_load_start_scheduled.setter
     def program_settings_load_start_scheduled(self, value: bool) -> None:
         self.program_settings_load_state.start_scheduled = bool(value)
+
+    @property
+    def program_settings_save_pending(self) -> list[tuple[str, bool]]:
+        return self.program_settings_save_state.pending
+
+    @program_settings_save_pending.setter
+    def program_settings_save_pending(self, value: list[tuple[str, bool]]) -> None:
+        self.program_settings_save_state.pending[:] = [
+            (str(item[0] or ""), bool(item[1]))
+            for item in (value or [])
+        ]
+
+    @property
+    def program_settings_save_start_scheduled(self) -> bool:
+        return bool(self.program_settings_save_state.start_scheduled)
+
+    @program_settings_save_start_scheduled.setter
+    def program_settings_save_start_scheduled(self, value: bool) -> None:
+        self.program_settings_save_state.start_scheduled = bool(value)
 
     def accept_additional_settings_result(self, request_id: int) -> bool:
         if int(request_id) != int(self.additional_settings_request_id):
