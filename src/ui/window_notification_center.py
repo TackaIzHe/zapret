@@ -6,6 +6,7 @@ from PyQt6.QtCore import Q_ARG, QMetaObject, QObject, Qt, QTimer, pyqtSlot
 
 from app_notifications import advisory_notification, normalize_notification_payload, notification_action
 from log.log import global_logger, log
+from ui.accessibility import set_control_accessibility
 from ui.one_shot_worker_runtime import OneShotWorkerRuntime
 from ui.window_notification_actions import WindowNotificationActionHandler, WindowNotificationRuntimeActions
 
@@ -718,6 +719,7 @@ class WindowNotificationCenter(QObject):
                 btn = PushButton(button_text)
                 btn.setAutoDefault(False)
                 btn.setDefault(False)
+                self._set_infobar_action_button_accessibility(btn, action, button_text)
 
                 def _wrap(_checked=False, _btn=btn, _callback=callback):
                     try:
@@ -730,6 +732,16 @@ class WindowNotificationCenter(QObject):
                 bar.addWidget(btn)
         except Exception as e:
             log(f"Не удалось показать InfoBar уведомление: {e}", "DEBUG")
+
+    def _set_infobar_action_button_accessibility(self, button, action: dict, button_text: str) -> None:
+        description = str(action.get("description") or "").strip()
+        if not description:
+            description = f"Выполняет действие уведомления: {button_text}."
+        set_control_accessibility(
+            button,
+            name=f"Действие уведомления: {button_text}",
+            description=description,
+        )
 
     def _show_tray_notification_if_needed(self, payload: dict) -> bool:
         tray_title = str(payload.get("tray_title") or "").strip()

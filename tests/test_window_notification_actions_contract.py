@@ -5,6 +5,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from PyQt6.QtWidgets import QApplication
+
 from main import window_notifications_setup
 from ui.window_notification_actions import WindowNotificationActionHandler
 from ui.window_notification_center import WindowNotificationCenter
@@ -12,6 +14,10 @@ from winws_runtime.runtime import conflict_flow
 
 
 class WindowNotificationActionsContractTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._app = QApplication.instance() or QApplication([])
+
     def test_notification_open_url_action_runs_through_external_worker(self) -> None:
         handler_init_source = inspect.getsource(WindowNotificationActionHandler.__init__)
         handler_callback_source = inspect.getsource(WindowNotificationActionHandler.build_action_callback)
@@ -28,6 +34,47 @@ class WindowNotificationActionsContractTests(unittest.TestCase):
         self.assertNotIn("external_actions_feature", center_init_source)
         self.assertNotIn("self._external_actions", center_source)
         self.assertIn("features.external_actions", setup_source)
+
+    def test_infobar_action_button_has_screen_reader_text(self) -> None:
+        import qfluentwidgets
+
+        class _FakeBar:
+            def __init__(self) -> None:
+                self.widgets = []
+
+            def addWidget(self, widget) -> None:  # noqa: N802
+                self.widgets.append(widget)
+
+        bar = _FakeBar()
+        center = WindowNotificationCenter.__new__(WindowNotificationCenter)
+        center._parent = None
+        center._action_handler = SimpleNamespace(build_action_callback=lambda _action, _bar: lambda: None)
+
+        with (
+            patch.object(qfluentwidgets.InfoBar, "warning", return_value=bar),
+            patch.object(qfluentwidgets.InfoBar, "info", return_value=bar),
+            patch.object(qfluentwidgets.InfoBar, "success", return_value=bar),
+            patch.object(qfluentwidgets.InfoBar, "error", return_value=bar),
+        ):
+            WindowNotificationCenter._show_infobar_notification(
+                center,
+                {
+                    "level": "warning",
+                    "title": "Проверка",
+                    "content": "Нужно действие",
+                    "buttons": [
+                        {
+                            "text": "Открыть логи",
+                            "description": "Открывает страницу логов для просмотра подробностей.",
+                        }
+                    ],
+                },
+            )
+
+        self.assertEqual(len(bar.widgets), 1)
+        button = bar.widgets[0]
+        self.assertEqual(button.accessibleName(), "Действие уведомления: Открыть логи")
+        self.assertIn("Открывает страницу логов", button.accessibleDescription())
 
     def test_notification_open_url_pending_restarts_after_event_loop_turn(self) -> None:
         import ui.window_notification_center as notification_center
