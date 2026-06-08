@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import QLabel, QHBoxLayout
 from qfluentwidgets import FluentIcon
 
 from ui.pages.base_page import ScrollBlockingTextEdit
+from ui.accessibility import set_control_accessibility
 from ui.fluent_widgets import set_tooltip
 
 
@@ -111,6 +112,14 @@ def build_orchestra_log_card(
     log_text.setPlaceholderText(
         tr_fn("page.orchestra.log.placeholder", "Логи обучения будут отображаться здесь...")
     )
+    set_control_accessibility(
+        log_text,
+        name=tr_fn("page.orchestra.log.accessible_name", "Лог обучения Оркестратора"),
+        description=tr_fn(
+            "page.orchestra.log.accessible_description",
+            "Показывает строки обучения и события работы Оркестратора.",
+        ),
+    )
     log_text.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
     log_text.customContextMenuRequested.connect(on_show_log_context_menu)
     log_layout.addWidget(log_text)
@@ -124,6 +133,14 @@ def build_orchestra_log_card(
     log_filter_input.setPlaceholderText(
         tr_fn("page.orchestra.filter.domain.placeholder", "Домен (например: youtube.com)")
     )
+    set_control_accessibility(
+        log_filter_input,
+        name=tr_fn("page.orchestra.filter.domain.accessible_name", "Фильтр лога Оркестратора по домену"),
+        description=tr_fn(
+            "page.orchestra.filter.domain.accessible_description",
+            "Введите домен, например example.com, чтобы оставить в логе только подходящие строки.",
+        ),
+    )
     log_filter_input.textChanged.connect(on_apply_log_filter)
     filter_row.addWidget(log_filter_input, 2)
 
@@ -133,6 +150,14 @@ def build_orchestra_log_card(
 
     clear_filter_btn = transparent_tool_button_cls()
     set_tooltip(clear_filter_btn, tr_fn("page.orchestra.filter.clear.tooltip", "Сбросить фильтр"))
+    set_control_accessibility(
+        clear_filter_btn,
+        name=tr_fn("page.orchestra.filter.clear.accessible_name", "Сбросить фильтр лога Оркестратора"),
+        description=tr_fn(
+            "page.orchestra.filter.clear.accessible_description",
+            "Очищает фильтр домена и протокола в логе Оркестратора.",
+        ),
+    )
     clear_filter_btn.setFixedSize(28, 28)
     clear_filter_btn.clicked.connect(on_clear_log_filter)
     filter_row.addWidget(clear_filter_btn)
@@ -147,6 +172,14 @@ def build_orchestra_log_card(
     clear_log_btn.setIconSize(QSize(16, 16))
     clear_log_btn.setFixedHeight(32)
     clear_log_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+    set_control_accessibility(
+        clear_log_btn,
+        name=tr_fn("page.orchestra.button.clear_log.accessible_name", "Очистить лог обучения Оркестратора"),
+        description=tr_fn(
+            "page.orchestra.button.clear_log.accessible_description",
+            "Удаляет видимые строки текущего лога обучения.",
+        ),
+    )
     clear_log_btn.clicked.connect(on_clear_log)
     btn_row1.addWidget(clear_log_btn)
 
@@ -157,6 +190,14 @@ def build_orchestra_log_card(
     clear_learned_btn.setIconSize(QSize(16, 16))
     clear_learned_btn.setFixedHeight(32)
     clear_learned_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+    set_control_accessibility(
+        clear_learned_btn,
+        name=tr_fn("page.orchestra.button.clear_learning.accessible_name", "Сбросить данные обучения Оркестратора"),
+        description=tr_fn(
+            "page.orchestra.button.clear_learning.accessible_description",
+            "Очищает сохранённые результаты обучения стратегий.",
+        ),
+    )
     clear_learned_btn.clicked.connect(on_clear_learned_clicked)
     btn_row1.addWidget(clear_learned_btn)
 

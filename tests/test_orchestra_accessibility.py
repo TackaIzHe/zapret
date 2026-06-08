@@ -4,11 +4,14 @@ import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QVBoxLayout, QWidget
 from PyQt6.QtWidgets import QListWidget
+from qfluentwidgets import BodyLabel, CaptionLabel, ComboBox, LineEdit, PushButton, TransparentToolButton
 
 from orchestra.ui.blocked_page import BlockedDomainRow, OrchestraBlockedPage
 from orchestra.ui.locked_page import LockedDomainRow, OrchestraLockedPage
+from orchestra.ui.page_build import build_orchestra_log_card
+from orchestra.ui.page_runtime_helpers import protocol_filter_items, set_protocol_filter_items
 from orchestra.ui.ratings_page import OrchestraRatingsPage
 from orchestra.ui.whitelist_page import OrchestraWhitelistPage, WhitelistDomainRow
 
@@ -80,6 +83,56 @@ class OrchestraAccessibilityTests(unittest.TestCase):
         self.assertEqual(page.stats_label.accessibleName(), "Статистика рейтингов: Загрузка...")
         self.assertEqual(page.history_text.accessibleName(), "История рейтингов стратегий")
         self.assertIn("результаты обучения", page.history_text.accessibleDescription())
+
+    def test_log_card_controls_are_named_for_screen_reader(self) -> None:
+        def create_card(title: str):
+            card = QWidget()
+            layout = QVBoxLayout(card)
+            title_label = BodyLabel(title, card)
+            layout.addWidget(title_label)
+            return card, layout, title_label
+
+        widgets = build_orchestra_log_card(
+            create_card=create_card,
+            tr_fn=lambda _key, default, **_kwargs: default,
+            line_edit_cls=LineEdit,
+            combo_cls=ComboBox,
+            body_label_cls=BodyLabel,
+            caption_label_cls=CaptionLabel,
+            transparent_tool_button_cls=TransparentToolButton,
+            fluent_push_button_cls=PushButton,
+            on_show_log_context_menu=lambda *_args: None,
+            on_apply_log_filter=lambda *_args: None,
+            on_clear_log_filter=lambda: None,
+            on_clear_log=lambda: None,
+            on_clear_learned_clicked=lambda: None,
+        )
+        self.addCleanup(widgets.card.deleteLater)
+
+        self.assertEqual(widgets.log_text.accessibleName(), "Лог обучения Оркестратора")
+        self.assertIn("строки обучения", widgets.log_text.accessibleDescription())
+        self.assertEqual(widgets.log_filter_input.accessibleName(), "Фильтр лога Оркестратора по домену")
+        self.assertIn("example.com", widgets.log_filter_input.accessibleDescription())
+        self.assertEqual(widgets.clear_filter_btn.accessibleName(), "Сбросить фильтр лога Оркестратора")
+        self.assertEqual(widgets.clear_log_btn.accessibleName(), "Очистить лог обучения Оркестратора")
+        self.assertEqual(widgets.clear_learned_btn.accessibleName(), "Сбросить данные обучения Оркестратора")
+
+        set_protocol_filter_items(
+            combo=widgets.log_protocol_filter,
+            items=protocol_filter_items(tr_fn=lambda _key, default, **_kwargs: default),
+        )
+
+        self.assertEqual(
+            widgets.log_protocol_filter.accessibleName(),
+            "Фильтр лога Оркестратора по протоколу, выбрано: Все",
+        )
+
+        widgets.log_protocol_filter.setCurrentIndex(2)
+
+        self.assertEqual(
+            widgets.log_protocol_filter.accessibleName(),
+            "Фильтр лога Оркестратора по протоколу, выбрано: HTTP",
+        )
 
     def test_log_history_items_expose_screen_reader_text(self) -> None:
         from orchestra.ui.page_runtime_helpers import update_log_history_view

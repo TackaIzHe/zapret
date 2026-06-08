@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import QListWidgetItem
 
 import orchestra.page_runtime as orchestra_page_runtime
 from orchestra.orchestra_runner import MAX_ORCHESTRA_LOGS
-from ui.accessibility import set_item_accessible_text
+from ui.accessibility import set_control_accessibility, set_item_accessible_text
 from ui.fluent_widgets import set_tooltip
 
 
@@ -47,6 +47,30 @@ def set_protocol_filter_items(*, combo, items: list[tuple[str, str]]) -> None:
             if code == selected:
                 combo.setCurrentIndex(idx)
                 break
+    _update_protocol_filter_accessibility(combo)
+    _ensure_protocol_filter_accessibility_signal(combo)
+
+
+def _update_protocol_filter_accessibility(combo) -> None:
+    selected = " ".join(str(combo.currentText() or "").strip().split())
+    name = "Фильтр лога Оркестратора по протоколу"
+    if selected:
+        name = f"{name}, выбрано: {selected}"
+    set_control_accessibility(
+        combo,
+        name=name,
+        description="Выберите, какие строки показывать в логе Оркестратора: все, TLS, HTTP, UDP, успешные или ошибочные.",
+    )
+
+
+def _ensure_protocol_filter_accessibility_signal(combo) -> None:
+    if bool(getattr(combo, "_orchestra_protocol_filter_accessibility_connected", False)):
+        return
+    try:
+        combo.currentIndexChanged.connect(lambda _index: _update_protocol_filter_accessibility(combo))
+        setattr(combo, "_orchestra_protocol_filter_accessibility_connected", True)
+    except Exception:
+        pass
 
 
 def current_protocol_filter_code(*, combo) -> str:
