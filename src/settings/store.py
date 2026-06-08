@@ -1008,6 +1008,22 @@ def set_tg_proxy_buffer_kb(value: int) -> bool:
     return _set_int(("telegram_proxy", "buffer_kb"), value)
 
 
+def get_tg_proxy_fake_tls_domain() -> str:
+    return _get_str(("telegram_proxy", "fake_tls_domain"), "")
+
+
+def set_tg_proxy_fake_tls_domain(value: str) -> bool:
+    return _set_str(("telegram_proxy", "fake_tls_domain"), value)
+
+
+def get_tg_proxy_proxy_protocol() -> bool:
+    return _get_bool(("telegram_proxy", "proxy_protocol"), False)
+
+
+def set_tg_proxy_proxy_protocol(value: bool) -> bool:
+    return _set_bool(("telegram_proxy", "proxy_protocol"), value)
+
+
 def get_orchestra_strict_detection() -> bool:
     return _get_bool(("orchestra", "settings", "strict_detection"), True)
 
@@ -1318,11 +1334,13 @@ __all__ = [
     "get_tg_proxy_buffer_kb",
     "get_tg_proxy_dc_ip",
     "get_tg_proxy_enabled",
+    "get_tg_proxy_fake_tls_domain",
     "get_tg_proxy_host",
     "get_tg_proxy_mode",
     "get_tg_proxy_mtproxy_secret",
     "get_tg_proxy_pool_size",
     "get_tg_proxy_port",
+    "get_tg_proxy_proxy_protocol",
     "get_tg_proxy_upstream_enabled",
     "get_tg_proxy_upstream_host",
     "get_tg_proxy_upstream_mode",
@@ -1411,11 +1429,13 @@ __all__ = [
     "set_tg_proxy_buffer_kb",
     "set_tg_proxy_dc_ip",
     "set_tg_proxy_enabled",
+    "set_tg_proxy_fake_tls_domain",
     "set_tg_proxy_host",
     "set_tg_proxy_mode",
     "set_tg_proxy_mtproxy_secret",
     "set_tg_proxy_pool_size",
     "set_tg_proxy_port",
+    "set_tg_proxy_proxy_protocol",
     "set_tg_proxy_upstream_enabled",
     "set_tg_proxy_upstream_host",
     "set_tg_proxy_upstream_mode",

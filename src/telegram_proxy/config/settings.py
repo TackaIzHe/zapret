@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from telegram_proxy.config.upstream_catalog import UpstreamCatalog
 from telegram_proxy.proxy.cloudflare import AUTO_CLOUDFLARE_DOMAINS, CloudflareFallbackConfig, normalize_domain_list
 from telegram_proxy.proxy.dc_map import parse_dc_endpoint_overrides
+from telegram_proxy.proxy.fake_tls import normalize_fake_tls_domain
 from telegram_proxy.proxy.mtproxy import build_mtproxy_link, generate_secret, normalize_secret
 
 
@@ -28,6 +29,8 @@ class TelegramProxySettingsState:
     dc_ip: tuple[str, ...]
     pool_size: int
     buffer_kb: int
+    fake_tls_domain: str
+    proxy_protocol: bool
 
 
 @dataclass(slots=True)
@@ -60,6 +63,8 @@ def default_state() -> TelegramProxySettingsState:
         dc_ip=(),
         pool_size=4,
         buffer_kb=256,
+        fake_tls_domain="",
+        proxy_protocol=False,
     )
 
 def validate_host(host: str) -> bool:
@@ -124,11 +129,23 @@ def build_manual_instruction_text(host: str, port: int, *, mode: object = "socks
     proxy_type = "MTProxy" if normalize_proxy_mode(mode) == "mtproxy" else "SOCKS5"
     return f"  Тип: {proxy_type}  |  Хост: {normalize_host(host)}  |  Порт: {normalize_port(port)}"
 
-def build_proxy_url(host: str, port: int, *, mode: object = "socks5", mtproxy_secret: str = "") -> str:
+def build_proxy_url(
+    host: str,
+    port: int,
+    *,
+    mode: object = "socks5",
+    mtproxy_secret: str = "",
+    fake_tls_domain: str = "",
+) -> str:
     normalized_host = normalize_host(host)
     normalized_port = normalize_port(port)
     if normalize_proxy_mode(mode) == "mtproxy":
-        return build_mtproxy_link(normalized_host, normalized_port, mtproxy_secret)
+        return build_mtproxy_link(
+            normalized_host,
+            normalized_port,
+            mtproxy_secret,
+            fake_tls_domain=normalize_fake_tls_domain(fake_tls_domain),
+        )
     return f"tg://socks?server={normalized_host}&port={normalized_port}"
 
 
@@ -146,6 +163,8 @@ def _settings_state_from_data(data: dict, upstream_catalog: UpstreamCatalog) -> 
     dc_ip = tuple(f"{dc}:{ip}" for dc, ip in parse_dc_endpoint_overrides(raw.get("dc_ip")).items())
     pool_size = normalize_pool_size(raw.get("pool_size", 4))
     buffer_kb = normalize_buffer_kb(raw.get("buffer_kb", 256))
+    fake_tls_domain = normalize_fake_tls_domain(raw.get("fake_tls_domain"))
+    proxy_protocol = bool(raw.get("proxy_protocol", False))
 
     return TelegramProxySettingsState(
         host=normalize_host(raw.get("host")),
@@ -171,6 +190,8 @@ def _settings_state_from_data(data: dict, upstream_catalog: UpstreamCatalog) -> 
         dc_ip=dc_ip,
         pool_size=pool_size,
         buffer_kb=buffer_kb,
+        fake_tls_domain=fake_tls_domain,
+        proxy_protocol=proxy_protocol,
     )
 
 
@@ -260,6 +281,27 @@ def set_dc_ip(value: object) -> tuple[str, ...]:
     except Exception:
         pass
     return result
+
+
+def set_fake_tls_domain(value: object) -> str:
+    domain = normalize_fake_tls_domain(value)
+    try:
+        from settings.store import set_tg_proxy_fake_tls_domain
+
+        set_tg_proxy_fake_tls_domain(domain)
+    except Exception:
+        pass
+    return domain
+
+
+def set_proxy_protocol(enabled: bool) -> None:
+    try:
+        from settings.store import set_tg_proxy_proxy_protocol
+
+        set_tg_proxy_proxy_protocol(bool(enabled))
+    except Exception:
+        pass
+
 
 def set_upstream_enabled(enabled: bool) -> None:
     try:

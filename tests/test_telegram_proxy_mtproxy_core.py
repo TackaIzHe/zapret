@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import os
 import struct
+import time
 import unittest
 from types import SimpleNamespace
 
@@ -29,6 +31,31 @@ def _build_mtproxy_init(*, secret_hex: str, dc: int, is_media: bool = False) -> 
     init[40:56] = iv
     init[56:64] = _xor_bytes(tail_plain, keystream[56:64])
     return bytes(init)
+
+
+def _build_fake_tls_client_hello(secret_hex: str, *, session_id: bytes = b"") -> bytes:
+    secret = bytes.fromhex(secret_hex)
+    body = bytearray(96)
+    body[0] = 0x01
+    body[1:4] = (len(body) - 4).to_bytes(3, "big")
+    body[4:6] = b"\x03\x03"
+    body[6:38] = b"\x00" * 32
+    body[38] = len(session_id)
+    body[39:39 + len(session_id)] = session_id
+
+    hello = bytearray(b"\x16\x03\x03" + len(body).to_bytes(2, "big") + bytes(body))
+    expected = hmac.new(secret, bytes(hello), hashlib.sha256).digest()
+    timestamp = int(time.time())
+    random_tail = bytes(
+        value ^ mask
+        for value, mask in zip(timestamp.to_bytes(4, "little"), expected[28:32])
+    )
+    hello[11:43] = expected[:28] + random_tail
+    return bytes(hello)
+
+
+def _tls_app_data(payload: bytes) -> bytes:
+    return b"\x17\x03\x03" + len(payload).to_bytes(2, "big") + bytes(payload)
 
 
 class TelegramProxyMTProxyCoreTests(unittest.TestCase):
@@ -97,6 +124,37 @@ class TelegramProxyMTProxyCoreTests(unittest.TestCase):
             build_mtproxy_link("127.0.0.1", 1443, "aabbccddeeff00112233445566778899"),
             "tg://proxy?server=127.0.0.1&port=1443&secret=aabbccddeeff00112233445566778899",
         )
+        self.assertEqual(
+            build_mtproxy_link(
+                "proxy.example.com",
+                443,
+                "aabbccddeeff00112233445566778899",
+                fake_tls_domain="front.example.com",
+            ),
+            "tg://proxy?server=proxy.example.com&port=443&secret=eeaabbccddeeff0011223344556677889966726f6e742e6578616d706c652e636f6d",
+        )
+
+    def test_fake_tls_settings_are_normalized_in_settings_json_shape(self) -> None:
+        from settings.normalize import normalize_telegram_proxy
+        from settings.schema import default_telegram_proxy
+        from telegram_proxy.config.settings import default_state
+
+        defaults = default_telegram_proxy()
+
+        self.assertEqual(defaults["fake_tls_domain"], "")
+        self.assertFalse(defaults["proxy_protocol"])
+        self.assertEqual(default_state().fake_tls_domain, "")
+        self.assertFalse(default_state().proxy_protocol)
+
+        normalized = normalize_telegram_proxy(
+            {
+                "fake_tls_domain": " Front.Example.Com ",
+                "proxy_protocol": "yes",
+            }
+        )
+
+        self.assertEqual(normalized["fake_tls_domain"], "front.example.com")
+        self.assertTrue(normalized["proxy_protocol"])
 
     def test_mtproxy_client_init_parser_checks_secret_and_dc(self) -> None:
         from telegram_proxy.proxy.mtproxy import parse_client_init
@@ -248,6 +306,8 @@ class TelegramProxyMTProxyCoreTests(unittest.TestCase):
             patch("settings.store.get_tg_proxy_dc_ip", return_value=["4:149.154.167.220"]),
             patch("settings.store.get_tg_proxy_pool_size", return_value=6),
             patch("settings.store.get_tg_proxy_buffer_kb", return_value=512),
+            patch("settings.store.get_tg_proxy_fake_tls_domain", return_value="front.example.com"),
+            patch("settings.store.get_tg_proxy_proxy_protocol", return_value=True),
             patch("telegram_proxy.config.settings.build_upstream_config", return_value=None),
             patch("telegram_proxy.config.settings.build_cloudflare_config", return_value=None),
         ):
@@ -258,6 +318,8 @@ class TelegramProxyMTProxyCoreTests(unittest.TestCase):
         self.assertEqual(config.dc_endpoint_overrides, {4: "149.154.167.220"})
         self.assertEqual(config.pool_size, 6)
         self.assertEqual(config.buffer_kb, 512)
+        self.assertEqual(config.fake_tls_domain, "front.example.com")
+        self.assertTrue(config.proxy_protocol)
 
     def test_runtime_start_config_creates_secret_for_default_mtproxy(self) -> None:
         from unittest.mock import patch
@@ -274,6 +336,8 @@ class TelegramProxyMTProxyCoreTests(unittest.TestCase):
             patch("settings.store.get_tg_proxy_dc_ip", return_value=[]),
             patch("settings.store.get_tg_proxy_pool_size", return_value=4),
             patch("settings.store.get_tg_proxy_buffer_kb", return_value=256),
+            patch("settings.store.get_tg_proxy_fake_tls_domain", return_value=""),
+            patch("settings.store.get_tg_proxy_proxy_protocol", return_value=False),
             patch("telegram_proxy.config.settings.generate_mtproxy_secret", return_value=generated),
             patch("telegram_proxy.config.settings.set_mtproxy_secret") as save_secret,
             patch("telegram_proxy.config.settings.build_upstream_config", return_value=None),
@@ -293,11 +357,89 @@ class TelegramProxyMTProxyCoreTests(unittest.TestCase):
             mtproxy_secret="aabbccddeeff00112233445566778899",
             pool_size=7,
             buffer_kb=384,
+            fake_tls_domain="front.example.com",
+            proxy_protocol=True,
         )
 
         self.assertEqual(proxy._ws_pool._pool_size, 7)
         self.assertEqual(proxy._cloudflare_worker_pool._pool_size, 7)
         self.assertEqual(proxy._buffer_size, 384 * 1024)
+        self.assertEqual(proxy._fake_tls_domain, "front.example.com")
+        self.assertTrue(proxy._proxy_protocol)
+
+    def test_fake_tls_client_init_reader_unwraps_mtproxy_handshake(self) -> None:
+        import asyncio
+
+        from telegram_proxy.proxy.fake_tls import read_mtproxy_client_init
+
+        secret = "aabbccddeeff00112233445566778899"
+        mtproxy_init = _build_mtproxy_init(secret_hex=secret, dc=2)
+        payload = _build_fake_tls_client_hello(secret) + _tls_app_data(mtproxy_init)
+
+        class _Reader:
+            def __init__(self, data: bytes):
+                self._data = bytearray(data)
+
+            async def readexactly(self, size: int) -> bytes:
+                if len(self._data) < size:
+                    raise asyncio.IncompleteReadError(bytes(self._data), size)
+                result = bytes(self._data[:size])
+                del self._data[:size]
+                return result
+
+            async def readline(self) -> bytes:
+                marker = self._data.find(b"\n")
+                if marker < 0:
+                    return b""
+                result = bytes(self._data[:marker + 1])
+                del self._data[:marker + 1]
+                return result
+
+            async def read(self, size: int = -1) -> bytes:
+                if not self._data:
+                    return b""
+                if size < 0:
+                    size = len(self._data)
+                result = bytes(self._data[:size])
+                del self._data[:size]
+                return result
+
+        class _Writer:
+            def __init__(self):
+                self.writes: list[bytes] = []
+                self.closed = False
+
+            def write(self, data: bytes) -> None:
+                self.writes.append(bytes(data))
+
+            async def drain(self) -> None:
+                return None
+
+            def close(self) -> None:
+                self.closed = True
+
+            async def wait_closed(self) -> None:
+                return None
+
+            def get_extra_info(self, _name, default=None):
+                return default
+
+        writer = _Writer()
+        result = asyncio.run(
+            read_mtproxy_client_init(
+                _Reader(payload),
+                writer,
+                secret,
+                "127.0.0.1:1",
+                fake_tls_domain="front.example.com",
+            )
+        )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.init, mtproxy_init)
+        self.assertIs(result.reader, result.writer)
+        self.assertTrue(writer.writes)
+        self.assertTrue(writer.writes[0].startswith(b"\x16\x03\x03"))
 
     def test_mtproxy_dc_endpoint_override_changes_tcp_target(self) -> None:
         import inspect
@@ -329,6 +471,9 @@ class TelegramProxyMTProxyCoreTests(unittest.TestCase):
                 "2:149.154.167.220",
                 "--dc-ip",
                 "4:149.154.167.220",
+                "--fake-tls-domain",
+                "front.example.com",
+                "--proxy-protocol",
             ]
         )
 
@@ -336,6 +481,8 @@ class TelegramProxyMTProxyCoreTests(unittest.TestCase):
         self.assertEqual(args.mode, "mtproxy")
         self.assertEqual(args.secret, "aabbccddeeff00112233445566778899")
         self.assertEqual(args.dc_ip, ["2:149.154.167.220", "4:149.154.167.220"])
+        self.assertEqual(args.fake_tls_domain, "front.example.com")
+        self.assertTrue(args.proxy_protocol)
 
     def test_windows_service_command_can_pass_mtproxy_secret(self) -> None:
         from telegram_proxy.service import build_service_args
@@ -345,11 +492,13 @@ class TelegramProxyMTProxyCoreTests(unittest.TestCase):
             mode="mtproxy",
             mtproxy_secret="aabbccddeeff00112233445566778899",
             dc_ip=["2:149.154.167.220", "4:149.154.167.220"],
+            fake_tls_domain="front.example.com",
+            proxy_protocol=True,
         )
 
         self.assertEqual(
             args,
-            "-m telegram_proxy --port 1443 --mode mtproxy --secret aabbccddeeff00112233445566778899 --dc-ip 2:149.154.167.220 --dc-ip 4:149.154.167.220",
+            "-m telegram_proxy --port 1443 --mode mtproxy --secret aabbccddeeff00112233445566778899 --dc-ip 2:149.154.167.220 --dc-ip 4:149.154.167.220 --fake-tls-domain front.example.com --proxy-protocol",
         )
 
     def test_page_links_follow_selected_local_proxy_mode(self) -> None:

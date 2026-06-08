@@ -97,6 +97,8 @@ def start_proxy_runtime(
     mtproxy_secret: str = "",
     pool_size: int = 4,
     buffer_kb: int = 256,
+    fake_tls_domain: str = "",
+    proxy_protocol: bool = False,
     on_finished=None,
 ) -> None:
     plan = telegram_proxy_page_runtime.build_start_plan(
@@ -129,6 +131,8 @@ def start_proxy_runtime(
             mtproxy_secret=str(mtproxy_secret or ""),
             pool_size=int(pool_size),
             buffer_kb=int(buffer_kb),
+            fake_tls_domain=str(fake_tls_domain or ""),
+            proxy_protocol=bool(proxy_protocol),
             parent=page,
         ),
         on_loaded=lambda _request_id, ok: _finish_proxy_start_worker(page, ok),

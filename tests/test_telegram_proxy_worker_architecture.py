@@ -250,6 +250,8 @@ class TelegramProxyWorkerArchitectureTests(unittest.TestCase):
             upstream_config=upstream_config,
             cloudflare_config=cloudflare_config,
             mtproxy_secret=secret,
+            fake_tls_domain="front.example.com",
+            proxy_protocol=True,
         )
 
         self.assertIsNotNone(page._proxy_start_runtime.started)
@@ -266,6 +268,8 @@ class TelegramProxyWorkerArchitectureTests(unittest.TestCase):
             mtproxy_secret=secret,
             pool_size=4,
             buffer_kb=256,
+            fake_tls_domain="front.example.com",
+            proxy_protocol=True,
             parent=page,
         )
 
@@ -500,6 +504,8 @@ class TelegramProxyWorkerArchitectureTests(unittest.TestCase):
             dc_endpoint_overrides={},
             pool_size=4,
             buffer_kb=256,
+            fake_tls_domain="",
+            proxy_protocol=False,
         )
 
     def test_external_links_are_queued_while_worker_runs(self) -> None:

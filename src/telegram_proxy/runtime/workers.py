@@ -45,6 +45,8 @@ class TelegramProxyStartWorker(QThread):
         dc_endpoint_overrides=None,
         pool_size: int = 4,
         buffer_kb: int = 256,
+        fake_tls_domain: str = "",
+        proxy_protocol: bool = False,
         parent=None,
     ):
         super().__init__(parent)
@@ -61,6 +63,8 @@ class TelegramProxyStartWorker(QThread):
         self._dc_endpoint_overrides = dc_endpoint_overrides
         self._pool_size = int(pool_size)
         self._buffer_kb = int(buffer_kb)
+        self._fake_tls_domain = str(fake_tls_domain or "")
+        self._proxy_protocol = bool(proxy_protocol)
 
     def run(self) -> None:
         try:
@@ -83,6 +87,8 @@ class TelegramProxyStartWorker(QThread):
                 dc_endpoint_overrides=dc_endpoint_overrides,
                 pool_size=self._pool_size,
                 buffer_kb=self._buffer_kb,
+                fake_tls_domain=self._fake_tls_domain,
+                proxy_protocol=self._proxy_protocol,
             )
         except Exception as exc:
             log(f"TelegramProxyStartWorker: ошибка запуска proxy: {exc}", "WARNING")

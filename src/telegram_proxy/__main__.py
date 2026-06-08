@@ -41,6 +41,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="MTProxy target IP for a DC, for example: --dc-ip 2:149.154.167.220",
     )
     parser.add_argument(
+        "--fake-tls-domain",
+        default="",
+        help="MTProxy Fake TLS domain for ee-secret mode",
+    )
+    parser.add_argument(
+        "--proxy-protocol",
+        action="store_true",
+        help="Accept PROXY protocol v1 header, for example behind nginx stream",
+    )
+    parser.add_argument(
         "-v", "--verbose", action="store_true",
         help="Enable debug logging",
     )
@@ -64,6 +74,8 @@ def main():
         mode=args.mode,
         mtproxy_secret=args.secret,
         dc_endpoint_overrides=parse_dc_endpoint_overrides(args.dc_ip),
+        fake_tls_domain=args.fake_tls_domain,
+        proxy_protocol=args.proxy_protocol,
         on_log=lambda msg: print(f"[TG-PROXY] {msg}"),
     )
 

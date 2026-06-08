@@ -104,6 +104,8 @@ class TelegramProxyRuntime:
         dc_endpoint_overrides: Optional[dict[int, str]] = None,
         pool_size: int = 4,
         buffer_kb: int = 256,
+        fake_tls_domain: str = "",
+        proxy_protocol: bool = False,
     ):
         self._port = port
         self._mode = mode
@@ -115,6 +117,8 @@ class TelegramProxyRuntime:
         self._dc_endpoint_overrides = dict(dc_endpoint_overrides or {})
         self._pool_size = int(pool_size)
         self._buffer_kb = int(buffer_kb)
+        self._fake_tls_domain = str(fake_tls_domain or "")
+        self._proxy_protocol = bool(proxy_protocol)
         self._proxy: Optional[TelegramWSProxy] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._thread: Optional[threading.Thread] = None
@@ -160,6 +164,8 @@ class TelegramProxyRuntime:
             dc_endpoint_overrides=self._dc_endpoint_overrides,
             pool_size=self._pool_size,
             buffer_kb=self._buffer_kb,
+            fake_tls_domain=self._fake_tls_domain,
+            proxy_protocol=self._proxy_protocol,
         )
         self._started.clear()
         self._thread = threading.Thread(
@@ -207,7 +213,9 @@ class TelegramProxyRuntime:
                       mtproxy_secret: Optional[str] = None,
                       dc_endpoint_overrides: Optional[dict[int, str]] = None,
                       pool_size: Optional[int] = None,
-                      buffer_kb: Optional[int] = None) -> None:
+                      buffer_kb: Optional[int] = None,
+                      fake_tls_domain: Optional[str] = None,
+                      proxy_protocol: Optional[bool] = None) -> None:
         """Update config. Requires restart to take effect."""
         if port is not None:
             self._port = port
@@ -227,6 +235,10 @@ class TelegramProxyRuntime:
             self._pool_size = int(pool_size)
         if buffer_kb is not None:
             self._buffer_kb = int(buffer_kb)
+        if fake_tls_domain is not None:
+            self._fake_tls_domain = str(fake_tls_domain or "")
+        if proxy_protocol is not None:
+            self._proxy_protocol = bool(proxy_protocol)
 
     def restart(self) -> bool:
         """Restart with current config."""

@@ -117,6 +117,8 @@ def default_telegram_proxy() -> dict[str, Any]:
         "dc_ip": [],
         "pool_size": 4,
         "buffer_kb": 256,
+        "fake_tls_domain": "",
+        "proxy_protocol": False,
     }
 
 

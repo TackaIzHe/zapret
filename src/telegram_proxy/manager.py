@@ -63,7 +63,9 @@ class TelegramProxyManager(QThread):
                     mtproxy_secret: str = "",
                     dc_endpoint_overrides: Optional[dict[int, str]] = None,
                     pool_size: int = 4,
-                    buffer_kb: int = 256) -> bool:
+                    buffer_kb: int = 256,
+                    fake_tls_domain: str = "",
+                    proxy_protocol: bool = False) -> bool:
         """Start the proxy. Thread-safe, non-blocking."""
         if self.is_running:
             return False
@@ -79,6 +81,8 @@ class TelegramProxyManager(QThread):
             dc_endpoint_overrides=dc_endpoint_overrides,
             pool_size=pool_size,
             buffer_kb=buffer_kb,
+            fake_tls_domain=fake_tls_domain,
+            proxy_protocol=proxy_protocol,
         )
         ok = self._runtime.start()
         if ok:
@@ -113,7 +117,9 @@ class TelegramProxyManager(QThread):
                       mtproxy_secret: str = "",
                       dc_endpoint_overrides: Optional[dict[int, str]] = None,
                       pool_size: int = 4,
-                      buffer_kb: int = 256) -> bool:
+                      buffer_kb: int = 256,
+                      fake_tls_domain: str = "",
+                      proxy_protocol: bool = False) -> bool:
         """Restart with new config."""
         self.stop_proxy()
         return self.start_proxy(
@@ -126,6 +132,8 @@ class TelegramProxyManager(QThread):
             dc_endpoint_overrides=dc_endpoint_overrides,
             pool_size=pool_size,
             buffer_kb=buffer_kb,
+            fake_tls_domain=fake_tls_domain,
+            proxy_protocol=proxy_protocol,
         )
 
     def cleanup(self) -> None:
@@ -180,11 +188,13 @@ def start_proxy_if_enabled_async() -> bool:
         from settings.store import (
             get_tg_proxy_enabled,
             get_tg_proxy_buffer_kb,
+            get_tg_proxy_fake_tls_domain,
             get_tg_proxy_host,
             get_tg_proxy_mode,
             get_tg_proxy_mtproxy_secret,
             get_tg_proxy_pool_size,
             get_tg_proxy_port,
+            get_tg_proxy_proxy_protocol,
         )
     except Exception:
         return False
@@ -217,9 +227,13 @@ def start_proxy_if_enabled_async() -> bool:
 
             pool_size = telegram_proxy_settings.normalize_pool_size(get_tg_proxy_pool_size())
             buffer_kb = telegram_proxy_settings.normalize_buffer_kb(get_tg_proxy_buffer_kb())
+            fake_tls_domain = telegram_proxy_settings.normalize_fake_tls_domain(get_tg_proxy_fake_tls_domain())
+            proxy_protocol = bool(get_tg_proxy_proxy_protocol())
         except Exception:
             pool_size = 4
             buffer_kb = 256
+            fake_tls_domain = ""
+            proxy_protocol = False
 
         def _start() -> None:
             try:
@@ -233,6 +247,8 @@ def start_proxy_if_enabled_async() -> bool:
                     dc_endpoint_overrides=dc_endpoint_overrides,
                     pool_size=pool_size,
                     buffer_kb=buffer_kb,
+                    fake_tls_domain=fake_tls_domain,
+                    proxy_protocol=proxy_protocol,
                 )
             except Exception:
                 pass

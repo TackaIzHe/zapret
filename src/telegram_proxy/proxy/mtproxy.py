@@ -14,6 +14,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from telegram_proxy.proxy.stats import ProxyStats
 from telegram_proxy.proxy.transport import RawWebSocket
+from telegram_proxy.proxy.fake_tls import build_fake_tls_secret
 
 
 HANDSHAKE_LEN = 64
@@ -156,13 +157,14 @@ def generate_secret() -> str:
     return secrets.token_hex(16)
 
 
-def build_mtproxy_link(host: str, port: int, secret: str) -> str:
+def build_mtproxy_link(host: str, port: int, secret: str, *, fake_tls_domain: str = "") -> str:
     normalized_secret = normalize_secret(secret)
+    link_secret = build_fake_tls_secret(normalized_secret, fake_tls_domain) if fake_tls_domain else normalized_secret
     query = urlencode(
         {
             "server": str(host or "127.0.0.1").strip() or "127.0.0.1",
             "port": str(int(port or 0)),
-            "secret": normalized_secret,
+            "secret": link_secret,
         }
     )
     return f"tg://proxy?{query}"

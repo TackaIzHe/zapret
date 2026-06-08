@@ -27,6 +27,8 @@ class TelegramProxyStartConfig:
     dc_endpoint_overrides: dict[int, str]
     pool_size: int
     buffer_kb: int
+    fake_tls_domain: str
+    proxy_protocol: bool
 
 
 def get_proxy_manager():
@@ -44,11 +46,13 @@ def start_proxy_if_enabled_async() -> bool:
 def get_start_config() -> TelegramProxyStartConfig:
     from settings.store import (
         get_tg_proxy_buffer_kb,
+        get_tg_proxy_fake_tls_domain,
         get_tg_proxy_host,
         get_tg_proxy_mode,
         get_tg_proxy_mtproxy_secret,
         get_tg_proxy_pool_size,
         get_tg_proxy_port,
+        get_tg_proxy_proxy_protocol,
     )
     from telegram_proxy.config.settings import (
         build_cloudflare_config,
@@ -56,6 +60,7 @@ def get_start_config() -> TelegramProxyStartConfig:
         build_upstream_config,
         ensure_mtproxy_secret_for_mode,
         normalize_buffer_kb,
+        normalize_fake_tls_domain,
         normalize_pool_size,
     )
 
@@ -72,6 +77,8 @@ def get_start_config() -> TelegramProxyStartConfig:
         dc_endpoint_overrides=build_dc_endpoint_overrides(),
         pool_size=normalize_pool_size(get_tg_proxy_pool_size()),
         buffer_kb=normalize_buffer_kb(get_tg_proxy_buffer_kb()),
+        fake_tls_domain=normalize_fake_tls_domain(get_tg_proxy_fake_tls_domain()),
+        proxy_protocol=bool(get_tg_proxy_proxy_protocol()),
     )
 
 
@@ -167,6 +174,10 @@ def save_settings_action(
         return telegram_proxy_settings.set_mtproxy_secret(str(value or ""))
     if action_name == "dc_ip":
         return telegram_proxy_settings.set_dc_ip(value)
+    if action_name == "fake_tls_domain":
+        return telegram_proxy_settings.set_fake_tls_domain(value)
+    if action_name == "proxy_protocol":
+        return telegram_proxy_settings.set_proxy_protocol(enabled)
     if action_name == "upstream_enabled":
         return telegram_proxy_settings.set_upstream_enabled(enabled)
     if action_name == "upstream_fields":

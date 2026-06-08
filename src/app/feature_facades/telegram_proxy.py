@@ -88,6 +88,8 @@ class TelegramProxyFeature:
         dc_endpoint_overrides=None,
         pool_size: int = 4,
         buffer_kb: int = 256,
+        fake_tls_domain: str = "",
+        proxy_protocol: bool = False,
         parent=None,
     ):
         from telegram_proxy.runtime.workers import TelegramProxyStartWorker
@@ -103,6 +105,8 @@ class TelegramProxyFeature:
             dc_endpoint_overrides=dc_endpoint_overrides,
             pool_size=pool_size,
             buffer_kb=buffer_kb,
+            fake_tls_domain=fake_tls_domain,
+            proxy_protocol=proxy_protocol,
             build_upstream_config=self.build_upstream_config,
             build_cloudflare_config=self.build_cloudflare_config,
             build_dc_endpoint_overrides=self.build_dc_endpoint_overrides,

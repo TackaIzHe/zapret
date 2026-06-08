@@ -1175,9 +1175,13 @@ class TelegramProxyPage(BasePage):
             start_config = self._telegram_proxy.get_start_config()
             pool_size = int(getattr(start_config, "pool_size", 4))
             buffer_kb = int(getattr(start_config, "buffer_kb", 256))
+            fake_tls_domain = str(getattr(start_config, "fake_tls_domain", "") or "")
+            proxy_protocol = bool(getattr(start_config, "proxy_protocol", False))
         except Exception:
             pool_size = 4
             buffer_kb = 256
+            fake_tls_domain = ""
+            proxy_protocol = False
         start_proxy_runtime(
             page=self,
             manager=mgr,
@@ -1194,6 +1198,8 @@ class TelegramProxyPage(BasePage):
             mtproxy_secret=self._ensure_mtproxy_secret_if_needed(),
             pool_size=pool_size,
             buffer_kb=buffer_kb,
+            fake_tls_domain=fake_tls_domain,
+            proxy_protocol=proxy_protocol,
             on_finished=self._on_proxy_start_worker_finished,
         )
 
@@ -1453,6 +1459,13 @@ class TelegramProxyPage(BasePage):
         self._mtproxy_secret_edit.setText(secret)
         self._request_settings_save("mtproxy_secret", value=secret, restart="now")
         return secret
+
+    def _local_fake_tls_domain(self) -> str:
+        try:
+            start_config = self._telegram_proxy.get_start_config()
+            return str(getattr(start_config, "fake_tls_domain", "") or "")
+        except Exception:
+            return ""
 
     def _apply_local_proxy_mode_ui(self) -> None:
         is_mtproxy = self._local_proxy_mode() == "mtproxy"
@@ -1774,6 +1787,7 @@ class TelegramProxyPage(BasePage):
             self._port_spin.value(),
             mode=self._local_proxy_mode(),
             mtproxy_secret=self._ensure_mtproxy_secret_if_needed(),
+            fake_tls_domain=self._local_fake_tls_domain(),
         )
         self._start_external_link_worker(
             url,
@@ -1887,6 +1901,7 @@ class TelegramProxyPage(BasePage):
             self._port_spin.value(),
             mode=self._local_proxy_mode(),
             mtproxy_secret=self._ensure_mtproxy_secret_if_needed(),
+            fake_tls_domain=self._local_fake_tls_domain(),
         )
         plan = self._telegram_proxy.copy_text(
             url,

@@ -78,6 +78,22 @@ def normalize_hex_secret(value: object) -> str:
     return text
 
 
+def normalize_domain(value: object) -> str:
+    text = as_clean_str(value).strip(".").lower()
+    if not text or len(text) > 253:
+        return ""
+    labels = text.split(".")
+    if any(not label or len(label) > 63 for label in labels):
+        return ""
+    allowed = set("abcdefghijklmnopqrstuvwxyz0123456789-")
+    for label in labels:
+        if label.startswith("-") or label.endswith("-"):
+            return ""
+        if any(ch not in allowed for ch in label):
+            return ""
+    return text
+
+
 def unique_str_list(value: object) -> list[str]:
     if not isinstance(value, (list, tuple, set)):
         return []
@@ -309,6 +325,8 @@ def normalize_telegram_proxy(data: object) -> dict[str, Any]:
         "dc_ip": unique_dc_ip_list(raw.get("dc_ip")),
         "pool_size": as_int(raw.get("pool_size"), defaults["pool_size"], minimum=0, maximum=32),
         "buffer_kb": as_int(raw.get("buffer_kb"), defaults["buffer_kb"], minimum=4, maximum=4096),
+        "fake_tls_domain": normalize_domain(raw.get("fake_tls_domain")),
+        "proxy_protocol": as_bool(raw.get("proxy_protocol"), defaults["proxy_protocol"]),
     }
 
 

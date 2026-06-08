@@ -31,6 +31,8 @@ def build_service_args(
     mode: str = "socks5",
     mtproxy_secret: str = "",
     dc_ip: object = (),
+    fake_tls_domain: str = "",
+    proxy_protocol: bool = False,
 ) -> str:
     from telegram_proxy.proxy.dc_map import parse_dc_endpoint_overrides
 
@@ -40,6 +42,11 @@ def build_service_args(
         args += f" --secret {secret}"
     for dc, ip in parse_dc_endpoint_overrides(dc_ip).items():
         args += f" --dc-ip {dc}:{ip}"
+    domain = str(fake_tls_domain or "").strip()
+    if domain:
+        args += f" --fake-tls-domain {domain}"
+    if proxy_protocol:
+        args += " --proxy-protocol"
     return args
 
 
@@ -48,6 +55,8 @@ def create_tg_proxy_service(
     mode: str = "socks5",
     mtproxy_secret: str = "",
     dc_ip: object = (),
+    fake_tls_domain: str = "",
+    proxy_protocol: bool = False,
 ) -> bool:
     """Create a Windows service for the Telegram proxy.
 
@@ -56,7 +65,14 @@ def create_tg_proxy_service(
     try:
         python_exe = _get_python_exe()
         # Service runs: python.exe -m telegram_proxy --port PORT --mode MODE
-        args = build_service_args(port=port, mode=mode, mtproxy_secret=mtproxy_secret, dc_ip=dc_ip)
+        args = build_service_args(
+            port=port,
+            mode=mode,
+            mtproxy_secret=mtproxy_secret,
+            dc_ip=dc_ip,
+            fake_tls_domain=fake_tls_domain,
+            proxy_protocol=proxy_protocol,
+        )
         work_dir = os.path.dirname(_get_proxy_module_path())
 
         # Try NSSM first (better restart handling)

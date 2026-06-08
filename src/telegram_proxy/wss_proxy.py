@@ -58,6 +58,7 @@ from telegram_proxy.proxy.mtproxy import (
     relay_mtproxy_tcp,
     relay_mtproxy_wss,
 )
+from telegram_proxy.proxy.fake_tls import normalize_fake_tls_domain, read_mtproxy_client_init
 from telegram_proxy.proxy.pool import (
     CloudflareWorkerPool,
     WsPool as _WsPool,
@@ -106,6 +107,8 @@ class TelegramWSProxy:
         dc_endpoint_overrides: Optional[dict[int, str]] = None,
         pool_size: int = 4,
         buffer_kb: int = 256,
+        fake_tls_domain: str = "",
+        proxy_protocol: bool = False,
     ):
         self._port = port
         self._mode = mode
@@ -118,6 +121,8 @@ class TelegramWSProxy:
         self._dc_endpoint_overrides = dict(dc_endpoint_overrides or {})
         self._pool_size = max(0, min(32, int(pool_size or 4)))
         self._buffer_size = max(4, min(4096, int(buffer_kb or 256))) * 1024
+        self._fake_tls_domain = normalize_fake_tls_domain(fake_tls_domain)
+        self._proxy_protocol = bool(proxy_protocol)
         self._servers: list[asyncio.Server] = []
         self._tasks: set[asyncio.Task] = set()
         self._running = False
@@ -379,11 +384,21 @@ class TelegramWSProxy:
                 self._log(f"[{label}] MTProxy secret is not configured")
                 return
 
-            try:
-                client_init = await asyncio.wait_for(reader.readexactly(64), timeout=15.0)
-            except (asyncio.IncompleteReadError, asyncio.TimeoutError) as exc:
-                self._log(f"[{label}] no MTProxy init packet: {type(exc).__name__}")
+            client = await read_mtproxy_client_init(
+                reader,
+                writer,
+                self._mtproxy_secret,
+                label,
+                fake_tls_domain=self._fake_tls_domain,
+                proxy_protocol=self._proxy_protocol,
+            )
+            if client is None:
+                self._log(f"[{label}] no MTProxy init packet")
                 return
+            client_init = client.init
+            client_reader = client.reader
+            client_writer = client.writer
+            label = client.label
 
             parsed = parse_client_init(client_init, self._mtproxy_secret)
             if parsed is None:
@@ -401,8 +416,8 @@ class TelegramWSProxy:
             self._log(f"[{label}] MTProxy DC{dc}{media_tag} -> {target_host}:{target_port}")
 
             await self._tunnel_mtproxy_via_wss(
-                reader,
-                writer,
+                client_reader,
+                client_writer,
                 dc,
                 is_media,
                 relay_init,
@@ -420,8 +435,9 @@ class TelegramWSProxy:
         finally:
             self.stats.active_connections -= 1
             try:
-                writer.close()
-                await writer.wait_closed()
+                writer_to_close = locals().get("client_writer", writer)
+                writer_to_close.close()
+                await writer_to_close.wait_closed()
             except Exception:
                 pass
             if task:
