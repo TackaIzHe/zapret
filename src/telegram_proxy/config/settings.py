@@ -26,6 +26,8 @@ class TelegramProxySettingsState:
     cloudflare_worker_domains: tuple[str, ...]
     mtproxy_secret: str
     dc_ip: tuple[str, ...]
+    pool_size: int
+    buffer_kb: int
 
 
 @dataclass(slots=True)
@@ -56,6 +58,8 @@ def default_state() -> TelegramProxySettingsState:
         cloudflare_worker_domains=(),
         mtproxy_secret="",
         dc_ip=(),
+        pool_size=4,
+        buffer_kb=256,
     )
 
 def validate_host(host: str) -> bool:
@@ -99,6 +103,23 @@ def normalize_proxy_mode(mode: object) -> str:
         return "socks5"
     return "mtproxy"
 
+
+def normalize_pool_size(value: object) -> int:
+    try:
+        number = int(value)
+    except Exception:
+        return 4
+    return max(0, min(32, number))
+
+
+def normalize_buffer_kb(value: object) -> int:
+    try:
+        number = int(value)
+    except Exception:
+        return 256
+    return max(4, min(4096, number))
+
+
 def build_manual_instruction_text(host: str, port: int, *, mode: object = "socks5") -> str:
     proxy_type = "MTProxy" if normalize_proxy_mode(mode) == "mtproxy" else "SOCKS5"
     return f"  Тип: {proxy_type}  |  Хост: {normalize_host(host)}  |  Порт: {normalize_port(port)}"
@@ -123,6 +144,8 @@ def _settings_state_from_data(data: dict, upstream_catalog: UpstreamCatalog) -> 
     cloudflare_worker_domains = normalize_domain_list(raw.get("cloudflare_worker_domains"))
     mtproxy_secret = normalize_secret(raw.get("mtproxy_secret"))
     dc_ip = tuple(f"{dc}:{ip}" for dc, ip in parse_dc_endpoint_overrides(raw.get("dc_ip")).items())
+    pool_size = normalize_pool_size(raw.get("pool_size", 4))
+    buffer_kb = normalize_buffer_kb(raw.get("buffer_kb", 256))
 
     return TelegramProxySettingsState(
         host=normalize_host(raw.get("host")),
@@ -146,6 +169,8 @@ def _settings_state_from_data(data: dict, upstream_catalog: UpstreamCatalog) -> 
         cloudflare_worker_domains=cloudflare_worker_domains,
         mtproxy_secret=mtproxy_secret,
         dc_ip=dc_ip,
+        pool_size=pool_size,
+        buffer_kb=buffer_kb,
     )
 
 

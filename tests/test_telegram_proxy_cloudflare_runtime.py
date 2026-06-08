@@ -166,7 +166,7 @@ class TelegramProxyCloudflareRuntimeTests(unittest.TestCase):
 
         calls = []
 
-        async def fake_connect(host, domain, path="/apiws", timeout=10.0):
+        async def fake_connect(host, domain, path="/apiws", timeout=10.0, **_kwargs):
             calls.append((host, domain, path, timeout))
             return _Ws()
 
@@ -218,7 +218,7 @@ class TelegramProxyCloudflareRuntimeTests(unittest.TestCase):
 
         calls: list[str] = []
 
-        async def fake_connect(host, domain, path="/apiws", timeout=10.0):
+        async def fake_connect(host, domain, path="/apiws", timeout=10.0, **_kwargs):
             calls.append(domain)
             if domain == "kws4.first.example.com":
                 raise OSError("dead domain")

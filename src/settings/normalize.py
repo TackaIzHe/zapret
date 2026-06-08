@@ -307,6 +307,8 @@ def normalize_telegram_proxy(data: object) -> dict[str, Any]:
         "cloudflare_worker_domains": unique_domain_list(raw.get("cloudflare_worker_domains")),
         "mtproxy_secret": normalize_hex_secret(raw.get("mtproxy_secret")),
         "dc_ip": unique_dc_ip_list(raw.get("dc_ip")),
+        "pool_size": as_int(raw.get("pool_size"), defaults["pool_size"], minimum=0, maximum=32),
+        "buffer_kb": as_int(raw.get("buffer_kb"), defaults["buffer_kb"], minimum=4, maximum=4096),
     }
 
 

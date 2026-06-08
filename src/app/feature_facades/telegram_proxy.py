@@ -86,6 +86,8 @@ class TelegramProxyFeature:
         cloudflare_config=None,
         mtproxy_secret: str = "",
         dc_endpoint_overrides=None,
+        pool_size: int = 4,
+        buffer_kb: int = 256,
         parent=None,
     ):
         from telegram_proxy.runtime.workers import TelegramProxyStartWorker
@@ -99,6 +101,8 @@ class TelegramProxyFeature:
             cloudflare_config=cloudflare_config,
             mtproxy_secret=mtproxy_secret,
             dc_endpoint_overrides=dc_endpoint_overrides,
+            pool_size=pool_size,
+            buffer_kb=buffer_kb,
             build_upstream_config=self.build_upstream_config,
             build_cloudflare_config=self.build_cloudflare_config,
             build_dc_endpoint_overrides=self.build_dc_endpoint_overrides,
@@ -251,6 +255,8 @@ class TelegramProxyFeature:
                     cloudflare_config=config.cloudflare_config,
                     mtproxy_secret=config.mtproxy_secret,
                     dc_endpoint_overrides=config.dc_endpoint_overrides,
+                    pool_size=config.pool_size,
+                    buffer_kb=config.buffer_kb,
                 ),
                 on_finished=self._on_tray_toggle_worker_finished,
                 signal_includes_request_id=False,

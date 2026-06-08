@@ -102,6 +102,8 @@ class TelegramProxyRuntime:
         cloudflare_config: Optional[CloudflareFallbackConfig] = None,
         mtproxy_secret: str = "",
         dc_endpoint_overrides: Optional[dict[int, str]] = None,
+        pool_size: int = 4,
+        buffer_kb: int = 256,
     ):
         self._port = port
         self._mode = mode
@@ -111,6 +113,8 @@ class TelegramProxyRuntime:
         self._cloudflare_config = cloudflare_config
         self._mtproxy_secret = str(mtproxy_secret or "")
         self._dc_endpoint_overrides = dict(dc_endpoint_overrides or {})
+        self._pool_size = int(pool_size)
+        self._buffer_kb = int(buffer_kb)
         self._proxy: Optional[TelegramWSProxy] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._thread: Optional[threading.Thread] = None
@@ -154,6 +158,8 @@ class TelegramProxyRuntime:
             cloudflare_config=self._cloudflare_config,
             mtproxy_secret=self._mtproxy_secret,
             dc_endpoint_overrides=self._dc_endpoint_overrides,
+            pool_size=self._pool_size,
+            buffer_kb=self._buffer_kb,
         )
         self._started.clear()
         self._thread = threading.Thread(
@@ -199,7 +205,9 @@ class TelegramProxyRuntime:
                       upstream_config: Optional[UpstreamProxyConfig] = None,
                       cloudflare_config: Optional[CloudflareFallbackConfig] = None,
                       mtproxy_secret: Optional[str] = None,
-                      dc_endpoint_overrides: Optional[dict[int, str]] = None) -> None:
+                      dc_endpoint_overrides: Optional[dict[int, str]] = None,
+                      pool_size: Optional[int] = None,
+                      buffer_kb: Optional[int] = None) -> None:
         """Update config. Requires restart to take effect."""
         if port is not None:
             self._port = port
@@ -215,6 +223,10 @@ class TelegramProxyRuntime:
             self._mtproxy_secret = str(mtproxy_secret or "")
         if dc_endpoint_overrides is not None:
             self._dc_endpoint_overrides = dict(dc_endpoint_overrides or {})
+        if pool_size is not None:
+            self._pool_size = int(pool_size)
+        if buffer_kb is not None:
+            self._buffer_kb = int(buffer_kb)
 
     def restart(self) -> bool:
         """Restart with current config."""

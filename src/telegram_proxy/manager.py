@@ -61,7 +61,9 @@ class TelegramProxyManager(QThread):
                     upstream_config: Optional[UpstreamProxyConfig] = None,
                     cloudflare_config: Optional[CloudflareFallbackConfig] = None,
                     mtproxy_secret: str = "",
-                    dc_endpoint_overrides: Optional[dict[int, str]] = None) -> bool:
+                    dc_endpoint_overrides: Optional[dict[int, str]] = None,
+                    pool_size: int = 4,
+                    buffer_kb: int = 256) -> bool:
         """Start the proxy. Thread-safe, non-blocking."""
         if self.is_running:
             return False
@@ -75,6 +77,8 @@ class TelegramProxyManager(QThread):
             cloudflare_config=cloudflare_config,
             mtproxy_secret=mtproxy_secret,
             dc_endpoint_overrides=dc_endpoint_overrides,
+            pool_size=pool_size,
+            buffer_kb=buffer_kb,
         )
         ok = self._runtime.start()
         if ok:
@@ -107,7 +111,9 @@ class TelegramProxyManager(QThread):
                       upstream_config: Optional[UpstreamProxyConfig] = None,
                       cloudflare_config: Optional[CloudflareFallbackConfig] = None,
                       mtproxy_secret: str = "",
-                      dc_endpoint_overrides: Optional[dict[int, str]] = None) -> bool:
+                      dc_endpoint_overrides: Optional[dict[int, str]] = None,
+                      pool_size: int = 4,
+                      buffer_kb: int = 256) -> bool:
         """Restart with new config."""
         self.stop_proxy()
         return self.start_proxy(
@@ -118,6 +124,8 @@ class TelegramProxyManager(QThread):
             cloudflare_config=cloudflare_config,
             mtproxy_secret=mtproxy_secret,
             dc_endpoint_overrides=dc_endpoint_overrides,
+            pool_size=pool_size,
+            buffer_kb=buffer_kb,
         )
 
     def cleanup(self) -> None:
@@ -171,9 +179,11 @@ def start_proxy_if_enabled_async() -> bool:
     try:
         from settings.store import (
             get_tg_proxy_enabled,
+            get_tg_proxy_buffer_kb,
             get_tg_proxy_host,
             get_tg_proxy_mode,
             get_tg_proxy_mtproxy_secret,
+            get_tg_proxy_pool_size,
             get_tg_proxy_port,
         )
     except Exception:
@@ -202,6 +212,14 @@ def start_proxy_if_enabled_async() -> bool:
         upstream_config = build_upstream_proxy_config_from_settings()
         cloudflare_config = build_cloudflare_proxy_config_from_settings()
         dc_endpoint_overrides = build_dc_endpoint_overrides_from_settings()
+        try:
+            import telegram_proxy.config.settings as telegram_proxy_settings
+
+            pool_size = telegram_proxy_settings.normalize_pool_size(get_tg_proxy_pool_size())
+            buffer_kb = telegram_proxy_settings.normalize_buffer_kb(get_tg_proxy_buffer_kb())
+        except Exception:
+            pool_size = 4
+            buffer_kb = 256
 
         def _start() -> None:
             try:
@@ -213,6 +231,8 @@ def start_proxy_if_enabled_async() -> bool:
                     cloudflare_config=cloudflare_config,
                     mtproxy_secret=mtproxy_secret,
                     dc_endpoint_overrides=dc_endpoint_overrides,
+                    pool_size=pool_size,
+                    buffer_kb=buffer_kb,
                 )
             except Exception:
                 pass

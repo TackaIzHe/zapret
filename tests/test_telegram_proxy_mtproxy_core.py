@@ -42,6 +42,8 @@ class TelegramProxyMTProxyCoreTests(unittest.TestCase):
         self.assertIn("mtproxy", VALID_TG_PROXY_MODES)
         self.assertIn("mtproxy_secret", defaults)
         self.assertIn("dc_ip", defaults)
+        self.assertEqual(defaults["pool_size"], 4)
+        self.assertEqual(defaults["buffer_kb"], 256)
         self.assertEqual(defaults["mode"], "mtproxy")
         self.assertEqual(normalize_telegram_proxy({})["mode"], "mtproxy")
         self.assertEqual(default_state().mode, "mtproxy")
@@ -51,6 +53,8 @@ class TelegramProxyMTProxyCoreTests(unittest.TestCase):
             {
                 "mode": "mtproxy",
                 "mtproxy_secret": "  AABBCCDDEEFF00112233445566778899  ",
+                "pool_size": 99,
+                "buffer_kb": 2,
                 "dc_ip": [
                     "2:149.154.167.220",
                     "bad",
@@ -63,6 +67,8 @@ class TelegramProxyMTProxyCoreTests(unittest.TestCase):
 
         self.assertEqual(normalized["mode"], "mtproxy")
         self.assertEqual(normalized["mtproxy_secret"], "aabbccddeeff00112233445566778899")
+        self.assertEqual(normalized["pool_size"], 32)
+        self.assertEqual(normalized["buffer_kb"], 4)
         self.assertEqual(
             normalized["dc_ip"],
             [
@@ -240,6 +246,8 @@ class TelegramProxyMTProxyCoreTests(unittest.TestCase):
             patch("settings.store.get_tg_proxy_mode", return_value="mtproxy"),
             patch("settings.store.get_tg_proxy_mtproxy_secret", return_value="aabbccddeeff00112233445566778899"),
             patch("settings.store.get_tg_proxy_dc_ip", return_value=["4:149.154.167.220"]),
+            patch("settings.store.get_tg_proxy_pool_size", return_value=6),
+            patch("settings.store.get_tg_proxy_buffer_kb", return_value=512),
             patch("telegram_proxy.config.settings.build_upstream_config", return_value=None),
             patch("telegram_proxy.config.settings.build_cloudflare_config", return_value=None),
         ):
@@ -248,6 +256,8 @@ class TelegramProxyMTProxyCoreTests(unittest.TestCase):
         self.assertEqual(config.mode, "mtproxy")
         self.assertEqual(config.mtproxy_secret, "aabbccddeeff00112233445566778899")
         self.assertEqual(config.dc_endpoint_overrides, {4: "149.154.167.220"})
+        self.assertEqual(config.pool_size, 6)
+        self.assertEqual(config.buffer_kb, 512)
 
     def test_runtime_start_config_creates_secret_for_default_mtproxy(self) -> None:
         from unittest.mock import patch
@@ -262,6 +272,8 @@ class TelegramProxyMTProxyCoreTests(unittest.TestCase):
             patch("settings.store.get_tg_proxy_mode", return_value="mtproxy"),
             patch("settings.store.get_tg_proxy_mtproxy_secret", return_value=""),
             patch("settings.store.get_tg_proxy_dc_ip", return_value=[]),
+            patch("settings.store.get_tg_proxy_pool_size", return_value=4),
+            patch("settings.store.get_tg_proxy_buffer_kb", return_value=256),
             patch("telegram_proxy.config.settings.generate_mtproxy_secret", return_value=generated),
             patch("telegram_proxy.config.settings.set_mtproxy_secret") as save_secret,
             patch("telegram_proxy.config.settings.build_upstream_config", return_value=None),
@@ -272,6 +284,20 @@ class TelegramProxyMTProxyCoreTests(unittest.TestCase):
         self.assertEqual(config.mode, "mtproxy")
         self.assertEqual(config.mtproxy_secret, generated)
         save_secret.assert_called_once_with(generated)
+
+    def test_mtproxy_performance_settings_reach_proxy_pools(self) -> None:
+        from telegram_proxy.wss_proxy import TelegramWSProxy
+
+        proxy = TelegramWSProxy(
+            mode="mtproxy",
+            mtproxy_secret="aabbccddeeff00112233445566778899",
+            pool_size=7,
+            buffer_kb=384,
+        )
+
+        self.assertEqual(proxy._ws_pool._pool_size, 7)
+        self.assertEqual(proxy._cloudflare_worker_pool._pool_size, 7)
+        self.assertEqual(proxy._buffer_size, 384 * 1024)
 
     def test_mtproxy_dc_endpoint_override_changes_tcp_target(self) -> None:
         import inspect

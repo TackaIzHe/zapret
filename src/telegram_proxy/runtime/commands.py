@@ -25,6 +25,8 @@ class TelegramProxyStartConfig:
     cloudflare_config: object | None
     mtproxy_secret: str
     dc_endpoint_overrides: dict[int, str]
+    pool_size: int
+    buffer_kb: int
 
 
 def get_proxy_manager():
@@ -40,12 +42,21 @@ def start_proxy_if_enabled_async() -> bool:
 
 
 def get_start_config() -> TelegramProxyStartConfig:
-    from settings.store import get_tg_proxy_host, get_tg_proxy_mode, get_tg_proxy_mtproxy_secret, get_tg_proxy_port
+    from settings.store import (
+        get_tg_proxy_buffer_kb,
+        get_tg_proxy_host,
+        get_tg_proxy_mode,
+        get_tg_proxy_mtproxy_secret,
+        get_tg_proxy_pool_size,
+        get_tg_proxy_port,
+    )
     from telegram_proxy.config.settings import (
         build_cloudflare_config,
         build_dc_endpoint_overrides,
         build_upstream_config,
         ensure_mtproxy_secret_for_mode,
+        normalize_buffer_kb,
+        normalize_pool_size,
     )
 
     mode = str(get_tg_proxy_mode() or "mtproxy")
@@ -59,6 +70,8 @@ def get_start_config() -> TelegramProxyStartConfig:
         cloudflare_config=build_cloudflare_config(),
         mtproxy_secret=mtproxy_secret,
         dc_endpoint_overrides=build_dc_endpoint_overrides(),
+        pool_size=normalize_pool_size(get_tg_proxy_pool_size()),
+        buffer_kb=normalize_buffer_kb(get_tg_proxy_buffer_kb()),
     )
 
 

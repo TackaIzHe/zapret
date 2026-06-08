@@ -1171,6 +1171,13 @@ class TelegramProxyPage(BasePage):
             return
         self._worker_state("_proxy_start_state", "_proxy_start_runtime").pending = False
         mgr = self._proxy_manager()
+        try:
+            start_config = self._telegram_proxy.get_start_config()
+            pool_size = int(getattr(start_config, "pool_size", 4))
+            buffer_kb = int(getattr(start_config, "buffer_kb", 256))
+        except Exception:
+            pool_size = 4
+            buffer_kb = 256
         start_proxy_runtime(
             page=self,
             manager=mgr,
@@ -1185,6 +1192,8 @@ class TelegramProxyPage(BasePage):
             create_start_worker=self._telegram_proxy.create_start_worker,
             mode=self._local_proxy_mode(),
             mtproxy_secret=self._ensure_mtproxy_secret_if_needed(),
+            pool_size=pool_size,
+            buffer_kb=buffer_kb,
             on_finished=self._on_proxy_start_worker_finished,
         )
 

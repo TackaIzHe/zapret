@@ -44,13 +44,23 @@ def relay_ip_for_domain(domain: str) -> str:
     return WSS_RELAY_IPS.get(domain, WSS_RELAY_IP)
 
 
+def normalize_pool_size(value: object) -> int:
+    try:
+        number = int(value)
+    except Exception:
+        return WS_POOL_SIZE
+    return max(0, min(32, number))
+
+
 class WsPool:
     """Pre-opened WebSocket connection pool."""
 
-    def __init__(self, stats: ProxyStats):
+    def __init__(self, stats: ProxyStats, pool_size: int = WS_POOL_SIZE, buffer_size: int = 256 * 1024):
         self._idle: dict[tuple[int, bool], list[tuple[RawWebSocket, float]]] = {}
         self._refilling: set[tuple[int, bool]] = set()
         self._stats = stats
+        self._pool_size = normalize_pool_size(pool_size)
+        self._buffer_size = int(buffer_size)
 
     async def get(
         self, dc: int, is_media: bool,
@@ -99,11 +109,11 @@ class WsPool:
         dc, is_media = key
         try:
             bucket = self._idle.setdefault(key, [])
-            needed = WS_POOL_SIZE - len(bucket)
+            needed = self._pool_size - len(bucket)
             if needed <= 0:
                 return
             tasks = [
-                asyncio.create_task(self._connect_one(target_ip, domains))
+                asyncio.create_task(self._connect_one(target_ip, domains, self._buffer_size))
                 for _ in range(needed)
             ]
             for task in tasks:
@@ -120,7 +130,7 @@ class WsPool:
 
     @staticmethod
     async def _connect_one(
-        target_ip: str, domains: list[str],
+        target_ip: str, domains: list[str], buffer_size: int = 256 * 1024,
     ) -> Optional[RawWebSocket]:
         sem = get_wss_semaphore()
         async with sem:
@@ -128,7 +138,7 @@ class WsPool:
                 relay_ip = relay_ip_for_domain(domain)
                 try:
                     ws = await RawWebSocket.connect(
-                        relay_ip, domain, WSS_PATH, timeout=8.0,
+                        relay_ip, domain, WSS_PATH, timeout=8.0, buffer_size=buffer_size,
                     )
                     return ws
                 except WsHandshakeError as exc:
@@ -164,10 +174,12 @@ class WsPool:
 class CloudflareWorkerPool:
     """Pre-opened WebSocket connections to user Cloudflare Worker domains."""
 
-    def __init__(self, stats: ProxyStats):
+    def __init__(self, stats: ProxyStats, pool_size: int = WS_POOL_SIZE, buffer_size: int = 256 * 1024):
         self._idle: dict[tuple[int, str, str], list[tuple[RawWebSocket, float]]] = {}
         self._refilling: set[tuple[int, str, str]] = set()
         self._stats = stats
+        self._pool_size = normalize_pool_size(pool_size)
+        self._buffer_size = int(buffer_size)
 
     async def get(self, dc: int, worker_domain: str, fallback_dst: str) -> Optional[RawWebSocket]:
         key = (int(dc), str(worker_domain), str(fallback_dst))
@@ -198,11 +210,11 @@ class CloudflareWorkerPool:
         dc, worker_domain, fallback_dst = key
         try:
             bucket = self._idle.setdefault(key, [])
-            needed = WS_POOL_SIZE - len(bucket)
+            needed = self._pool_size - len(bucket)
             if needed <= 0:
                 return
             tasks = [
-                asyncio.create_task(self._connect_one(dc, worker_domain, fallback_dst))
+                asyncio.create_task(self._connect_one(dc, worker_domain, fallback_dst, self._buffer_size))
                 for _ in range(needed)
             ]
             for task in tasks:
@@ -222,7 +234,9 @@ class CloudflareWorkerPool:
             self._refilling.discard(key)
 
     @staticmethod
-    async def _connect_one(dc: int, worker_domain: str, fallback_dst: str) -> Optional[RawWebSocket]:
+    async def _connect_one(
+        dc: int, worker_domain: str, fallback_dst: str, buffer_size: int = 256 * 1024
+    ) -> Optional[RawWebSocket]:
         path = build_worker_path(fallback_dst, dc)
         sem = get_wss_semaphore()
         async with sem:
@@ -232,6 +246,7 @@ class CloudflareWorkerPool:
                     worker_domain,
                     path=path,
                     timeout=8.0,
+                    buffer_size=buffer_size,
                 )
             except Exception:
                 return None

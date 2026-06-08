@@ -68,7 +68,7 @@ from telegram_proxy.proxy.pool import (
 from telegram_proxy.proxy.relay import RELAY_BUFFER, relay_tcp, relay_wss
 from telegram_proxy.proxy.routing import UpstreamProxyConfig, check_relay_reachable, should_route_upstream
 from telegram_proxy.proxy.stats import ProxyStats
-from telegram_proxy.proxy.transport import RawWebSocket, WsHandshakeError
+from telegram_proxy.proxy.transport import RawWebSocket, WsHandshakeError, apply_socket_options
 
 log = logging.getLogger("tg_proxy")
 
@@ -104,6 +104,8 @@ class TelegramWSProxy:
         cloudflare_config: Optional[CloudflareFallbackConfig] = None,
         mtproxy_secret: str = "",
         dc_endpoint_overrides: Optional[dict[int, str]] = None,
+        pool_size: int = 4,
+        buffer_kb: int = 256,
     ):
         self._port = port
         self._mode = mode
@@ -114,12 +116,18 @@ class TelegramWSProxy:
         self._cloudflare_domain_balancer = CloudflareDomainBalancer()
         self._mtproxy_secret = normalize_secret(mtproxy_secret)
         self._dc_endpoint_overrides = dict(dc_endpoint_overrides or {})
+        self._pool_size = max(0, min(32, int(pool_size or 4)))
+        self._buffer_size = max(4, min(4096, int(buffer_kb or 256))) * 1024
         self._servers: list[asyncio.Server] = []
         self._tasks: set[asyncio.Task] = set()
         self._running = False
         self.stats = ProxyStats()
-        self._ws_pool = _WsPool(self.stats)
-        self._cloudflare_worker_pool = CloudflareWorkerPool(self.stats)
+        self._ws_pool = _WsPool(self.stats, pool_size=self._pool_size, buffer_size=self._buffer_size)
+        self._cloudflare_worker_pool = CloudflareWorkerPool(
+            self.stats,
+            pool_size=self._pool_size,
+            buffer_size=self._buffer_size,
+        )
         # WS blacklist: set of (dc, is_media) where ALL domains returned 302
         self._ws_blacklist: set[tuple[int, bool]] = set()
         # Cooldown for failed DCs: {(dc, is_media): fail_until_timestamp}
@@ -145,8 +153,12 @@ class TelegramWSProxy:
             return
 
         self.stats = ProxyStats()
-        self._ws_pool = _WsPool(self.stats)
-        self._cloudflare_worker_pool = CloudflareWorkerPool(self.stats)
+        self._ws_pool = _WsPool(self.stats, pool_size=self._pool_size, buffer_size=self._buffer_size)
+        self._cloudflare_worker_pool = CloudflareWorkerPool(
+            self.stats,
+            pool_size=self._pool_size,
+            buffer_size=self._buffer_size,
+        )
         # Reset learned routing state from previous session
         self._dc_upstream_required = set()
         self._ws_blacklist = set()
@@ -234,6 +246,7 @@ class TelegramWSProxy:
                         asyncio.open_connection(target_host, target_port),
                         timeout=CONNECT_TIMEOUT,
                     )
+                    apply_socket_options(rw.transport, self._buffer_size)
                 except Exception as exc:
                     log.warning("[%s] passthrough connect failed: %s", label, exc)
                     return
@@ -268,6 +281,7 @@ class TelegramWSProxy:
                         asyncio.open_connection(target_host, target_port),
                         timeout=CONNECT_TIMEOUT,
                     )
+                    apply_socket_options(rw.transport, self._buffer_size)
                 except Exception as exc:
                     self._log(f"[{label}] HTTP TCP failed: {type(exc).__name__}")
                     return
@@ -483,7 +497,11 @@ class TelegramWSProxy:
                 self._log(f"[{label}] DC{dc}{media_tag} -> wss://{domain}{WSS_PATH}")
                 async with sem:
                     ws = await RawWebSocket.connect(
-                        relay_ip, domain, WSS_PATH, timeout=CONNECT_TIMEOUT,
+                        relay_ip,
+                        domain,
+                        WSS_PATH,
+                        timeout=CONNECT_TIMEOUT,
+                        buffer_size=self._buffer_size,
                     )
                 all_redirects = False
                 break
@@ -628,7 +646,13 @@ class TelegramWSProxy:
             try:
                 self._log(f"[{label}] MTProxy DC{dc}{media_tag} -> wss://{domain}{WSS_PATH}")
                 async with sem:
-                    ws = await RawWebSocket.connect(relay_ip, domain, WSS_PATH, timeout=CONNECT_TIMEOUT)
+                    ws = await RawWebSocket.connect(
+                        relay_ip,
+                        domain,
+                        WSS_PATH,
+                        timeout=CONNECT_TIMEOUT,
+                        buffer_size=self._buffer_size,
+                    )
                 all_redirects = False
                 break
             except WsHandshakeError as exc:
@@ -722,6 +746,7 @@ class TelegramWSProxy:
                             worker_domain,
                             path=path,
                             timeout=CONNECT_TIMEOUT,
+                            buffer_size=self._buffer_size,
                         )
                     self.stats.cloudflare_connections += 1
                     self.stats.cloudflare_worker_connections += 1
@@ -762,6 +787,7 @@ class TelegramWSProxy:
                         domain,
                         path=WSS_PATH,
                         timeout=CONNECT_TIMEOUT,
+                        buffer_size=self._buffer_size,
                     )
                     self.stats.cloudflare_connections += 1
                     self._cloudflare_domain_balancer.record_success(dc, domain)
@@ -811,6 +837,7 @@ class TelegramWSProxy:
                 asyncio.open_connection(target_host, target_port),
                 timeout=CONNECT_TIMEOUT,
             )
+            apply_socket_options(rw.transport, self._buffer_size)
         except Exception as exc:
             self.stats.failed_connections += 1
             self._log(f"[{label}] MTProxy TCP fallback failed: {type(exc).__name__}")
@@ -869,6 +896,7 @@ class TelegramWSProxy:
                 asyncio.open_connection(target_host, target_port),
                 timeout=CONNECT_TIMEOUT,
             )
+            apply_socket_options(rw.transport, self._buffer_size)
         except Exception as exc:
             elapsed = time.monotonic() - t_connect
             self.stats.failed_connections += 1
@@ -932,6 +960,7 @@ class TelegramWSProxy:
                 password=self._upstream.password,
                 timeout=CONNECT_TIMEOUT,
             )
+            apply_socket_options(rw.transport, self._buffer_size)
         except Exception as exc:
             elapsed = time.monotonic() - t_connect
             self.stats.failed_connections += 1

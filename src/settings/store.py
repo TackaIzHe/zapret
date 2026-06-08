@@ -992,6 +992,22 @@ def set_tg_proxy_dc_ip(value: object) -> bool:
     return _set_dc_ip_list(("telegram_proxy", "dc_ip"), value)
 
 
+def get_tg_proxy_pool_size() -> int:
+    return _get_int(("telegram_proxy", "pool_size"), 4)
+
+
+def set_tg_proxy_pool_size(value: int) -> bool:
+    return _set_int(("telegram_proxy", "pool_size"), value)
+
+
+def get_tg_proxy_buffer_kb() -> int:
+    return _get_int(("telegram_proxy", "buffer_kb"), 256)
+
+
+def set_tg_proxy_buffer_kb(value: int) -> bool:
+    return _set_int(("telegram_proxy", "buffer_kb"), value)
+
+
 def get_orchestra_strict_detection() -> bool:
     return _get_bool(("orchestra", "settings", "strict_detection"), True)
 
@@ -1299,11 +1315,13 @@ __all__ = [
     "get_tg_proxy_cloudflare_enabled",
     "get_tg_proxy_cloudflare_worker_domains",
     "get_tg_proxy_cloudflare_worker_enabled",
+    "get_tg_proxy_buffer_kb",
     "get_tg_proxy_dc_ip",
     "get_tg_proxy_enabled",
     "get_tg_proxy_host",
     "get_tg_proxy_mode",
     "get_tg_proxy_mtproxy_secret",
+    "get_tg_proxy_pool_size",
     "get_tg_proxy_port",
     "get_tg_proxy_upstream_enabled",
     "get_tg_proxy_upstream_host",
@@ -1390,11 +1408,13 @@ __all__ = [
     "set_tg_proxy_cloudflare_enabled",
     "set_tg_proxy_cloudflare_worker_domains",
     "set_tg_proxy_cloudflare_worker_enabled",
+    "set_tg_proxy_buffer_kb",
     "set_tg_proxy_dc_ip",
     "set_tg_proxy_enabled",
     "set_tg_proxy_host",
     "set_tg_proxy_mode",
     "set_tg_proxy_mtproxy_secret",
+    "set_tg_proxy_pool_size",
     "set_tg_proxy_port",
     "set_tg_proxy_upstream_enabled",
     "set_tg_proxy_upstream_host",

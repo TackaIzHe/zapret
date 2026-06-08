@@ -29,6 +29,22 @@ class WsHandshakeError(Exception):
         return self.status_code in (301, 302, 303, 307, 308)
 
 
+def apply_socket_options(transport, buffer_size: int = 256 * 1024) -> None:
+    sock = transport.get_extra_info("socket") if transport is not None else None
+    if sock is None:
+        return
+    try:
+        sock.setsockopt(_socket.IPPROTO_TCP, _socket.TCP_NODELAY, 1)
+    except (OSError, AttributeError):
+        pass
+    try:
+        size = max(4 * 1024, int(buffer_size))
+        sock.setsockopt(_socket.SOL_SOCKET, _socket.SO_RCVBUF, size)
+        sock.setsockopt(_socket.SOL_SOCKET, _socket.SO_SNDBUF, size)
+    except (OSError, AttributeError, TypeError, ValueError):
+        pass
+
+
 def _xor_mask(data: bytes, mask: bytes) -> bytes:
     """XOR data with a 4-byte WebSocket mask key."""
     if not data:
@@ -53,18 +69,19 @@ class RawWebSocket:
         self._closed = False
 
     @staticmethod
-    async def connect(ip: str, domain: str, path: str = "/apiws", timeout: float = 10.0) -> "RawWebSocket":
+    async def connect(
+        ip: str,
+        domain: str,
+        path: str = "/apiws",
+        timeout: float = 10.0,
+        buffer_size: int = 256 * 1024,
+    ) -> "RawWebSocket":
         reader, writer = await asyncio.wait_for(
             asyncio.open_connection(ip, 443, ssl=_ssl_ctx, server_hostname=domain),
             timeout=min(timeout, 10),
         )
 
-        sock = writer.transport.get_extra_info("socket")
-        if sock is not None:
-            try:
-                sock.setsockopt(_socket.IPPROTO_TCP, _socket.TCP_NODELAY, 1)
-            except (OSError, AttributeError):
-                pass
+        apply_socket_options(writer.transport, buffer_size)
 
         ws_key = base64.b64encode(os.urandom(16)).decode()
         req = (

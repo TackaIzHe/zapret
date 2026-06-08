@@ -95,6 +95,8 @@ def start_proxy_runtime(
     upstream_config=None,
     cloudflare_config=None,
     mtproxy_secret: str = "",
+    pool_size: int = 4,
+    buffer_kb: int = 256,
     on_finished=None,
 ) -> None:
     plan = telegram_proxy_page_runtime.build_start_plan(
@@ -125,6 +127,8 @@ def start_proxy_runtime(
             upstream_config=upstream_config,
             cloudflare_config=cloudflare_config,
             mtproxy_secret=str(mtproxy_secret or ""),
+            pool_size=int(pool_size),
+            buffer_kb=int(buffer_kb),
             parent=page,
         ),
         on_loaded=lambda _request_id, ok: _finish_proxy_start_worker(page, ok),

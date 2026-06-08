@@ -43,6 +43,8 @@ class TelegramProxyStartWorker(QThread):
         cloudflare_config=None,
         mtproxy_secret: str = "",
         dc_endpoint_overrides=None,
+        pool_size: int = 4,
+        buffer_kb: int = 256,
         parent=None,
     ):
         super().__init__(parent)
@@ -57,6 +59,8 @@ class TelegramProxyStartWorker(QThread):
         self._cloudflare_config = cloudflare_config
         self._mtproxy_secret = str(mtproxy_secret or "")
         self._dc_endpoint_overrides = dc_endpoint_overrides
+        self._pool_size = int(pool_size)
+        self._buffer_kb = int(buffer_kb)
 
     def run(self) -> None:
         try:
@@ -77,6 +81,8 @@ class TelegramProxyStartWorker(QThread):
                 cloudflare_config=cloudflare_config,
                 mtproxy_secret=self._mtproxy_secret,
                 dc_endpoint_overrides=dc_endpoint_overrides,
+                pool_size=self._pool_size,
+                buffer_kb=self._buffer_kb,
             )
         except Exception as exc:
             log(f"TelegramProxyStartWorker: ошибка запуска proxy: {exc}", "WARNING")

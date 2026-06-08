@@ -264,6 +264,8 @@ class TelegramProxyWorkerArchitectureTests(unittest.TestCase):
             upstream_config=upstream_config,
             cloudflare_config=cloudflare_config,
             mtproxy_secret=secret,
+            pool_size=4,
+            buffer_kb=256,
             parent=page,
         )
 
@@ -496,6 +498,8 @@ class TelegramProxyWorkerArchitectureTests(unittest.TestCase):
             cloudflare_config=cloudflare_config,
             mtproxy_secret="",
             dc_endpoint_overrides={},
+            pool_size=4,
+            buffer_kb=256,
         )
 
     def test_external_links_are_queued_while_worker_runs(self) -> None:
