@@ -6,6 +6,15 @@ from config.build_info import APP_VERSION, CHANNEL
 
 
 from updater.ui.table_view import apply_server_table_headers
+from ui.accessibility import set_state_text
+
+
+def _label_text(label) -> str:
+    try:
+        value = label.text()
+    except Exception:
+        value = getattr(label, "text", "")
+    return " ".join(str(value or "").strip().split())
 
 
 def apply_servers_page_language(
@@ -69,6 +78,7 @@ def apply_servers_page_language(
             channel=CHANNEL,
         )
     )
+    set_state_text(version_info_label, f"Версия ZapretGUI: {_label_text(version_info_label)}")
 
     telegram_title = tr_fn("page.servers.telegram.title", "Проблемы с обновлением?")
     telegram_info = tr_fn(
