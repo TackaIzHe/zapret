@@ -61,6 +61,37 @@ def refresh_test_combo_items(*, combo, language: str) -> None:
         combo.addItem(label)
         combo.setItemData(combo.count() - 1, test_type)
     combo.setCurrentIndex(max(0, min(current, len(items) - 1)))
+    _update_test_combo_accessibility(combo)
+    _ensure_test_combo_accessibility_signal(combo)
+
+
+def _update_test_combo_accessibility(combo) -> None:
+    selected = _clean_combo_text(combo.currentText())
+    name = "Сценарий диагностики"
+    if selected:
+        name = f"{name}, выбрано: {selected}"
+    set_control_accessibility(
+        combo,
+        name=name,
+        description="Выберите, какие соединения проверить: Discord и YouTube, только Discord или только YouTube.",
+    )
+
+
+def _ensure_test_combo_accessibility_signal(combo) -> None:
+    if bool(getattr(combo, "_diagnostics_test_combo_accessibility_connected", False)):
+        return
+    try:
+        combo.currentIndexChanged.connect(lambda _index: _update_test_combo_accessibility(combo))
+        setattr(combo, "_diagnostics_test_combo_accessibility_connected", True)
+    except Exception:
+        pass
+
+
+def _clean_combo_text(text: object) -> str:
+    value = " ".join(str(text or "").strip().split())
+    for marker in ("🌐", "🎮", "🎬"):
+        value = value.replace(marker, "")
+    return " ".join(value.split())
 
 
 def start_connection_test(

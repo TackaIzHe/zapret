@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import QApplication, QVBoxLayout, QWidget
 from qfluentwidgets import BodyLabel, CaptionLabel, ComboBox, ProgressBar, PushButton
 
 from diagnostics.ui.build import build_connection_controls
-from diagnostics.ui.runtime_helpers import apply_connection_language
+from diagnostics.ui.runtime_helpers import apply_connection_language, refresh_test_combo_items
 
 
 class DiagnosticsControlsAccessibilityTests(unittest.TestCase):
@@ -41,6 +41,21 @@ class DiagnosticsControlsAccessibilityTests(unittest.TestCase):
         self.assertIn("Останавливает текущий тест", widgets.stop_btn.accessibleDescription())
         self.assertEqual(widgets.send_log_btn.accessibleName(), "Подготовить обращение с логами")
         self.assertIn("архив логов", widgets.send_log_btn.accessibleDescription())
+
+    def test_test_combo_name_includes_selected_scenario(self) -> None:
+        combo = ComboBox()
+
+        refresh_test_combo_items(combo=combo, language="ru")
+
+        self.assertEqual(
+            combo.accessibleName(),
+            "Сценарий диагностики, выбрано: Все тесты (Discord + YouTube)",
+        )
+        self.assertIn("Discord и YouTube", combo.accessibleDescription())
+
+        combo.setCurrentIndex(1)
+
+        self.assertEqual(combo.accessibleName(), "Сценарий диагностики, выбрано: Только Discord")
 
     def test_connection_language_refresh_keeps_screen_reader_descriptions(self) -> None:
         parent = QWidget()
