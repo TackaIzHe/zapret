@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -26,6 +27,15 @@ class _Page(ControlPageWindowsFeatureMixin):
 
 
 class ControlDefenderAdminCheckQueueTests(unittest.TestCase):
+    def test_defender_admin_check_uses_shared_latest_worker_state(self) -> None:
+        mixin_source = inspect.getsource(ControlPageWindowsFeatureMixin)
+        ensure_source = inspect.getsource(ControlPageWindowsFeatureMixin._ensure_defender_admin_check_runtime)
+
+        self.assertIn("LatestValueWorkerState", mixin_source)
+        self.assertIn("_defender_admin_check_state_obj", mixin_source)
+        self.assertNotIn("self._defender_admin_check_pending = None", ensure_source)
+        self.assertNotIn("self._defender_admin_check_start_scheduled = False", ensure_source)
+
     def test_defender_admin_check_keeps_latest_pending_request(self) -> None:
         page = _Page()
         page._defender_admin_check_runtime = _Runtime(running=True)

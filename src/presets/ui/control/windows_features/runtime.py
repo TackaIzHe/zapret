@@ -10,6 +10,7 @@ from presets.ui.control.control_page_runtime_shared import (
     run_confirmation_dialog,
     show_action_result_plan,
 )
+from ui.latest_value_worker_state import LatestValueWorkerState
 
 if TYPE_CHECKING:
     from ui.one_shot_worker_runtime import OneShotWorkerRuntime
@@ -55,17 +56,15 @@ class ControlPageWindowsFeatureMixin:
 
             runtime = OneShotWorkerRuntime()
             self._defender_admin_check_runtime = runtime
-            self._defender_admin_check_pending = None
-            self._defender_admin_check_start_scheduled = False
+        self._defender_admin_check_state_obj()
         return runtime
 
     def _request_defender_admin_check(self, disable: bool) -> None:
-        runtime = self._ensure_defender_admin_check_runtime()
-        if runtime.is_running() or bool(self.__dict__.get("_defender_admin_check_start_scheduled", False)):
-            self._defender_admin_check_pending = bool(disable)
-            return
-        self._defender_admin_check_pending = None
-        self._start_defender_admin_check_worker(bool(disable))
+        self._ensure_defender_admin_check_runtime()
+        self._defender_admin_check_state_obj().request_or_start(
+            bool(disable),
+            self._start_defender_admin_check_worker,
+        )
 
     def _start_defender_admin_check_worker(self, disable: bool) -> None:
         runtime = self._ensure_defender_admin_check_runtime()
@@ -88,7 +87,7 @@ class ControlPageWindowsFeatureMixin:
         runtime = self._ensure_defender_admin_check_runtime()
         if not runtime.is_current(request_id, cleanup_in_progress=bool(getattr(self, "_cleanup_in_progress", False))):
             return
-        if self.__dict__.get("_defender_admin_check_pending") is not None:
+        if self._defender_admin_check_state_obj().has_pending():
             return
         self._continue_defender_toggle(bool(disable), is_admin=bool(is_admin))
 
@@ -96,35 +95,40 @@ class ControlPageWindowsFeatureMixin:
         runtime = self._ensure_defender_admin_check_runtime()
         if not runtime.is_current(request_id, cleanup_in_progress=bool(getattr(self, "_cleanup_in_progress", False))):
             return
-        if self.__dict__.get("_defender_admin_check_pending") is not None:
+        if self._defender_admin_check_state_obj().has_pending():
             return
         self._continue_defender_toggle(bool(disable), is_admin=False)
 
     def _on_defender_admin_check_worker_finished(self, _worker) -> None:
-        if not self._is_current_worker_finish(self.__dict__.get("_defender_admin_check_runtime"), _worker):
-            return
-        pending = self.__dict__.get("_defender_admin_check_pending")
-        if pending is not None and not bool(getattr(self, "_cleanup_in_progress", False)):
-            self._schedule_defender_admin_check_worker_start(bool(pending))
+        self._defender_admin_check_state_obj().schedule_pending_after_finish(
+            _worker,
+            is_current_worker_finish=self._is_current_worker_finish,
+            single_shot=self._single_shot_defender_admin_check_start,
+            run_scheduled=self._run_scheduled_defender_admin_check_worker_start,
+            cleanup_in_progress=bool(getattr(self, "_cleanup_in_progress", False)),
+        )
 
     def _schedule_defender_admin_check_worker_start(self, disable: bool) -> None:
         if bool(getattr(self, "_cleanup_in_progress", False)):
             return
-        self._defender_admin_check_pending = bool(disable)
-        if bool(self.__dict__.get("_defender_admin_check_start_scheduled", False)):
-            return
-        self._defender_admin_check_start_scheduled = True
+        state = self._defender_admin_check_state_obj()
+        state.pending = bool(disable)
+        state.schedule_start(
+            self._single_shot_defender_admin_check_start,
+            self._run_scheduled_defender_admin_check_worker_start,
+            cleanup_in_progress=bool(getattr(self, "_cleanup_in_progress", False)),
+        )
+
+    def _single_shot_defender_admin_check_start(self, delay_ms: int, callback) -> None:
         try:
-            QTimer.singleShot(0, self._run_scheduled_defender_admin_check_worker_start)
+            QTimer.singleShot(delay_ms, callback)
         except Exception:
-            self._run_scheduled_defender_admin_check_worker_start()
+            callback()
 
     def _run_scheduled_defender_admin_check_worker_start(self) -> None:
-        self._defender_admin_check_start_scheduled = False
-        if bool(getattr(self, "_cleanup_in_progress", False)):
-            return
-        pending = self.__dict__.get("_defender_admin_check_pending")
-        self._defender_admin_check_pending = None
+        pending = self._defender_admin_check_state_obj().take_pending_for_scheduled_start(
+            cleanup_in_progress=bool(getattr(self, "_cleanup_in_progress", False))
+        )
         if pending is None:
             return
         self._start_defender_admin_check_worker(bool(pending))
@@ -159,12 +163,44 @@ class ControlPageWindowsFeatureMixin:
         self._request_program_settings_save("defender_disabled", bool(disable))
 
     def _stop_defender_admin_check_worker(self) -> None:
-        self._defender_admin_check_pending = None
-        self._defender_admin_check_start_scheduled = False
+        self._defender_admin_check_state_obj().reset()
         runtime = self.__dict__.get("_defender_admin_check_runtime")
         if runtime is not None:
             runtime.stop(blocking=False, warning_prefix="Defender admin check worker")
             runtime.cancel()
+
+    def _defender_admin_check_state_obj(self) -> LatestValueWorkerState:
+        state = self.__dict__.get("_defender_admin_check_state")
+        runtime = self.__dict__.get("_defender_admin_check_runtime")
+        if state is None:
+            pending = self.__dict__.pop("_defender_admin_check_pending", None)
+            start_scheduled = bool(self.__dict__.pop("_defender_admin_check_start_scheduled", False))
+            state = LatestValueWorkerState(
+                runtime,
+                empty_value=None,
+                pending=pending,
+                start_scheduled=start_scheduled,
+            )
+            self.__dict__["_defender_admin_check_state"] = state
+        elif getattr(state, "runtime", None) is None and runtime is not None:
+            state.runtime = runtime
+        return state
+
+    @property
+    def _defender_admin_check_pending(self):
+        return self._defender_admin_check_state_obj().pending
+
+    @_defender_admin_check_pending.setter
+    def _defender_admin_check_pending(self, value) -> None:
+        self._defender_admin_check_state_obj().pending = value
+
+    @property
+    def _defender_admin_check_start_scheduled(self) -> bool:
+        return bool(self._defender_admin_check_state_obj().start_scheduled)
+
+    @_defender_admin_check_start_scheduled.setter
+    def _defender_admin_check_start_scheduled(self, value: bool) -> None:
+        self._defender_admin_check_state_obj().start_scheduled = bool(value)
 
     def _is_current_worker_finish(self, runtime, worker) -> bool:
         if self.__dict__.get("_cleanup_in_progress", False):
