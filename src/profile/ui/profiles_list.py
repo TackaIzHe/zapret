@@ -69,6 +69,7 @@ class ProfilesList(QWidget):
         self._view_state_runtime = OneShotWorkerRuntime()
         self._view_state_runtime_worker = None
         self._view_state_rebuild_pending = False
+        self._view_state_group_expanded: dict[str, bool] | None = None
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -132,6 +133,7 @@ class ProfilesList(QWidget):
     def apply_view_state(self, view_state) -> None:
         self._active_profile_types = set(getattr(view_state, "active_profile_types", None) or {"all"})
         self._search_query = str(getattr(view_state, "search_query", "") or "")
+        self._view_state_group_expanded = dict(getattr(view_state, "group_expanded", None) or {})
         try:
             self._profile_type_selector.set_active_profile_types(self._active_profile_types)
         except Exception:
@@ -155,12 +157,10 @@ class ProfilesList(QWidget):
         self._model.set_profiles(())
 
     def expand_all(self) -> None:
-        for group_key in self._model.set_all_groups_expanded(True):
-            self.folder_toggled.emit(group_key, True)
+        self._request_all_groups_expanded(True)
 
     def collapse_all(self) -> None:
-        for group_key in self._model.set_all_groups_expanded(False):
-            self.folder_toggled.emit(group_key, False)
+        self._request_all_groups_expanded(False)
 
     def profile_item_for_key(self, profile_key: str):
         return self._model.profile_item_for_key(profile_key)
@@ -239,7 +239,9 @@ class ProfilesList(QWidget):
         if not group_key:
             return
         next_expanded = not self._model.is_group_expanded(group_key)
-        self._model.set_group_expanded(group_key, next_expanded)
+        group_expanded = self._current_group_expanded()
+        group_expanded[group_key] = next_expanded
+        self._request_view_state_rebuild(group_expanded=group_expanded)
         self.folder_toggled.emit(group_key, next_expanded)
 
     def _apply_profile_type_filter(self, active_profile_types: set[str]) -> None:
@@ -249,7 +251,43 @@ class ProfilesList(QWidget):
         self._active_profile_types = active
         self._request_view_state_rebuild()
 
-    def _request_view_state_rebuild(self) -> None:
+    def _request_all_groups_expanded(self, expanded: bool) -> None:
+        group_expanded = self._current_group_expanded()
+        expanded_value = bool(expanded)
+        changed_keys = tuple(
+            group_key
+            for group_key, current in group_expanded.items()
+            if bool(current) != expanded_value
+        )
+        if not changed_keys:
+            return
+        for group_key in changed_keys:
+            group_expanded[group_key] = expanded_value
+        self._request_view_state_rebuild(group_expanded=group_expanded)
+        for group_key in changed_keys:
+            self.folder_toggled.emit(group_key, expanded_value)
+
+    def _current_group_expanded(self) -> dict[str, bool]:
+        pending = self.__dict__.get("_view_state_group_expanded")
+        if isinstance(pending, dict):
+            return {
+                str(group_key): bool(expanded)
+                for group_key, expanded in pending.items()
+                if str(group_key)
+            }
+        try:
+            options = self._model.view_state_options()
+        except Exception:
+            options = {}
+        return {
+            str(group_key): bool(expanded)
+            for group_key, expanded in dict(options.get("group_expanded") or {}).items()
+            if str(group_key)
+        }
+
+    def _request_view_state_rebuild(self, *, group_expanded: dict[str, bool] | None = None) -> None:
+        if group_expanded is not None:
+            self._view_state_group_expanded = dict(group_expanded)
         runtime = self.__dict__.get("_view_state_runtime")
         if runtime is None:
             runtime = OneShotWorkerRuntime()
@@ -266,7 +304,11 @@ class ProfilesList(QWidget):
             self._view_state_runtime = runtime
         options = self._model.view_state_options()
         items = tuple(options.get("items") or ())
-        group_expanded = dict(options.get("group_expanded") or {})
+        group_expanded = dict(
+            self.__dict__.get("_view_state_group_expanded")
+            or options.get("group_expanded")
+            or {}
+        )
         active_profile_types = set(self._active_profile_types or {"all"})
         search_query = str(self._search_query or "")
 

@@ -657,6 +657,39 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         profiles_list._profile_type_selector.set_active_profile_types.assert_called_once_with({"tcp"})
         profiles_list._model.apply_view_state.assert_called_once_with(state)
 
+    def test_profile_list_folder_toggle_requests_worker_view_state_rebuild(self) -> None:
+        profiles_list = ProfilesList.__new__(ProfilesList)
+        profiles_list._model = SimpleNamespace(
+            is_group_expanded=Mock(return_value=True),
+            set_group_expanded=Mock(side_effect=AssertionError("folder rows must be built in worker")),
+            view_state_options=Mock(return_value={"group_expanded": {"video": True}}),
+        )
+        profiles_list._request_view_state_rebuild = Mock()
+        profiles_list.folder_toggled = SimpleNamespace(emit=Mock())
+
+        ProfilesList._on_delegate_action(profiles_list, "toggle_folder", "video")
+
+        profiles_list._model.set_group_expanded.assert_not_called()
+        profiles_list._request_view_state_rebuild.assert_called_once_with(group_expanded={"video": False})
+        profiles_list.folder_toggled.emit.assert_called_once_with("video", False)
+
+    def test_profile_list_expand_all_requests_worker_view_state_rebuild(self) -> None:
+        profiles_list = ProfilesList.__new__(ProfilesList)
+        profiles_list._model = SimpleNamespace(
+            set_all_groups_expanded=Mock(side_effect=AssertionError("expand all rows must be built in worker")),
+            view_state_options=Mock(return_value={"group_expanded": {"video": False, "voice": True}}),
+        )
+        profiles_list._request_view_state_rebuild = Mock()
+        profiles_list.folder_toggled = SimpleNamespace(emit=Mock())
+
+        ProfilesList.expand_all(profiles_list)
+
+        profiles_list._model.set_all_groups_expanded.assert_not_called()
+        profiles_list._request_view_state_rebuild.assert_called_once_with(
+            group_expanded={"video": True, "voice": True}
+        )
+        profiles_list.folder_toggled.emit.assert_called_once_with("video", True)
+
     def test_profile_list_reserves_space_for_visible_fluent_scrollbar(self) -> None:
         list_source = inspect.getsource(ProfilesList._build_ui)
 
