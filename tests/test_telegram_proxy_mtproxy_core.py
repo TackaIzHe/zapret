@@ -122,7 +122,7 @@ class TelegramProxyMTProxyCoreTests(unittest.TestCase):
         self.assertEqual(normalize_secret("bad"), "")
         self.assertEqual(
             build_mtproxy_link("127.0.0.1", 1443, "aabbccddeeff00112233445566778899"),
-            "tg://proxy?server=127.0.0.1&port=1443&secret=aabbccddeeff00112233445566778899",
+            "tg://proxy?server=127.0.0.1&port=1443&secret=ddaabbccddeeff00112233445566778899",
         )
         self.assertEqual(
             build_mtproxy_link(
@@ -515,7 +515,7 @@ class TelegramProxyMTProxyCoreTests(unittest.TestCase):
         )
         self.assertEqual(
             build_proxy_url("127.0.0.1", 1443, mode="mtproxy", mtproxy_secret=secret),
-            "tg://proxy?server=127.0.0.1&port=1443&secret=aabbccddeeff00112233445566778899",
+            "tg://proxy?server=127.0.0.1&port=1443&secret=ddaabbccddeeff00112233445566778899",
         )
         self.assertEqual(
             build_manual_instruction_text("127.0.0.1", 1443, mode="mtproxy"),

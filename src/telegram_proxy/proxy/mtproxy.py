@@ -159,7 +159,7 @@ def generate_secret() -> str:
 
 def build_mtproxy_link(host: str, port: int, secret: str, *, fake_tls_domain: str = "") -> str:
     normalized_secret = normalize_secret(secret)
-    link_secret = build_fake_tls_secret(normalized_secret, fake_tls_domain) if fake_tls_domain else normalized_secret
+    link_secret = build_fake_tls_secret(normalized_secret, fake_tls_domain) if fake_tls_domain else f"dd{normalized_secret}"
     query = urlencode(
         {
             "server": str(host or "127.0.0.1").strip() or "127.0.0.1",
