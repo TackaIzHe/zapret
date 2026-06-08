@@ -14,6 +14,8 @@ from qfluentwidgets import (
     TitleLabel,
 )
 
+from ui.accessibility import set_control_accessibility
+
 
 @dataclass(slots=True)
 class ServersHeaderWidgets:
@@ -65,6 +67,14 @@ def build_servers_header_widgets(*, tr_fn, parent, on_about_clicked) -> ServersH
 
 def build_servers_table_widget(*, tr_fn):
     table = TableWidget()
+    set_control_accessibility(
+        table,
+        name=tr_fn("page.servers.table.accessible_name", "Серверы обновлений"),
+        description=tr_fn(
+            "page.servers.table.accessible_description",
+            "Показывает сервер, статус и версии обновлений. Перемещайтесь по строкам стрелками.",
+        ),
+    )
     table.setColumnCount(4)
     table.setRowCount(0)
     table.setBorderVisible(True)

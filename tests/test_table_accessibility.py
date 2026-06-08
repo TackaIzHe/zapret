@@ -71,6 +71,14 @@ class TableAccessibilityTests(unittest.TestCase):
         self.assertIn("Сервер server-1", text)
         self.assertIn("статус Онлайн", text)
 
+    def test_updater_servers_table_has_screen_reader_name(self) -> None:
+        from updater.ui.main_build import build_servers_table_widget
+
+        table = build_servers_table_widget(tr_fn=lambda _key, default: default)
+
+        self.assertEqual(table.accessibleName(), "Серверы обновлений")
+        self.assertIn("статус и версии", table.accessibleDescription())
+
     def test_blockcheck_tcp_result_row_has_screen_reader_text(self) -> None:
         from blockcheck.models import SingleTestResult, TargetResult, TestStatus, TestType
         from blockcheck.ui.page_results_workflow import update_tcp_result_table
