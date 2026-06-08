@@ -42,7 +42,7 @@ def default_state() -> TelegramProxySettingsState:
     return TelegramProxySettingsState(
         host=DEFAULT_HOST,
         port=DEFAULT_PORT,
-        mode="socks5",
+        mode="mtproxy",
         upstream_enabled=False,
         upstream_host="",
         upstream_port=DEFAULT_UPSTREAM_PORT,
@@ -95,9 +95,9 @@ def normalize_upstream_port(port: int | None) -> int:
 
 def normalize_proxy_mode(mode: object) -> str:
     text = str(mode or "").strip().lower()
-    if text == "mtproxy":
-        return "mtproxy"
-    return "socks5"
+    if text == "socks5":
+        return "socks5"
+    return "mtproxy"
 
 def build_manual_instruction_text(host: str, port: int, *, mode: object = "socks5") -> str:
     proxy_type = "MTProxy" if normalize_proxy_mode(mode) == "mtproxy" else "SOCKS5"
@@ -210,6 +210,19 @@ def set_mtproxy_secret(secret: str) -> str:
     except Exception:
         pass
     return normalized
+
+
+def ensure_mtproxy_secret_for_mode(mode: object, secret: object) -> str:
+    if normalize_proxy_mode(mode) != "mtproxy":
+        return ""
+
+    normalized = normalize_secret(secret)
+    if normalized:
+        return normalized
+
+    generated = generate_mtproxy_secret()
+    set_mtproxy_secret(generated)
+    return generated
 
 
 def set_dc_ip(value: object) -> tuple[str, ...]:

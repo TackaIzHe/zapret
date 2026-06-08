@@ -41,15 +41,23 @@ def start_proxy_if_enabled_async() -> bool:
 
 def get_start_config() -> TelegramProxyStartConfig:
     from settings.store import get_tg_proxy_host, get_tg_proxy_mode, get_tg_proxy_mtproxy_secret, get_tg_proxy_port
-    from telegram_proxy.config.settings import build_cloudflare_config, build_dc_endpoint_overrides, build_upstream_config
+    from telegram_proxy.config.settings import (
+        build_cloudflare_config,
+        build_dc_endpoint_overrides,
+        build_upstream_config,
+        ensure_mtproxy_secret_for_mode,
+    )
+
+    mode = str(get_tg_proxy_mode() or "mtproxy")
+    mtproxy_secret = ensure_mtproxy_secret_for_mode(mode, get_tg_proxy_mtproxy_secret())
 
     return TelegramProxyStartConfig(
         host=str(get_tg_proxy_host() or "127.0.0.1"),
         port=int(get_tg_proxy_port() or 1353),
-        mode=str(get_tg_proxy_mode() or "socks5"),
+        mode=mode,
         upstream_config=build_upstream_config(),
         cloudflare_config=build_cloudflare_config(),
-        mtproxy_secret=str(get_tg_proxy_mtproxy_secret() or ""),
+        mtproxy_secret=mtproxy_secret,
         dc_endpoint_overrides=build_dc_endpoint_overrides(),
     )
 

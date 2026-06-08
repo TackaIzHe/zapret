@@ -190,7 +190,15 @@ def start_proxy_if_enabled_async() -> bool:
         port = get_tg_proxy_port()
         host = get_tg_proxy_host()
         mode = get_tg_proxy_mode()
-        mtproxy_secret = get_tg_proxy_mtproxy_secret()
+        try:
+            import telegram_proxy.config.settings as telegram_proxy_settings
+
+            mtproxy_secret = telegram_proxy_settings.ensure_mtproxy_secret_for_mode(
+                mode,
+                get_tg_proxy_mtproxy_secret(),
+            )
+        except Exception:
+            mtproxy_secret = get_tg_proxy_mtproxy_secret()
         upstream_config = build_upstream_proxy_config_from_settings()
         cloudflare_config = build_cloudflare_proxy_config_from_settings()
         dc_endpoint_overrides = build_dc_endpoint_overrides_from_settings()

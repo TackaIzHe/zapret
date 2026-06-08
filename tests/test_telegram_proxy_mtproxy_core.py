@@ -42,6 +42,9 @@ class TelegramProxyMTProxyCoreTests(unittest.TestCase):
         self.assertIn("mtproxy", VALID_TG_PROXY_MODES)
         self.assertIn("mtproxy_secret", defaults)
         self.assertIn("dc_ip", defaults)
+        self.assertEqual(defaults["mode"], "mtproxy")
+        self.assertEqual(normalize_telegram_proxy({})["mode"], "mtproxy")
+        self.assertEqual(default_state().mode, "mtproxy")
         self.assertEqual(default_state().mtproxy_secret, "")
 
         normalized = normalize_telegram_proxy(
@@ -245,6 +248,30 @@ class TelegramProxyMTProxyCoreTests(unittest.TestCase):
         self.assertEqual(config.mode, "mtproxy")
         self.assertEqual(config.mtproxy_secret, "aabbccddeeff00112233445566778899")
         self.assertEqual(config.dc_endpoint_overrides, {4: "149.154.167.220"})
+
+    def test_runtime_start_config_creates_secret_for_default_mtproxy(self) -> None:
+        from unittest.mock import patch
+
+        import telegram_proxy.runtime.commands as commands
+
+        generated = "00112233445566778899aabbccddeeff"
+
+        with (
+            patch("settings.store.get_tg_proxy_host", return_value="127.0.0.1"),
+            patch("settings.store.get_tg_proxy_port", return_value=1353),
+            patch("settings.store.get_tg_proxy_mode", return_value="mtproxy"),
+            patch("settings.store.get_tg_proxy_mtproxy_secret", return_value=""),
+            patch("settings.store.get_tg_proxy_dc_ip", return_value=[]),
+            patch("telegram_proxy.config.settings.generate_mtproxy_secret", return_value=generated),
+            patch("telegram_proxy.config.settings.set_mtproxy_secret") as save_secret,
+            patch("telegram_proxy.config.settings.build_upstream_config", return_value=None),
+            patch("telegram_proxy.config.settings.build_cloudflare_config", return_value=None),
+        ):
+            config = commands.get_start_config()
+
+        self.assertEqual(config.mode, "mtproxy")
+        self.assertEqual(config.mtproxy_secret, generated)
+        save_secret.assert_called_once_with(generated)
 
     def test_mtproxy_dc_endpoint_override_changes_tcp_target(self) -> None:
         import inspect
