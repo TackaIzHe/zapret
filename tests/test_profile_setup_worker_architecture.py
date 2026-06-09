@@ -352,6 +352,27 @@ class ProfileSetupWorkerArchitectureTests(unittest.TestCase):
         self.assertNotIn("self._pending_enabled_save", init_source)
         self.assertNotIn("self._enabled_save_start_scheduled = False", init_source)
 
+    def test_strategy_feedback_save_queue_uses_shared_latest_worker_state(self) -> None:
+        from profile.ui.profile_setup_page import ProfileSetupPageBase
+        from ui.latest_value_worker_state import LatestValueWorkerState
+
+        page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        page._strategy_feedback_save_runtime = SimpleNamespace(is_running=Mock(return_value=False))
+
+        init_source = inspect.getsource(ProfileSetupPageBase.__init__)
+        request_source = inspect.getsource(ProfileSetupPageBase._request_strategy_feedback_save)
+        finished_source = inspect.getsource(ProfileSetupPageBase._on_strategy_feedback_save_worker_finished)
+        cleanup_source = inspect.getsource(ProfileSetupPageBase.cleanup)
+
+        self.assertTrue(hasattr(ProfileSetupPageBase, "_strategy_feedback_save_state_obj"))
+        self.assertIsInstance(page._strategy_feedback_save_state_obj(), LatestValueWorkerState)
+        self.assertIn("_strategy_feedback_save_state = LatestValueWorkerState", init_source)
+        self.assertIn("_strategy_feedback_save_state_obj()", request_source)
+        self.assertIn("_strategy_feedback_save_state_obj()", finished_source)
+        self.assertIn("_strategy_feedback_save_state_obj().reset()", cleanup_source)
+        self.assertNotIn("self._pending_strategy_feedback_save", init_source)
+        self.assertNotIn("self._strategy_feedback_save_start_scheduled = False", init_source)
+
     def test_context_action_worker_receives_action_functions(self) -> None:
         from profile.profile_setup_loader import ProfilePresetProfileActionWorker
 

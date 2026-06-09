@@ -1079,8 +1079,10 @@ class ProfileSetupPageBase(BasePage):
         self._strategy_feedback_save_runtime = OneShotWorkerRuntime()
         self._strategy_feedback_save_request_id = 0
         self._strategy_feedback_save_runtime_worker = None
-        self._pending_strategy_feedback_save = None
-        self._strategy_feedback_save_start_scheduled = False
+        self._strategy_feedback_save_state = LatestValueWorkerState(
+            self._strategy_feedback_save_runtime,
+            empty_value=None,
+        )
         self._payload = None
         self._profile_setup_payload_apply_scheduled = False
         self._pending_profile_setup_payload_apply = None
@@ -4135,20 +4137,21 @@ class ProfileSetupPageBase(BasePage):
 
     def _request_strategy_feedback_save(self, request: dict) -> None:
         runtime = self._worker_runtime("_strategy_feedback_save_runtime")
-        if runtime.is_running() or self.__dict__.get("_strategy_feedback_save_start_scheduled", False):
+        if self._strategy_feedback_save_state_obj().is_busy():
             self._merge_pending_strategy_feedback_save(request)
             return
         self._start_strategy_feedback_save_worker(request)
 
     def _merge_pending_strategy_feedback_save(self, request: dict) -> None:
-        pending = dict(self.__dict__.get("_pending_strategy_feedback_save") or {})
+        state = self._strategy_feedback_save_state_obj()
+        pending = dict(state.pending or {})
         next_request = dict(request or {})
         for key in ("rating", "favorite"):
             if key in next_request and next_request.get(key) is not None:
                 pending[key] = next_request.get(key)
             elif key not in pending:
                 pending[key] = next_request.get(key)
-        self._pending_strategy_feedback_save = pending
+        state.pending = pending
 
     def _start_strategy_feedback_save_worker(self, request: dict) -> None:
         if not self._profile_key:
@@ -4185,7 +4188,7 @@ class ProfileSetupPageBase(BasePage):
     ) -> None:
         if request_id != int(getattr(self, "_strategy_feedback_save_request_id", 0) or 0):
             return
-        if self.__dict__.get("_pending_strategy_feedback_save"):
+        if self._strategy_feedback_save_state_obj().has_pending():
             return
         if str(profile_key or "").strip() != str(self._profile_key or "").strip():
             return
@@ -4211,7 +4214,7 @@ class ProfileSetupPageBase(BasePage):
     def _on_strategy_feedback_save_failed(self, request_id: int, error: str) -> None:
         if request_id != int(getattr(self, "_strategy_feedback_save_request_id", 0) or 0):
             return
-        if self.__dict__.get("_pending_strategy_feedback_save"):
+        if self._strategy_feedback_save_state_obj().has_pending():
             return
         log(f"{self.__class__.__name__}: не удалось обновить оценку стратегии: {error}", "ERROR")
         self.reload_current_profile()
@@ -4219,28 +4222,60 @@ class ProfileSetupPageBase(BasePage):
     def _on_strategy_feedback_save_worker_finished(self, worker) -> None:
         if not self._accept_current_profile_setup_worker_finished("_strategy_feedback_save_runtime_worker", worker):
             return
-        pending = self.__dict__.get("_pending_strategy_feedback_save")
-        if pending:
+        if self._strategy_feedback_save_state_obj().has_pending():
             self._schedule_strategy_feedback_save_worker_start()
 
     def _schedule_strategy_feedback_save_worker_start(self) -> None:
-        if self.__dict__.get("_strategy_feedback_save_start_scheduled", False):
-            return
-        self._strategy_feedback_save_start_scheduled = True
-        try:
-            QTimer.singleShot(0, self._run_scheduled_strategy_feedback_save_worker_start)
-        except Exception:
-            self._run_scheduled_strategy_feedback_save_worker_start()
+        state = self._strategy_feedback_save_state_obj()
+
+        def _single_shot(delay: int, callback) -> None:
+            try:
+                QTimer.singleShot(delay, callback)
+            except Exception:
+                callback()
+
+        state.schedule_start(_single_shot, self._run_scheduled_strategy_feedback_save_worker_start)
 
     def _run_scheduled_strategy_feedback_save_worker_start(self) -> None:
-        self._strategy_feedback_save_start_scheduled = False
-        request = self.__dict__.get("_pending_strategy_feedback_save")
-        self._pending_strategy_feedback_save = None
-        if self.__dict__.get("_cleanup_in_progress", False):
-            return
+        request = self._strategy_feedback_save_state_obj().take_pending_for_scheduled_start(
+            cleanup_in_progress=self.__dict__.get("_cleanup_in_progress", False),
+        )
         if not request:
             return
         self._start_strategy_feedback_save_worker(dict(request or {}))
+
+    def _strategy_feedback_save_state_obj(self) -> LatestValueWorkerState:
+        state = self.__dict__.get("_strategy_feedback_save_state")
+        runtime = self.__dict__.get("_strategy_feedback_save_runtime")
+        if state is None:
+            pending = self.__dict__.pop("_pending_strategy_feedback_save", None)
+            start_scheduled = bool(self.__dict__.pop("_strategy_feedback_save_start_scheduled", False))
+            state = LatestValueWorkerState(
+                runtime,
+                empty_value=None,
+                pending=pending,
+                start_scheduled=start_scheduled,
+            )
+            self.__dict__["_strategy_feedback_save_state"] = state
+        elif getattr(state, "runtime", None) is None and runtime is not None:
+            state.runtime = runtime
+        return state
+
+    @property
+    def _pending_strategy_feedback_save(self):
+        return self._strategy_feedback_save_state_obj().pending
+
+    @_pending_strategy_feedback_save.setter
+    def _pending_strategy_feedback_save(self, value) -> None:
+        self._strategy_feedback_save_state_obj().pending = value
+
+    @property
+    def _strategy_feedback_save_start_scheduled(self) -> bool:
+        return bool(self._strategy_feedback_save_state_obj().start_scheduled)
+
+    @_strategy_feedback_save_start_scheduled.setter
+    def _strategy_feedback_save_start_scheduled(self, value: bool) -> None:
+        self._strategy_feedback_save_state_obj().start_scheduled = bool(value)
 
     def cleanup(self) -> None:
         self._cleanup_in_progress = True
@@ -4280,7 +4315,7 @@ class ProfileSetupPageBase(BasePage):
         self._settings_save_state_obj().reset()
         self._raw_profile_save_state_obj().reset()
         self._enabled_save_state_obj().reset()
-        self._strategy_feedback_save_start_scheduled = False
+        self._strategy_feedback_save_state_obj().reset()
         self._profile_setup_payload_apply_scheduled = False
         self._profile_setup_write_operation_start_scheduled = False
         self._user_profile_write_operation_start_scheduled = False
