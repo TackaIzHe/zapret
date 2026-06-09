@@ -37,6 +37,28 @@ class AppearancePerformanceWidgets:
     editor_smooth_scroll_switch: object
 
 
+def update_holiday_checkbox_accessibility(checkbox, *, title: str) -> None:
+    if checkbox is None:
+        return
+    title_text = str(title or "").strip() or "Праздничный эффект"
+    if not checkbox.isEnabled():
+        state = "недоступно без Premium"
+    elif checkbox.isChecked():
+        state = "включено"
+    else:
+        state = "выключено"
+    text = f"{title_text}, {state}"
+    set_state_text(checkbox, text)
+    set_control_accessibility(
+        checkbox,
+        name=text,
+        description=(
+            f"{title_text}. Переключатель праздничного эффекта оформления. "
+            "Доступно только для подписчиков Premium."
+        ),
+    )
+
+
 def build_holiday_sections(
     *,
     page,
@@ -75,9 +97,12 @@ def build_holiday_sections(
     garland_icon.setPixmap(get_icon_pixmap('fa5s.holly-berry', 20))
     garland_row.addWidget(garland_icon)
 
-    garland_label = body_label_cls(
-        tr_catalog("page.appearance.holiday.garland.title", language=tr_language, default="Новогодняя гирлянда")
+    garland_title_text = tr_catalog(
+        "page.appearance.holiday.garland.title",
+        language=tr_language,
+        default="Новогодняя гирлянда",
     )
+    garland_label = body_label_cls(garland_title_text)
     garland_row.addWidget(garland_label)
     garland_row.addWidget(build_premium_badge(tr_catalog("common.badge.premium", language=tr_language, default="⭐ Premium")))
     garland_row.addStretch()
@@ -85,6 +110,13 @@ def build_holiday_sections(
     garland_checkbox = checkbox_cls()
     garland_checkbox.setEnabled(False)
     garland_checkbox.setObjectName("garlandSwitch")
+    update_holiday_checkbox_accessibility(garland_checkbox, title=garland_title_text)
+    garland_checkbox.stateChanged.connect(
+        lambda _state, checkbox=garland_checkbox, title=garland_title_text: update_holiday_checkbox_accessibility(
+            checkbox,
+            title=title,
+        )
+    )
     garland_checkbox.stateChanged.connect(on_garland_changed)
     garland_row.addWidget(garland_checkbox)
 
@@ -113,9 +145,12 @@ def build_holiday_sections(
     snowflakes_icon.setPixmap(get_icon_pixmap('fa5s.snowflake', 20))
     snowflakes_row.addWidget(snowflakes_icon)
 
-    snowflakes_label = body_label_cls(
-        tr_catalog("page.appearance.holiday.snowflakes.title", language=tr_language, default="Снежинки")
+    snowflakes_title_text = tr_catalog(
+        "page.appearance.holiday.snowflakes.title",
+        language=tr_language,
+        default="Снежинки",
     )
+    snowflakes_label = body_label_cls(snowflakes_title_text)
     snowflakes_row.addWidget(snowflakes_label)
     snowflakes_row.addWidget(build_premium_badge(tr_catalog("common.badge.premium", language=tr_language, default="⭐ Premium")))
     snowflakes_row.addStretch()
@@ -123,6 +158,13 @@ def build_holiday_sections(
     snowflakes_checkbox = checkbox_cls()
     snowflakes_checkbox.setEnabled(False)
     snowflakes_checkbox.setObjectName("snowflakesSwitch")
+    update_holiday_checkbox_accessibility(snowflakes_checkbox, title=snowflakes_title_text)
+    snowflakes_checkbox.stateChanged.connect(
+        lambda _state, checkbox=snowflakes_checkbox, title=snowflakes_title_text: update_holiday_checkbox_accessibility(
+            checkbox,
+            title=title,
+        )
+    )
     snowflakes_checkbox.stateChanged.connect(on_snowflakes_changed)
     snowflakes_row.addWidget(snowflakes_checkbox)
 

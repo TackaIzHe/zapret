@@ -7,10 +7,10 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtWidgets import QApplication, QWidget
 from PyQt6.QtGui import QPixmap
-from qfluentwidgets import BodyLabel, CaptionLabel, ComboBox, RadioButton, SegmentedWidget, Slider
+from qfluentwidgets import BodyLabel, CaptionLabel, CheckBox, ComboBox, RadioButton, SegmentedWidget, Slider
 
 from ui.fluent_widgets import SettingsCard
-from ui.pages.appearance_page_lower_build import build_opacity_section
+from ui.pages.appearance_page_lower_build import build_holiday_sections, build_opacity_section
 from ui.pages.appearance_page_top_build import (
     build_background_section,
     build_display_mode_section,
@@ -140,6 +140,73 @@ class AppearanceAccessibilityTests(unittest.TestCase):
             widgets.opacity_slider.property("screenReaderStateText"),
             "Прозрачность окна, значение: 85%",
         )
+
+    def test_holiday_switches_read_premium_limit_and_state(self) -> None:
+        class _Page:
+            content = QWidget()
+
+            def __init__(self) -> None:
+                self.widgets = []
+
+            def add_section_title(self, **_kwargs) -> None:
+                pass
+
+            def add_widget(self, widget) -> None:
+                self.widgets.append(widget)
+
+            def add_spacing(self, _value: int) -> None:
+                pass
+
+        page = _Page()
+        widgets = build_holiday_sections(
+            page=page,
+            tr_language="ru",
+            settings_card_cls=SettingsCard,
+            caption_label_cls=CaptionLabel,
+            body_label_cls=BodyLabel,
+            checkbox_cls=CheckBox,
+            get_icon_pixmap=lambda *_args: QPixmap(20, 20),
+            on_garland_changed=lambda _state: None,
+            on_snowflakes_changed=lambda _state: None,
+        )
+
+        self.assertEqual(widgets.garland_checkbox.accessibleName(), "Новогодняя гирлянда, недоступно без Premium")
+        self.assertIn("Premium", widgets.garland_checkbox.accessibleDescription())
+        self.assertEqual(widgets.snowflakes_checkbox.accessibleName(), "Снежинки, недоступно без Premium")
+
+        widgets.garland_checkbox.setEnabled(True)
+        widgets.garland_checkbox.setChecked(True)
+        widgets.snowflakes_checkbox.setEnabled(True)
+        widgets.snowflakes_checkbox.setChecked(True)
+        widgets.snowflakes_checkbox.setChecked(False)
+
+        self.assertEqual(widgets.garland_checkbox.accessibleName(), "Новогодняя гирлянда, включено")
+        self.assertEqual(
+            widgets.garland_checkbox.property("screenReaderStateText"),
+            "Новогодняя гирлянда, включено",
+        )
+        self.assertEqual(widgets.snowflakes_checkbox.accessibleName(), "Снежинки, выключено")
+
+    def test_saved_holiday_state_refreshes_screen_reader_state(self) -> None:
+        from ui.pages.appearance_page import AppearancePage
+
+        garland = CheckBox()
+        snowflakes = CheckBox()
+        self.addCleanup(garland.deleteLater)
+        self.addCleanup(snowflakes.deleteLater)
+        garland.setEnabled(True)
+        snowflakes.setEnabled(True)
+
+        page = AppearancePage.__new__(AppearancePage)
+        page._garland_checkbox = garland
+        page._snowflakes_checkbox = snowflakes
+        page._set_checked_silently = lambda widget, value: widget.setChecked(bool(value))
+
+        AppearancePage.set_garland_state(page, True)
+        AppearancePage.set_snowflakes_state(page, False)
+
+        self.assertEqual(garland.accessibleName(), "Новогодняя гирлянда, включено")
+        self.assertEqual(snowflakes.accessibleName(), "Снежинки, выключено")
 
     def test_saved_sidebar_icon_style_refreshes_screen_reader_state(self) -> None:
         from ui.pages.appearance_page import AppearancePage

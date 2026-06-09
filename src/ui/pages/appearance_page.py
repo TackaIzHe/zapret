@@ -13,6 +13,7 @@ from ui.pages.appearance_page_lower_build import (
     build_holiday_sections,
     build_opacity_section,
     build_performance_section,
+    update_holiday_checkbox_accessibility,
     update_opacity_slider_accessibility,
 )
 from ui.pages.appearance_page_runtime_helpers import (
@@ -1006,6 +1007,8 @@ class AppearancePage(BasePage):
             editor_smooth_scroll_switch=self._editor_smooth_scroll_switch,
         )
         update_language_combo_accessibility(self._language_combo)
+        self._update_garland_checkbox_accessibility()
+        self._update_snowflakes_checkbox_accessibility()
 
     def _apply_bg_preset_ui(self, preset: str):
         """Update RadioButton selection without emitting signals."""
@@ -1535,10 +1538,12 @@ class AppearancePage(BasePage):
         if self._garland_checkbox:
             self._garland_checkbox.setEnabled(is_premium)
             self._set_checked_silently(self._garland_checkbox, premium_plan.garland_checked)
+            self._update_garland_checkbox_accessibility()
 
         if self._snowflakes_checkbox:
             self._snowflakes_checkbox.setEnabled(is_premium)
             self._set_checked_silently(self._snowflakes_checkbox, premium_plan.snowflakes_checked)
+            self._update_snowflakes_checkbox_accessibility()
 
         if premium_plan.disable_garland:
             self._request_appearance_save("garland_enabled", False)
@@ -1554,11 +1559,33 @@ class AppearancePage(BasePage):
         """Устанавливает состояние чекбокса гирлянды (без эмита сигнала)"""
         if self._garland_checkbox:
             self._set_checked_silently(self._garland_checkbox, enabled)
+            self._update_garland_checkbox_accessibility()
 
     def set_snowflakes_state(self, enabled: bool):
         """Устанавливает состояние чекбокса снежинок (без эмита сигнала)"""
         if self._snowflakes_checkbox:
             self._set_checked_silently(self._snowflakes_checkbox, enabled)
+            self._update_snowflakes_checkbox_accessibility()
+
+    def _update_garland_checkbox_accessibility(self) -> None:
+        update_holiday_checkbox_accessibility(
+            self._garland_checkbox,
+            title=tr_catalog(
+                "page.appearance.holiday.garland.title",
+                language=self.__dict__.get("_ui_language", "ru"),
+                default="Новогодняя гирлянда",
+            ),
+        )
+
+    def _update_snowflakes_checkbox_accessibility(self) -> None:
+        update_holiday_checkbox_accessibility(
+            self._snowflakes_checkbox,
+            title=tr_catalog(
+                "page.appearance.holiday.snowflakes.title",
+                language=self.__dict__.get("_ui_language", "ru"),
+                default="Снежинки",
+            ),
+        )
 
     def set_opacity_value(self, value: int):
         """Устанавливает значение слайдера прозрачности (без эмита сигнала)"""
