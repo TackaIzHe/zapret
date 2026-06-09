@@ -284,6 +284,27 @@ def update_display_mode_accessibility(widget, *, mode: object | None = None) -> 
     )
 
 
+def update_sidebar_icon_style_accessibility(widget, *, style: object | None = None) -> None:
+    labels = {
+        "standard": "Стандартные",
+        "windows11_fluent": "Windows 11 Fluent",
+    }
+    key = str(style or "").strip()
+    if not key:
+        try:
+            key = str(widget.currentItem() or "").strip()
+        except Exception:
+            key = ""
+    selected = labels.get(key, key or "Стандартные")
+    state = f"Стиль иконок бокового меню, выбрано: {selected}"
+    set_state_text(widget, state)
+    set_control_accessibility(
+        widget,
+        name=state,
+        description="Выберите стиль иконок в левом боковом меню.",
+    )
+
+
 def update_language_combo_accessibility(combo) -> None:
     selected = str(combo.currentText() or "").strip() or "не выбран"
     state = f"Язык интерфейса, выбрано: {selected}"

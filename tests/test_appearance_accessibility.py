@@ -13,6 +13,7 @@ from ui.pages.appearance_page_top_build import (
     build_background_section,
     build_display_mode_section,
     build_language_section,
+    update_sidebar_icon_style_accessibility,
 )
 
 
@@ -79,6 +80,45 @@ class AppearanceAccessibilityTests(unittest.TestCase):
         self.assertEqual(widgets.radio_amoled.accessibleName(), "Фон окна: AMOLED — чёрный, недоступно без Premium")
         self.assertEqual(widgets.radio_rkn_chan.accessibleName(), "Фон окна: РКН Тян, недоступно без Premium")
         self.assertEqual(widgets.rkn_background_combo.accessibleName(), "Фон РКН Тян, вариантов пока нет")
+
+    def test_sidebar_icon_style_selector_reads_current_style(self) -> None:
+        segmented = SegmentedWidget()
+        self.addCleanup(segmented.deleteLater)
+        segmented.addItem("standard", "Стандартные", lambda: None)
+        segmented.addItem("windows11_fluent", "Windows 11 Fluent", lambda: None)
+        segmented.setCurrentItem("standard")
+
+        update_sidebar_icon_style_accessibility(segmented, style="standard")
+
+        self.assertEqual(segmented.accessibleName(), "Стиль иконок бокового меню, выбрано: Стандартные")
+        self.assertIn("Выберите стиль иконок", segmented.accessibleDescription())
+
+        segmented.setCurrentItem("windows11_fluent")
+        update_sidebar_icon_style_accessibility(segmented, style="windows11_fluent")
+
+        self.assertEqual(segmented.accessibleName(), "Стиль иконок бокового меню, выбрано: Windows 11 Fluent")
+        self.assertEqual(
+            segmented.property("screenReaderStateText"),
+            "Стиль иконок бокового меню, выбрано: Windows 11 Fluent",
+        )
+
+    def test_saved_sidebar_icon_style_refreshes_screen_reader_state(self) -> None:
+        from ui.pages.appearance_page import AppearancePage
+
+        segmented = SegmentedWidget()
+        self.addCleanup(segmented.deleteLater)
+        segmented.addItem("standard", "Стандартные", lambda: None)
+        segmented.addItem("windows11_fluent", "Windows 11 Fluent", lambda: None)
+        segmented.setCurrentItem("standard")
+        page = AppearancePage.__new__(AppearancePage)
+        page._sidebar_icon_style_seg = segmented
+        page._begin_ui_sync = lambda: None
+        page._end_ui_sync = lambda: None
+        page._set_current_item_silently = lambda widget, item: widget.setCurrentItem(item)
+
+        AppearancePage._apply_sidebar_icon_style_value(page, "windows11_fluent")
+
+        self.assertEqual(segmented.accessibleName(), "Стиль иконок бокового меню, выбрано: Windows 11 Fluent")
 
 
 if __name__ == "__main__":

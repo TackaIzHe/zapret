@@ -24,6 +24,7 @@ from ui.pages.appearance_page_top_build import (
     update_display_mode_accessibility,
     update_language_combo_accessibility,
     update_rkn_background_combo_accessibility,
+    update_sidebar_icon_style_accessibility,
 )
 from ui.fluent_widgets import (
     SettingsCard,
@@ -358,6 +359,11 @@ class AppearancePage(BasePage):
             ),
             lambda: self._on_sidebar_icon_style_changed("windows11_fluent"),
         )
+        sidebar_icon_seg.setCurrentItem("standard")
+        update_sidebar_icon_style_accessibility(sidebar_icon_seg, style="standard")
+        sidebar_icon_seg.currentItemChanged.connect(
+            lambda style: update_sidebar_icon_style_accessibility(sidebar_icon_seg, style=style)
+        )
         sidebar_icon_layout.addWidget(sidebar_icon_seg)
         sidebar_icon_card.add_layout(sidebar_icon_layout)
         self._sidebar_icon_style_card = sidebar_icon_card
@@ -680,6 +686,7 @@ class AppearancePage(BasePage):
                 pass
             finally:
                 self._end_ui_sync()
+            update_sidebar_icon_style_accessibility(self._sidebar_icon_style_seg, style=style)
 
     def create_appearance_save_worker(self, request_id: int, *, action: str, value=None, context_extra: dict | None = None):
         return self._appearance.create_appearance_save_worker(
