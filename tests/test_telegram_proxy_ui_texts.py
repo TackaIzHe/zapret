@@ -102,6 +102,14 @@ class TelegramProxyUiTextsTests(unittest.TestCase):
         self.assertIn("SOCKS5 (рекомендуется)", source)
         self.assertIn("MTProxy (продвинутый)", source)
 
+    def test_page_activation_resyncs_advanced_settings_block(self) -> None:
+        import inspect
+        from telegram_proxy.ui.page import TelegramProxyPage
+
+        source = inspect.getsource(TelegramProxyPage.on_page_activated)
+
+        self.assertIn("_apply_advanced_settings_ui()", source)
+
 
 if __name__ == "__main__":
     unittest.main()

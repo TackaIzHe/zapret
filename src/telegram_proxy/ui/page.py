@@ -249,6 +249,7 @@ class TelegramProxyPage(BasePage):
 
     def on_page_activated(self) -> None:
         self._run_runtime_init_once()
+        self._apply_advanced_settings_ui()
 
     def _setup_ui(self):
         started_at = time.perf_counter()
