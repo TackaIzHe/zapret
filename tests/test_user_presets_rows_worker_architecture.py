@@ -31,6 +31,23 @@ class UserPresetsRowsWorkerArchitectureTests(unittest.TestCase):
         self.assertNotIn("self._rows_plan_worker", service_source)
         self.assertNotIn("def _worker_runtime_is_running", service_source)
 
+    def test_runtime_service_uses_shared_state_for_rows_plan_queue(self) -> None:
+        import presets.user_presets_runtime_service as runtime_service
+        from ui.latest_value_worker_state import LatestValueWorkerState
+
+        service = runtime_service.UserPresetsRuntimeService()
+        service_source = inspect.getsource(runtime_service.UserPresetsRuntimeService)
+        request_source = inspect.getsource(runtime_service.UserPresetsRuntimeService._request_rows_plan_refresh)
+        finished_source = inspect.getsource(runtime_service.UserPresetsRuntimeService._on_rows_plan_worker_finished)
+        scheduled_source = inspect.getsource(runtime_service.UserPresetsRuntimeService._run_scheduled_rows_plan_refresh)
+
+        self.assertIsInstance(service._rows_plan_state_obj(), LatestValueWorkerState)
+        self.assertIn("_rows_plan_state = LatestValueWorkerState", service_source)
+        self.assertIn("_rows_plan_state_obj()", request_source)
+        self.assertIn("_rows_plan_state_obj()", finished_source)
+        self.assertIn("_rows_plan_state_obj()", scheduled_source)
+        self.assertNotIn("_rows_plan_start_scheduled", service_source)
+
     def test_runtime_finished_handlers_leave_worker_deletion_to_shared_runtime(self) -> None:
         import presets.user_presets_runtime_service as runtime_service
 

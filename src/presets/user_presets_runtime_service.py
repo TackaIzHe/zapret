@@ -10,6 +10,7 @@ from PyQt6.QtCore import QThread, QTimer, pyqtSignal
 
 from log.log import log
 from presets.icon_color import normalize_preset_icon_color
+from ui.latest_value_worker_state import LatestValueWorkerState
 from ui.one_shot_worker_runtime import OneShotWorkerRuntime
 
 
@@ -218,8 +219,7 @@ class UserPresetsRuntimeService:
         self._single_metadata_start_scheduled = False
         self._rows_plan_request_id = 0
         self._rows_plan_runtime = OneShotWorkerRuntime()
-        self._rows_plan_pending: tuple[dict[str, dict[str, object]], dict[str, Any] | None, float | None, object] | None = None
-        self._rows_plan_start_scheduled = False
+        self._rows_plan_state = LatestValueWorkerState(self._rows_plan_runtime, empty_value=None, pending=None)
         self._rows_plan_apply_scheduled = False
         self._pending_rows_plan_apply: tuple[object, float | None, object] | None = None
         self._watched_preset_files_sync_scheduled = False
@@ -682,8 +682,7 @@ class UserPresetsRuntimeService:
         self._metadata_load_start_scheduled = False
         self._single_metadata_pending.clear()
         self._single_metadata_start_scheduled = False
-        self._rows_plan_pending = None
-        self._rows_plan_start_scheduled = False
+        self._rows_plan_state_obj().reset()
         self._rows_plan_apply_scheduled = False
         self._pending_rows_plan_apply = None
         self._watched_preset_files_sync_scheduled = False
@@ -1053,12 +1052,11 @@ class UserPresetsRuntimeService:
         page = self._resolve_page(page)
         adapter = self._resolve_adapter()
         build_rows_plan = adapter.build_rows_plan
+        pending_request = (dict(all_presets or {}), dict(folder_state or {}), started_at, page)
+        rows_plan_state = self._rows_plan_state_obj()
 
-        if (
-            self._rows_plan_runtime.is_running()
-            or self.__dict__.get("_rows_plan_start_scheduled", False)
-        ):
-            self._rows_plan_pending = (dict(all_presets or {}), dict(folder_state or {}), started_at, page)
+        if rows_plan_state.is_busy():
+            rows_plan_state.pending = pending_request
             return
 
         def bind_worker(worker) -> None:
@@ -1085,7 +1083,7 @@ class UserPresetsRuntimeService:
     def _on_rows_plan_loaded(self, request_id: int, plan, started_at: float | None, page=None) -> None:
         if request_id != self._rows_plan_request_id:
             return
-        if self.__dict__.get("_rows_plan_pending") is not None:
+        if self._rows_plan_state_obj().has_pending():
             return
         page = self._resolve_page(page)
         self._schedule_rows_plan_apply(plan, started_at, page)
@@ -1107,8 +1105,8 @@ class UserPresetsRuntimeService:
         if pending is None:
             return
         if (
-            self.__dict__.get("_rows_plan_pending") is not None
-            or self.__dict__.get("_rows_plan_start_scheduled", False)
+            self._rows_plan_state_obj().has_pending()
+            or self._rows_plan_state_obj().start_scheduled
         ):
             return
         plan, started_at, page = pending
@@ -1124,7 +1122,7 @@ class UserPresetsRuntimeService:
     def _on_rows_plan_failed(self, request_id: int, error: str, page=None) -> None:
         if request_id != self._rows_plan_request_id:
             return
-        if self.__dict__.get("_rows_plan_pending") is not None:
+        if self._rows_plan_state_obj().has_pending():
             return
         self._ui_dirty = True
         log(f"Ошибка подготовки списка пресетов: {error}", "ERROR")
@@ -1132,27 +1130,46 @@ class UserPresetsRuntimeService:
     def _on_rows_plan_worker_finished(self, worker: UserPresetsRowsPlanWorker) -> None:
         if not self._is_current_worker_finish(worker, "_rows_plan_request_id"):
             return
-        pending = self._rows_plan_pending
-        if pending is not None:
+        if self._rows_plan_state_obj().has_pending():
             self._schedule_rows_plan_refresh()
 
     def _schedule_rows_plan_refresh(self) -> None:
-        if self.__dict__.get("_rows_plan_start_scheduled", False):
-            return
-        self._rows_plan_start_scheduled = True
-        try:
-            QTimer.singleShot(0, self._run_scheduled_rows_plan_refresh)
-        except Exception:
-            self._run_scheduled_rows_plan_refresh()
+        self._rows_plan_state_obj().schedule_start(
+            self._single_shot_or_run,
+            self._run_scheduled_rows_plan_refresh,
+        )
 
     def _run_scheduled_rows_plan_refresh(self) -> None:
-        self._rows_plan_start_scheduled = False
-        pending = self.__dict__.get("_rows_plan_pending")
-        self._rows_plan_pending = None
+        pending = self._rows_plan_state_obj().take_pending_for_scheduled_start()
         if pending is None:
             return
         all_presets, folder_state, started_at, page = pending
         self._request_rows_plan_refresh(all_presets, folder_state, started_at, page)
+
+    def _rows_plan_state_obj(self) -> LatestValueWorkerState:
+        state = self.__dict__.get("_rows_plan_state")
+        if state is None:
+            runtime = self.__dict__.get("_rows_plan_runtime")
+            if runtime is None:
+                runtime = OneShotWorkerRuntime()
+                self._rows_plan_runtime = runtime
+            state = LatestValueWorkerState(runtime, empty_value=None, pending=None)
+            self._rows_plan_state = state
+        return state
+
+    @property
+    def _rows_plan_pending(self):
+        return self._rows_plan_state_obj().pending
+
+    @_rows_plan_pending.setter
+    def _rows_plan_pending(self, value) -> None:
+        self._rows_plan_state_obj().pending = value
+
+    def _single_shot_or_run(self, _delay: int, callback) -> None:
+        try:
+            QTimer.singleShot(0, callback)
+        except Exception:
+            callback()
 
     def remove_deleted_preset_locally(self, name: str, page=None) -> bool:
         page = self._resolve_page(page)
