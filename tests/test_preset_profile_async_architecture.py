@@ -1684,10 +1684,10 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertNotIn("from profile.folders import", inspect.getsource(PresetSetupPageBase))
         self.assertIn("_queue_profile_folder_action", request_source)
         self.assertIn(
-            "_profile_folder_action_pending",
+            "_profile_folder_action_state_obj()",
             inspect.getsource(PresetSetupPageBase._queue_profile_folder_action),
         )
-        self.assertIn("_profile_folder_action_pending.pop(0)", finished_source)
+        self.assertIn("_profile_folder_action_state_obj().pop_next()", finished_source)
         self.assertIn("show_menu", action_finished_source)
         self.assertIn("_create_profile_folder_action_worker", request_source)
         create_source = inspect.getsource(PresetSetupPageBase._create_profile_folder_action_worker)
@@ -1716,12 +1716,32 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         schedule_source = inspect.getsource(PresetSetupPageBase._schedule_profile_folder_action_start)
         run_source = inspect.getsource(PresetSetupPageBase._run_scheduled_profile_folder_action_start)
 
-        self.assertIn("_profile_folder_action_pending.pop(0)", finished_source)
+        self.assertIn("_profile_folder_action_state_obj().pop_next()", finished_source)
         self.assertIn("_schedule_profile_folder_action_start", finished_source)
         self.assertNotIn("_request_profile_folder_action(", finished_source)
         self.assertIn("QTimer.singleShot", schedule_source)
         self.assertIn("_run_scheduled_profile_folder_action_start", schedule_source)
         self.assertIn("_request_profile_folder_action", run_source)
+
+    def test_profile_folder_action_queue_uses_shared_queued_worker_state(self) -> None:
+        from types import SimpleNamespace
+
+        from ui.queued_worker_state import QueuedWorkerState
+
+        page = PresetSetupPageBase.__new__(PresetSetupPageBase)
+        page._profile_folder_action_runtime = SimpleNamespace(is_running=lambda: False)
+
+        init_source = inspect.getsource(PresetSetupPageBase.__init__)
+        queue_source = inspect.getsource(PresetSetupPageBase._queue_profile_folder_action)
+        cleanup_source = inspect.getsource(PresetSetupPageBase.cleanup)
+
+        self.assertTrue(hasattr(PresetSetupPageBase, "_profile_folder_action_state_obj"))
+        self.assertIsInstance(page._profile_folder_action_state_obj(), QueuedWorkerState)
+        self.assertIn("_profile_folder_action_state = QueuedWorkerState", init_source)
+        self.assertIn("_profile_folder_action_state_obj()", queue_source)
+        self.assertIn("_profile_folder_action_state_obj().reset()", cleanup_source)
+        self.assertNotIn("self._profile_folder_action_pending: list", init_source)
+        self.assertNotIn("self._profile_folder_action_start_scheduled = False", init_source)
 
     def test_profile_move_updates_visible_list_locally_after_worker(self) -> None:
         finished_source = inspect.getsource(PresetSetupPageBase._on_profile_move_finished)

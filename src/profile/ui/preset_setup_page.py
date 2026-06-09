@@ -17,6 +17,7 @@ from settings.mode import ZAPRET1_MODE, ZAPRET2_MODE
 from ui.pages.base_page import BasePage
 from app.ui_texts import tr as tr_catalog
 from ui.one_shot_worker_runtime import OneShotWorkerRuntime
+from ui.queued_worker_state import QueuedWorkerState
 
 
 PROFILE_UI_TIMING_LOG_LEVEL = "⏱ PROFILE"
@@ -127,8 +128,9 @@ class PresetSetupPageBase(BasePage):
         self._profile_folder_action_request_id = 0
         self._profile_folder_action_runtime = OneShotWorkerRuntime()
         self._profile_folder_action_runtime_worker = None
-        self._profile_folder_action_pending: list[dict[str, object]] = []
-        self._profile_folder_action_start_scheduled = False
+        self._profile_folder_action_state = QueuedWorkerState[dict[str, object]](
+            self._profile_folder_action_runtime,
+        )
         self._profile_folder_action_refresh_by_request: dict[int, bool] = {}
         self._user_profile_create_request_id = 0
         self._user_profile_create_runtime = OneShotWorkerRuntime()
@@ -1616,7 +1618,7 @@ class PresetSetupPageBase(BasePage):
             "refresh": bool(refresh),
             "context_extra": dict(context_extra or {}),
         }
-        if runtime.is_running() or self.__dict__.get("_profile_folder_action_start_scheduled", False):
+        if self._profile_folder_action_state_obj().is_busy():
             self._queue_profile_folder_action(payload)
             return
         self._profile_folder_action_request_id = int(
@@ -1648,7 +1650,7 @@ class PresetSetupPageBase(BasePage):
         queued = dict(payload or {})
         action = str(queued.get("action") or "")
         folder_key = str(queued.get("folder_key") or "")
-        pending = self.__dict__.setdefault("_profile_folder_action_pending", [])
+        pending = self._profile_folder_action_state_obj().pending
         if action == "move" and queued in pending:
             return
         if action == "set_collapsed" and folder_key:
@@ -1665,7 +1667,7 @@ class PresetSetupPageBase(BasePage):
     def _on_profile_folder_action_finished(self, request_id: int, action: str, result, context) -> None:
         if request_id != int(getattr(self, "_profile_folder_action_request_id", 0) or 0):
             return
-        if self.__dict__.get("_profile_folder_action_pending"):
+        if self._profile_folder_action_state_obj().has_pending():
             self.__dict__.setdefault("_profile_folder_action_refresh_by_request", {}).pop(request_id, None)
             return
         context = dict(context or {})
@@ -1700,7 +1702,7 @@ class PresetSetupPageBase(BasePage):
     def _on_profile_folder_action_failed(self, request_id: int, action: str, error: str, _context) -> None:
         if request_id != int(getattr(self, "_profile_folder_action_request_id", 0) or 0):
             return
-        if self.__dict__.get("_profile_folder_action_pending"):
+        if self._profile_folder_action_state_obj().has_pending():
             self.__dict__.setdefault("_profile_folder_action_refresh_by_request", {}).pop(request_id, None)
             return
         self.__dict__.setdefault("_profile_folder_action_refresh_by_request", {}).pop(request_id, None)
@@ -1709,24 +1711,33 @@ class PresetSetupPageBase(BasePage):
     def _on_profile_folder_action_worker_finished(self, worker) -> None:
         if not self._accept_current_preset_setup_worker_finished("_profile_folder_action_runtime_worker", worker):
             return
-        if self._profile_folder_action_pending and not self._cleanup_in_progress:
-            pending = self._profile_folder_action_pending.pop(0)
+        if not self.__dict__.get("_cleanup_in_progress", False):
+            pending = self._profile_folder_action_state_obj().pop_next()
+        else:
+            pending = None
+        if pending:
             self._schedule_profile_folder_action_start(pending)
 
     def _schedule_profile_folder_action_start(self, pending: dict[str, object]) -> None:
-        if self.__dict__.get("_cleanup_in_progress", False):
-            return
-        if self.__dict__.get("_profile_folder_action_start_scheduled", False):
-            self._queue_profile_folder_action(dict(pending or {}))
-            return
-        self._profile_folder_action_start_scheduled = True
-        try:
-            QTimer.singleShot(0, lambda p=dict(pending or {}): self._run_scheduled_profile_folder_action_start(p))
-        except Exception:
-            self._run_scheduled_profile_folder_action_start(dict(pending or {}))
+        queued = dict(pending or {})
+        state = self._profile_folder_action_state_obj()
+
+        def _single_shot(delay: int, callback) -> None:
+            try:
+                QTimer.singleShot(delay, callback)
+            except Exception:
+                callback()
+
+        state.schedule_start(
+            queued,
+            _single_shot,
+            self._run_scheduled_profile_folder_action_start,
+            queue_item=self._queue_profile_folder_action,
+            is_cleanup_in_progress=lambda: bool(self.__dict__.get("_cleanup_in_progress", False)),
+        )
 
     def _run_scheduled_profile_folder_action_start(self, pending: dict[str, object]) -> None:
-        self._profile_folder_action_start_scheduled = False
+        self._profile_folder_action_state_obj().start_scheduled = False
         if self.__dict__.get("_cleanup_in_progress", False):
             return
         self._request_profile_folder_action(
@@ -1738,6 +1749,38 @@ class PresetSetupPageBase(BasePage):
             refresh=bool(pending.get("refresh", True)),
             context_extra=dict(pending.get("context_extra") or {}),
         )
+
+    def _profile_folder_action_state_obj(self) -> QueuedWorkerState[dict[str, object]]:
+        state = self.__dict__.get("_profile_folder_action_state")
+        runtime = self.__dict__.get("_profile_folder_action_runtime")
+        if state is None:
+            pending = list(self.__dict__.pop("_profile_folder_action_pending", []) or [])
+            start_scheduled = bool(self.__dict__.pop("_profile_folder_action_start_scheduled", False))
+            state = QueuedWorkerState(
+                runtime,
+                pending=pending,
+                start_scheduled=start_scheduled,
+            )
+            self.__dict__["_profile_folder_action_state"] = state
+        elif getattr(state, "runtime", None) is None and runtime is not None:
+            state.runtime = runtime
+        return state
+
+    @property
+    def _profile_folder_action_pending(self) -> list[dict[str, object]]:
+        return self._profile_folder_action_state_obj().pending
+
+    @_profile_folder_action_pending.setter
+    def _profile_folder_action_pending(self, value: list[dict[str, object]]) -> None:
+        self._profile_folder_action_state_obj().pending = list(value or [])
+
+    @property
+    def _profile_folder_action_start_scheduled(self) -> bool:
+        return bool(self._profile_folder_action_state_obj().start_scheduled)
+
+    @_profile_folder_action_start_scheduled.setter
+    def _profile_folder_action_start_scheduled(self, value: bool) -> None:
+        self._profile_folder_action_state_obj().start_scheduled = bool(value)
 
     def apply_profile_setup_change(self, profile_key: str, change_kind: str, profile_item=None) -> None:
         clean_profile_key = str(profile_key or "").strip()
@@ -1786,8 +1829,7 @@ class PresetSetupPageBase(BasePage):
         self.__dict__.setdefault("_pending_user_profile_operations", []).clear()
         self._pending_profile_payload_apply = None
         self._profile_payload_apply_scheduled = False
-        self._profile_folder_action_pending.clear()
-        self._profile_folder_action_start_scheduled = False
+        self._profile_folder_action_state_obj().reset()
         self.__dict__.setdefault("_profile_folder_action_refresh_by_request", {}).clear()
         self.__dict__.setdefault("_profile_context_action_enabled_by_request", {}).clear()
         for attr, label in (
