@@ -28,6 +28,31 @@ class WindowLifecycleMixin:
     def _get_window_notification_center(self):
         return getattr(self, "window_notification_center", None)
 
+    def _get_holiday_effects(self):
+        visual_state = self._get_visual_state()
+        return None if visual_state is None else getattr(visual_state, "holiday_effects", None)
+
+    def _holiday_animation_allowed(self) -> bool:
+        try:
+            return (
+                bool(self.isVisible())
+                and not bool(self.isMinimized())
+                and bool(self.isActiveWindow())
+            )
+        except Exception:
+            return False
+
+    def _sync_holiday_animation_activity(self, *, force_inactive: bool = False) -> None:
+        effects = self._get_holiday_effects()
+        if effects is None:
+            return
+
+        setter = getattr(effects, "set_animation_active", None)
+        if not callable(setter):
+            return
+
+        setter(False if force_inactive else self._holiday_animation_allowed())
+
     def _require_application_lifecycle(self):
         lifecycle = getattr(self, "application_lifecycle", None)
         if lifecycle is None:
@@ -106,6 +131,7 @@ class WindowLifecycleMixin:
             try:
                 if not self.isActiveWindow():
                     self.release_input_interaction_states()
+                self._sync_holiday_animation_activity()
             except Exception as e:
                 log(f"Не удалось сбросить состояние ввода при смене активности окна: {e}", "DEBUG")
 
@@ -115,9 +141,9 @@ class WindowLifecycleMixin:
                 geometry_runtime.on_window_state_change()
 
             try:
-                visual_state = self._get_visual_state()
-                effects = None if visual_state is None else visual_state.holiday_effects
+                effects = self._get_holiday_effects()
                 if effects is not None:
+                    self._sync_holiday_animation_activity()
                     QTimer.singleShot(0, effects.sync_geometry)
             except Exception as e:
                 log(f"Не удалось синхронизировать визуальные эффекты при смене состояния окна: {e}", "DEBUG")
@@ -129,6 +155,10 @@ class WindowLifecycleMixin:
             self.release_input_interaction_states()
         except Exception as e:
             log(f"Не удалось сбросить состояние ввода при скрытии окна: {e}", "DEBUG")
+        try:
+            self._sync_holiday_animation_activity(force_inactive=True)
+        except Exception as e:
+            log(f"Не удалось остановить визуальные эффекты при скрытии окна: {e}", "DEBUG")
         super().hideEvent(event)
 
     def moveEvent(self, event):
@@ -174,11 +204,11 @@ class WindowLifecycleMixin:
         QTimer.singleShot(120, self._refresh_titlebar_layout_after_show)
 
         try:
-            visual_state = self._get_visual_state()
-            effects = None if visual_state is None else visual_state.holiday_effects
+            effects = self._get_holiday_effects()
             if effects is not None:
                 effects.sync_geometry()
                 QTimer.singleShot(0, effects.sync_geometry)
+                self._sync_holiday_animation_activity()
         except Exception as e:
             log(f"Не удалось синхронизировать визуальные эффекты при показе окна: {e}", "DEBUG")
 

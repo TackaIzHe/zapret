@@ -57,6 +57,7 @@ class GarlandOverlay(QWidget):
         super().__init__(parent)
         self._lights: list[_GarlandLight] = []
         self._enabled = False
+        self._animation_active = True
         self._opacity = 0.0
         self._fade_target = 0.0
         self._fade: QPropertyAnimation | None = None
@@ -82,12 +83,32 @@ class GarlandOverlay(QWidget):
     def is_enabled(self) -> bool:
         return bool(self._enabled)
 
+    def set_animation_active(self, active: bool) -> None:
+        active = bool(active)
+        if self._animation_active == active:
+            return
+
+        self._animation_active = active
+        if active:
+            if self._enabled:
+                self.sync_geometry()
+                self.show()
+                self.raise_()
+                if not self._timer.isActive():
+                    self._timer.start()
+                if self._opacity < 1.0 and self._fade_target > 0.0:
+                    self._start_fade(1.0, 420)
+            return
+
+        self._stop_running_animation()
+        if not self._enabled and self._fade_target <= 0.0:
+            self._finish_fade_out()
+
     def shutdown(self) -> None:
         self._enabled = False
+        self._animation_active = False
         self._fade_target = 0.0
-        if self._fade is not None:
-            self._fade.stop()
-            self._fade = None
+        self._stop_running_animation()
         self._timer.stop()
         self._lights.clear()
         self._opacity = 0.0
@@ -106,11 +127,20 @@ class GarlandOverlay(QWidget):
             self._generate_lights()
             self.show()
             self.raise_()
-            if not self._timer.isActive():
+            if self._animation_active and not self._timer.isActive():
                 self._timer.start()
-            self._start_fade(1.0, 420)
+            if self._animation_active:
+                self._start_fade(1.0, 420)
+            else:
+                self._opacity = 1.0
+                self.update()
         else:
-            self._start_fade(0.0, 240)
+            if self._animation_active:
+                self._start_fade(0.0, 240)
+            else:
+                self._fade_target = 0.0
+                self._stop_running_animation()
+                self._finish_fade_out()
 
     def sync_geometry(self) -> None:
         host = self.parentWidget()
@@ -160,6 +190,12 @@ class GarlandOverlay(QWidget):
             anim.finished.connect(self._finish_fade_out)
         start_managed_animation(anim)
         self._fade = anim
+
+    def _stop_running_animation(self) -> None:
+        if self._fade is not None:
+            self._fade.stop()
+            self._fade = None
+        self._timer.stop()
 
     def _finish_fade_out(self) -> None:
         if self._enabled or self._fade_target > 0.0:
@@ -273,6 +309,7 @@ class SnowflakesOverlay(QWidget):
         super().__init__(parent)
         self._flakes: list[_Snowflake] = []
         self._enabled = False
+        self._animation_active = True
         self._opacity = 0.0
         self._fade_target = 0.0
         self._fade: QPropertyAnimation | None = None
@@ -303,14 +340,34 @@ class SnowflakesOverlay(QWidget):
     def is_enabled(self) -> bool:
         return bool(self._enabled)
 
+    def set_animation_active(self, active: bool) -> None:
+        active = bool(active)
+        if self._animation_active == active:
+            return
+
+        self._animation_active = active
+        if active:
+            if self._enabled:
+                self.sync_geometry()
+                self.show()
+                self.raise_()
+                if not self._animate_timer.isActive():
+                    self._animate_timer.start()
+                if not self._spawn_timer.isActive():
+                    self._spawn_timer.start()
+                if self._opacity < 1.0 and self._fade_target > 0.0:
+                    self._start_fade(1.0, 500)
+            return
+
+        self._stop_running_animation()
+        if not self._enabled and self._fade_target <= 0.0:
+            self._finish_fade_out()
+
     def shutdown(self) -> None:
         self._enabled = False
+        self._animation_active = False
         self._fade_target = 0.0
-        if self._fade is not None:
-            self._fade.stop()
-            self._fade = None
-        self._animate_timer.stop()
-        self._spawn_timer.stop()
+        self._stop_running_animation()
         self._flakes.clear()
         self._flake_pixmap_cache.clear()
         self._opacity = 0.0
@@ -330,13 +387,22 @@ class SnowflakesOverlay(QWidget):
             self._seed_visible_flakes()
             self.show()
             self.raise_()
-            if not self._animate_timer.isActive():
+            if self._animation_active and not self._animate_timer.isActive():
                 self._animate_timer.start()
-            if not self._spawn_timer.isActive():
+            if self._animation_active and not self._spawn_timer.isActive():
                 self._spawn_timer.start()
-            self._start_fade(1.0, 500)
+            if self._animation_active:
+                self._start_fade(1.0, 500)
+            else:
+                self._opacity = 1.0
+                self.update()
         else:
-            self._start_fade(0.0, 320)
+            if self._animation_active:
+                self._start_fade(0.0, 320)
+            else:
+                self._fade_target = 0.0
+                self._stop_running_animation()
+                self._finish_fade_out()
 
     def sync_geometry(self, *, raise_overlay: bool = True) -> None:
         host = self.parentWidget()
@@ -374,6 +440,13 @@ class SnowflakesOverlay(QWidget):
             anim.finished.connect(self._finish_fade_out)
         start_managed_animation(anim)
         self._fade = anim
+
+    def _stop_running_animation(self) -> None:
+        if self._fade is not None:
+            self._fade.stop()
+            self._fade = None
+        self._animate_timer.stop()
+        self._spawn_timer.stop()
 
     def _finish_fade_out(self) -> None:
         if self._enabled or self._fade_target > 0.0:
@@ -537,6 +610,7 @@ class HolidayEffectsManager:
     def __init__(self, host_window: QWidget):
         self._garland = GarlandOverlay(host_window)
         self._snowflakes = SnowflakesOverlay(host_window)
+        self._animation_active = True
 
     def set_garland_enabled(self, enabled: bool) -> None:
         self._garland.set_enabled(bool(enabled))
@@ -550,6 +624,13 @@ class HolidayEffectsManager:
         self._snowflakes.sync_geometry()
         self._garland.sync_geometry()
         self._raise_overlays()
+
+    def set_animation_active(self, active: bool) -> None:
+        self._animation_active = bool(active)
+        self._garland.set_animation_active(self._animation_active)
+        self._snowflakes.set_animation_active(self._animation_active)
+        if self._animation_active:
+            self._raise_overlays()
 
     def cleanup(self) -> None:
         self._garland.shutdown()

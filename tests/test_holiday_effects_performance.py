@@ -7,7 +7,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtWidgets import QApplication, QWidget
 
-from ui.holiday_effects import _Snowflake, GarlandOverlay, SnowflakesOverlay
+from ui.holiday_effects import _Snowflake, GarlandOverlay, HolidayEffectsManager, SnowflakesOverlay
 
 
 class _CountingSnowflakesOverlay(SnowflakesOverlay):
@@ -80,6 +80,32 @@ class HolidayEffectsPerformanceTests(unittest.TestCase):
         overlay._animate()
 
         self.assertEqual(overlay.raise_count, 0)
+
+    def test_holiday_manager_pauses_and_resumes_timers_without_disabling_effects(self) -> None:
+        host = QWidget()
+        host.resize(640, 480)
+        manager = HolidayEffectsManager(host)
+
+        manager.set_garland_enabled(True)
+        manager.set_snowflakes_enabled(True)
+
+        self.assertTrue(manager._garland._timer.isActive())
+        self.assertTrue(manager._snowflakes._animate_timer.isActive())
+        self.assertTrue(manager._snowflakes._spawn_timer.isActive())
+
+        manager.set_animation_active(False)
+
+        self.assertTrue(manager._garland.is_enabled())
+        self.assertTrue(manager._snowflakes.is_enabled())
+        self.assertFalse(manager._garland._timer.isActive())
+        self.assertFalse(manager._snowflakes._animate_timer.isActive())
+        self.assertFalse(manager._snowflakes._spawn_timer.isActive())
+
+        manager.set_animation_active(True)
+
+        self.assertTrue(manager._garland._timer.isActive())
+        self.assertTrue(manager._snowflakes._animate_timer.isActive())
+        self.assertTrue(manager._snowflakes._spawn_timer.isActive())
 
 
 if __name__ == "__main__":

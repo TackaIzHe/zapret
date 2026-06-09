@@ -2821,6 +2821,9 @@ class _BaseWindowEvents:
     def showEvent(self, event) -> None:
         self.calls.append("base_show")
 
+    def hideEvent(self, event) -> None:
+        self.calls.append("base_hide")
+
     def isActiveWindow(self) -> bool:
         return True
 
@@ -2913,6 +2916,80 @@ class WindowLifecycleEarlyEventTests(unittest.TestCase):
         refresh_titlebar_layout.assert_not_called()
         self.assertIn(0, scheduled_delays)
         self.assertIn(120, scheduled_delays)
+
+    def test_window_events_pause_and_resume_holiday_animation_by_visibility(self) -> None:
+        from PyQt6.QtCore import QEvent
+
+        from main.window_lifecycle import WindowLifecycleMixin
+
+        class Event:
+            def __init__(self, event_type) -> None:
+                self._event_type = event_type
+
+            def type(self):
+                return self._event_type
+
+        class Window(WindowLifecycleMixin, _BaseWindowEvents):
+            def __init__(self) -> None:
+                self.calls: list[str] = []
+                self.active = True
+                self.visible = True
+                self.minimized = False
+                self.visual_state = SimpleNamespace(
+                    holiday_effects=SimpleNamespace(
+                        sync_geometry=Mock(),
+                        set_animation_active=Mock(),
+                    )
+                )
+                self.window_geometry_runtime = SimpleNamespace(
+                    on_window_state_change=Mock(),
+                    apply_saved_maximized_state_if_needed=Mock(),
+                    enable_persistence=Mock(),
+                )
+                self.window_notification_center = None
+                self.startup_state = SimpleNamespace(ttff_logged=True, ttff_ms=None)
+
+            def isActiveWindow(self) -> bool:
+                return self.active
+
+            def isVisible(self) -> bool:
+                return self.visible
+
+            def isMinimized(self) -> bool:
+                return self.minimized
+
+            def findChildren(self, *_args, **_kwargs):
+                return []
+
+        window = Window()
+        effects = window.visual_state.holiday_effects
+
+        window.hideEvent(object())
+        effects.set_animation_active.assert_called_with(False)
+
+        effects.set_animation_active.reset_mock()
+        window.visible = True
+        window.active = True
+        window.minimized = False
+        with patch("main.window_lifecycle.QTimer.singleShot", side_effect=lambda *_args, **_kwargs: None):
+            window.showEvent(object())
+        effects.set_animation_active.assert_called_with(True)
+
+        effects.set_animation_active.reset_mock()
+        window.active = False
+        window.changeEvent(Event(QEvent.Type.ActivationChange))
+        effects.set_animation_active.assert_called_with(False)
+
+        effects.set_animation_active.reset_mock()
+        window.active = True
+        window.minimized = True
+        window.changeEvent(Event(QEvent.Type.WindowStateChange))
+        effects.set_animation_active.assert_called_with(False)
+
+        effects.set_animation_active.reset_mock()
+        window.minimized = False
+        window.changeEvent(Event(QEvent.Type.WindowStateChange))
+        effects.set_animation_active.assert_called_with(True)
 
     def test_native_minimize_command_hides_to_tray_when_window_setting_is_enabled(self) -> None:
         from main.window_native_commands import SC_MINIMIZE, WM_SYSCOMMAND
