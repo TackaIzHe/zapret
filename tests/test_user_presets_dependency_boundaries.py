@@ -423,6 +423,23 @@ class UserPresetsDependencyBoundaryTests(unittest.TestCase):
         page._start_preset_open_folder_worker.assert_not_called()
         self.assertTrue(page._preset_open_folder_pending)
 
+    def test_user_presets_open_folder_queue_uses_shared_latest_worker_state(self) -> None:
+        from presets.ui.common.user_presets_page import UserPresetsPageBase
+        from ui.latest_value_worker_state import LatestValueWorkerState
+
+        page = UserPresetsPageBase.__new__(UserPresetsPageBase)
+        page._preset_open_folder_runtime = SimpleNamespace(is_running=Mock(return_value=False))
+
+        init_source = inspect.getsource(UserPresetsPageBase.__init__)
+        cleanup_source = inspect.getsource(UserPresetsPageBase._stop_action_workers_for_cleanup)
+
+        self.assertTrue(hasattr(UserPresetsPageBase, "_preset_open_folder_state_obj"))
+        self.assertIsInstance(page._preset_open_folder_state_obj(), LatestValueWorkerState)
+        self.assertIn("_preset_open_folder_state = LatestValueWorkerState", init_source)
+        self.assertIn("_preset_open_folder_state_obj().reset()", cleanup_source)
+        self.assertNotIn("self._preset_open_folder_pending = False", init_source)
+        self.assertNotIn("self._preset_open_folder_start_scheduled = False", init_source)
+
     def test_user_presets_folder_action_pending_restarts_later_after_worker_finished(self) -> None:
         from presets.ui.common.user_presets_page import UserPresetsPageBase
 

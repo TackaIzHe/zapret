@@ -80,6 +80,7 @@ from ui.presets_menu.delegate import PresetListDelegate
 from ui.presets_menu.model import PresetListModel
 from ui.presets_menu.toolbar import PresetsToolbarLayout
 from ui.presets_menu.common import tr_text as _tr_text
+from ui.latest_value_worker_state import LatestValueWorkerState
 from ui.one_shot_worker_runtime import OneShotWorkerRuntime
 
 
@@ -201,8 +202,10 @@ class UserPresetsPageBase(BasePage):
         self._preset_open_folder_runtime = OneShotWorkerRuntime()
         self._preset_open_folder_request_id = 0
         self._preset_open_folder_runtime_worker = None
-        self._preset_open_folder_pending = False
-        self._preset_open_folder_start_scheduled = False
+        self._preset_open_folder_state = LatestValueWorkerState(
+            self._preset_open_folder_runtime,
+            empty_value=False,
+        )
         self._preset_item_action_pending: list[dict[str, str]] = []
         self._preset_link_action_runtime = OneShotWorkerRuntime()
         self._preset_link_action_request_id = 0
@@ -592,16 +595,14 @@ class UserPresetsPageBase(BasePage):
         )
 
     def _request_preset_open_folder_action(self) -> None:
-        if (
-            self._worker_runtime_is_running("_preset_open_folder_runtime")
-            or self.__dict__.get("_preset_open_folder_start_scheduled", False)
-        ):
-            self._preset_open_folder_pending = True
+        state = self._preset_open_folder_state_obj()
+        if state.is_busy():
+            state.pending = True
             return
         self._start_preset_open_folder_worker()
 
     def _start_preset_open_folder_worker(self) -> None:
-        self._preset_open_folder_pending = False
+        self._preset_open_folder_state_obj().pending = False
         self._preset_open_folder_request_id = int(self.__dict__.get("_preset_open_folder_request_id", 0) or 0) + 1
         request_id = self._preset_open_folder_request_id
 
@@ -635,21 +636,67 @@ class UserPresetsPageBase(BasePage):
         if current_worker is not None and worker is not current_worker:
             return
         self._preset_open_folder_runtime_worker = None
-        if self._preset_open_folder_pending:
+        state = self._preset_open_folder_state_obj()
+        if state.has_pending():
+            state.pending = False
             self._schedule_preset_open_folder_worker_start()
 
     def _schedule_preset_open_folder_worker_start(self) -> None:
-        self._preset_open_folder_start_scheduled = True
-        try:
-            QTimer.singleShot(0, self._run_scheduled_preset_open_folder_worker_start)
-        except Exception:
-            self._run_scheduled_preset_open_folder_worker_start()
+        state = self._preset_open_folder_state_obj()
+        state.pending = True
+
+        def _single_shot(delay: int, callback) -> None:
+            try:
+                QTimer.singleShot(delay, callback)
+            except Exception:
+                callback()
+
+        state.schedule_start(
+            _single_shot,
+            self._run_scheduled_preset_open_folder_worker_start,
+            pending_when_already_scheduled=True,
+        )
 
     def _run_scheduled_preset_open_folder_worker_start(self) -> None:
-        self._preset_open_folder_start_scheduled = False
-        if self.__dict__.get("_cleanup_in_progress", False):
+        pending = self._preset_open_folder_state_obj().take_pending_for_scheduled_start(
+            cleanup_in_progress=self.__dict__.get("_cleanup_in_progress", False),
+        )
+        if not pending:
             return
         self._start_preset_open_folder_worker()
+
+    def _preset_open_folder_state_obj(self) -> LatestValueWorkerState:
+        state = self.__dict__.get("_preset_open_folder_state")
+        runtime = self.__dict__.get("_preset_open_folder_runtime")
+        if state is None:
+            pending = bool(self.__dict__.pop("_preset_open_folder_pending", False))
+            start_scheduled = bool(self.__dict__.pop("_preset_open_folder_start_scheduled", False))
+            state = LatestValueWorkerState(
+                runtime,
+                empty_value=False,
+                pending=pending,
+                start_scheduled=start_scheduled,
+            )
+            self.__dict__["_preset_open_folder_state"] = state
+        elif getattr(state, "runtime", None) is None and runtime is not None:
+            state.runtime = runtime
+        return state
+
+    @property
+    def _preset_open_folder_pending(self) -> bool:
+        return bool(self._preset_open_folder_state_obj().pending)
+
+    @_preset_open_folder_pending.setter
+    def _preset_open_folder_pending(self, value: bool) -> None:
+        self._preset_open_folder_state_obj().pending = bool(value)
+
+    @property
+    def _preset_open_folder_start_scheduled(self) -> bool:
+        return bool(self._preset_open_folder_state_obj().start_scheduled)
+
+    @_preset_open_folder_start_scheduled.setter
+    def _preset_open_folder_start_scheduled(self, value: bool) -> None:
+        self._preset_open_folder_state_obj().start_scheduled = bool(value)
 
     def _apply_page_theme(self, tokens=None, force: bool = False) -> None:
         self._last_page_theme_key = apply_user_presets_page_theme(
@@ -2423,8 +2470,7 @@ class UserPresetsPageBase(BasePage):
         self._preset_write_action_start_scheduled = False
         self._preset_folder_action_pending.clear()
         self._preset_folder_action_start_scheduled = False
-        self._preset_open_folder_pending = False
-        self._preset_open_folder_start_scheduled = False
+        self._preset_open_folder_state_obj().reset()
         self._preset_open_folder_runtime_worker = None
         self.__dict__.setdefault("_preset_item_action_pending", []).clear()
         self.__dict__.setdefault("_preset_link_action_pending", []).clear()
