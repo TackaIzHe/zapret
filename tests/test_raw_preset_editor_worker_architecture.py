@@ -105,6 +105,29 @@ class RawPresetEditorWorkerArchitectureTests(unittest.TestCase):
         self.assertNotIn("self._raw_load_pending = False", init_source)
         self.assertNotIn("self._raw_load_start_scheduled = False", init_source)
 
+    def test_raw_preset_save_queue_uses_shared_latest_worker_state(self) -> None:
+        from presets.ui.common.preset_subpage_base import PresetRawEditorPage
+        from ui.latest_value_worker_state import LatestValueWorkerState
+
+        page = PresetRawEditorPage.__new__(PresetRawEditorPage)
+        page._raw_save_runtime = SimpleNamespace(is_running=Mock(return_value=False))
+
+        init_source = inspect.getsource(PresetRawEditorPage.__init__)
+        request_source = inspect.getsource(PresetRawEditorPage._request_raw_preset_save)
+        finished_source = inspect.getsource(PresetRawEditorPage._on_raw_preset_save_worker_finished)
+        scheduled_source = inspect.getsource(PresetRawEditorPage._run_scheduled_raw_preset_save_worker_start)
+        cleanup_source = inspect.getsource(PresetRawEditorPage.cleanup)
+
+        self.assertTrue(hasattr(PresetRawEditorPage, "_raw_preset_save_state_obj"))
+        self.assertIsInstance(page._raw_preset_save_state_obj(), LatestValueWorkerState)
+        self.assertIn("_raw_preset_save_state = LatestValueWorkerState", init_source)
+        self.assertIn("_raw_preset_save_state_obj()", request_source)
+        self.assertIn("_raw_preset_save_state_obj()", finished_source)
+        self.assertIn("_raw_preset_save_state_obj()", scheduled_source)
+        self.assertIn("_raw_preset_save_state_obj().reset()", cleanup_source)
+        self.assertNotIn("self._pending_raw_preset_save", init_source)
+        self.assertNotIn("self._raw_preset_save_start_scheduled = False", init_source)
+
 
 if __name__ == "__main__":
     unittest.main()
