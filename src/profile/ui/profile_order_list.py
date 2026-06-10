@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from PyQt6.QtCore import QAbstractListModel, QMimeData, QModelIndex, QPoint, QThread, QTimer, Qt, pyqtSignal
+from PyQt6.QtCore import QAbstractListModel, QEvent, QMimeData, QModelIndex, QPoint, QThread, QTimer, Qt, pyqtSignal
 from PyQt6.QtWidgets import QListView, QVBoxLayout, QWidget
 
 from log.log import log
@@ -16,6 +16,7 @@ from profile.ui.profile_list_view import ProfileListView
 from ui.latest_value_worker_state import LatestValueWorkerState
 from ui.one_shot_worker_runtime import OneShotWorkerRuntime
 from ui.smooth_scroll import apply_page_smooth_scroll_preference
+from ui.accessibility import set_control_accessibility
 from ui.widgets.fluent_scrollbar import install_fluent_scrollbars
 
 
@@ -251,6 +252,11 @@ class ProfileOrderList(QWidget):
 
         self._model = ProfileOrderListModel(self)
         self._view = ProfileListView(self)
+        order_list_description = (
+            "Стрелки выбирают profile. PageUp и PageDown меняют порядок выбранного profile."
+        )
+        set_control_accessibility(self, name="Порядок profile", description=order_list_description)
+        set_control_accessibility(self._view, name="Порядок profile", description=order_list_description)
         self._view.setModel(self._model)
         self._view.setSelectionMode(QListView.SelectionMode.SingleSelection)
         self._view.setEditTriggers(QListView.EditTrigger.NoEditTriggers)
@@ -270,9 +276,42 @@ class ProfileOrderList(QWidget):
         self._view.profile_move_requested.connect(lambda source, destination, _group: self.profile_move_requested.emit(source, destination))
         self._view.profile_move_after_requested.connect(lambda source, destination, _group: self.profile_move_after_requested.emit(source, destination))
         self._view.profile_move_to_end_requested.connect(self.profile_move_to_end_requested)
+        self._view.installEventFilter(self)
         install_fluent_scrollbars(self._view, vertical=True, horizontal=False, reserve_vertical_space=True)
         apply_page_smooth_scroll_preference(self._view)
         layout.addWidget(self._view, 1)
+
+    def eventFilter(self, watched, event):  # noqa: N802
+        if watched is self._view and event.type() == QEvent.Type.KeyPress:
+            if self._handle_order_key_event(event):
+                return True
+        return super().eventFilter(watched, event)
+
+    def _handle_order_key_event(self, event) -> bool:
+        if event.key() not in (Qt.Key.Key_PageUp, Qt.Key.Key_PageDown):
+            return False
+        index = self._view.currentIndex()
+        if not index.isValid() or str(index.data(ProfileListModel.KindRole) or "") != "profile":
+            return False
+        source_key = str(index.data(ProfileListModel.ProfileKeyRole) or "")
+        if not source_key:
+            return False
+        step = -1 if event.key() == Qt.Key.Key_PageUp else 1
+        destination_row = index.row() + step
+        if destination_row < 0 or destination_row >= self._model.rowCount():
+            return False
+        destination_index = self._model.index(destination_row, 0)
+        if not destination_index.isValid():
+            return False
+        destination_key = str(destination_index.data(ProfileListModel.ProfileKeyRole) or "")
+        if not destination_key:
+            return False
+        if step < 0:
+            self.profile_move_requested.emit(source_key, destination_key)
+        else:
+            self.profile_move_after_requested.emit(source_key, destination_key)
+        event.accept()
+        return True
 
     def set_profiles(self, items: tuple[Any, ...]) -> None:
         self._request_view_state_rebuild(items=tuple(items or ()))

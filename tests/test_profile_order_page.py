@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 import inspect
+import os
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QKeyEvent
+from PyQt6.QtWidgets import QApplication
 
 from profile.state import ProfileListItem
 
@@ -30,6 +37,10 @@ def _item(name: str, *, key: str, in_preset: bool = True, profile_index: int = 0
 
 
 class ProfileOrderPageTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._app = QApplication.instance() or QApplication([])
+
     def test_order_model_is_flat_and_keeps_only_real_preset_profiles(self) -> None:
         from profile.ui.profile_order_list import ProfileOrderListModel
         from profile.ui.profile_list_model import ProfileListModel
@@ -132,6 +143,38 @@ class ProfileOrderPageTests(unittest.TestCase):
         self.assertEqual(model.rowCount(), 2)
         self.assertEqual(model.index(0, 0).data(ProfileListModel.ProfileKeyRole), "profile:a")
         self.assertEqual(model.index(0, 0).data(ProfileListModel.DisplayNameRole), "A updated")
+
+    def test_order_list_has_screen_reader_name_and_keyboard_help(self) -> None:
+        from profile.ui.profile_order_list import ProfileOrderList
+
+        order_list = ProfileOrderList()
+        self.addCleanup(order_list.deleteLater)
+
+        self.assertEqual(order_list.accessibleName(), "Порядок profile")
+        self.assertIn("PageUp и PageDown", order_list.accessibleDescription())
+        self.assertEqual(order_list._view.accessibleName(), "Порядок profile")
+        self.assertIn("меняют порядок выбранного profile", order_list._view.accessibleDescription())
+
+    def test_order_list_moves_selected_profile_from_keyboard(self) -> None:
+        from profile.ui.profile_order_list import ProfileOrderList
+
+        order_list = ProfileOrderList()
+        self.addCleanup(order_list.deleteLater)
+        order_list._model.set_profiles(
+            (
+                _item("A", key="profile:a", profile_index=0),
+                _item("B", key="profile:b", profile_index=1),
+            )
+        )
+        order_list._view.setCurrentIndex(order_list._model.index(1, 0))
+        requested: list[tuple[str, str]] = []
+        order_list.profile_move_requested.connect(lambda source, destination: requested.append((source, destination)))
+
+        event = QKeyEvent(QKeyEvent.Type.KeyPress, int(Qt.Key.Key_PageUp), Qt.KeyboardModifier.NoModifier)
+        QApplication.sendEvent(order_list._view, event)
+
+        self.assertTrue(event.isAccepted())
+        self.assertEqual(requested, [("profile:b", "profile:a")])
 
     def test_order_page_explains_priority_and_uses_order_workers(self) -> None:
         from profile.ui.profile_order_page import ProfileOrderPageBase
