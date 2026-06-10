@@ -5,6 +5,8 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QKeyEvent
 from PyQt6.QtWidgets import QApplication, QVBoxLayout, QWidget
 from qfluentwidgets import FluentIcon, LineEdit, PrimaryToolButton, StrongBodyLabel
 
@@ -101,6 +103,34 @@ class UserPresetsAccessibilityTests(unittest.TestCase):
 
         self._assert_accessibility(widgets)
 
+    def test_preset_list_opens_selected_preset_menu_from_keyboard(self) -> None:
+        from ui.presets_menu.model import PresetListModel
+        from ui.presets_menu.view import LinkedWheelListView
+
+        model = PresetListModel()
+        model.set_rows(
+            [
+                {
+                    "kind": "preset",
+                    "name": "Default",
+                    "file_name": "Default.txt",
+                    "folder_key": "common",
+                }
+            ]
+        )
+        view = LinkedWheelListView()
+        self.addCleanup(view.deleteLater)
+        view.setModel(model)
+        view.setCurrentIndex(model.index(0, 0))
+        requested: list[str] = []
+        view.preset_context_requested.connect(lambda name, _point: requested.append(name))
+
+        event = QKeyEvent(QKeyEvent.Type.KeyPress, int(Qt.Key.Key_Menu), Qt.KeyboardModifier.NoModifier)
+        view.keyPressEvent(event)
+
+        self.assertTrue(event.isAccepted())
+        self.assertEqual(requested, ["Default.txt"])
+
     def test_create_preset_dialog_has_screen_reader_text(self) -> None:
         dialog = CreatePresetDialog([], self._dialog_parent())
         self.addCleanup(dialog.deleteLater)
@@ -157,7 +187,10 @@ class UserPresetsAccessibilityTests(unittest.TestCase):
             widgets.presets_info_btn: ("Открыть вики по пресетам", "Вики по пресетам"),
             widgets.info_btn: ("Показать справку о пресетах", "Что это такое"),
             widgets.preset_search_input: ("Поиск пресетов", "Поиск пресетов по имени"),
-            widgets.presets_list: ("Список пользовательских пресетов", "Стрелки выбирают пресет, Enter делает выбранный пресет активным"),
+            widgets.presets_list: (
+                "Список пользовательских пресетов",
+                "Стрелки выбирают пресет, Enter делает выбранный пресет активным, клавиша меню открывает действия",
+            ),
         }
         for widget, (name, description) in expected.items():
             with self.subTest(name=name):

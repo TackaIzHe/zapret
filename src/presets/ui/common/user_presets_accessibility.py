@@ -72,7 +72,7 @@ def apply_user_presets_accessibility(
         name=tr_fn(f"{tr_prefix}.list.accessible_name", "Список пользовательских пресетов"),
         description=tr_fn(
             f"{tr_prefix}.list.accessible_description",
-            "Стрелки выбирают пресет, Enter делает выбранный пресет активным",
+            "Стрелки выбирают пресет, Enter делает выбранный пресет активным, клавиша меню открывает действия",
         ),
     )
 

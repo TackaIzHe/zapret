@@ -210,7 +210,38 @@ class LinkedWheelListView(ListView):
                     self.preset_activated.emit(name)
                     event.accept()
                     return
+        if event.key() == Qt.Key.Key_Menu or (
+            event.key() == Qt.Key.Key_F10 and event.modifiers() & Qt.KeyboardModifier.ShiftModifier
+        ):
+            if self._emit_context_requested_for_current_index():
+                event.accept()
+                return
         super().keyPressEvent(event)
+
+    def _emit_context_requested_for_current_index(self) -> bool:
+        index = self.currentIndex()
+        if not index.isValid():
+            return False
+        kind = str(index.data(PresetListModel.KindRole) or "")
+        if kind not in {"preset", "folder"}:
+            return False
+        rect = self.visualRect(index)
+        if rect.isValid():
+            point = rect.center()
+        else:
+            point = QPoint(0, 0)
+        global_point = self.viewport().mapToGlobal(point)
+        if kind == "preset":
+            name = str(index.data(PresetListModel.FileNameRole) or "")
+            if not name:
+                return False
+            self.preset_context_requested.emit(name, global_point)
+            return True
+        folder_key = str(index.data(PresetListModel.FolderKeyRole) or "")
+        if not folder_key:
+            return False
+        self.folder_context_requested.emit(folder_key, global_point)
+        return True
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasFormat("application/x-zapret-preset-item"):
