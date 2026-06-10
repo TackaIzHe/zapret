@@ -36,6 +36,30 @@ class _Runtime:
 
 
 class ProfileSetupWriteSerializationTests(unittest.TestCase):
+    def test_user_profile_write_queue_lives_in_queued_worker_state(self) -> None:
+        import inspect
+        from ui.queued_worker_state import QueuedWorkerState
+
+        page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        module_source = inspect.getsource(
+            __import__("profile.ui.profile_setup_page", fromlist=[""])
+        )
+        init_source = inspect.getsource(ProfileSetupPageBase.__init__)
+        queue_source = inspect.getsource(ProfileSetupPageBase._queue_user_profile_write_operation)
+        pop_source = inspect.getsource(ProfileSetupPageBase._pop_next_pending_user_profile_write_operation)
+        has_pending_source = inspect.getsource(ProfileSetupPageBase._has_pending_user_profile_write_operation)
+        schedule_source = inspect.getsource(ProfileSetupPageBase._schedule_next_pending_user_profile_write_operation_start)
+        cleanup_source = inspect.getsource(ProfileSetupPageBase.cleanup)
+
+        self.assertIsInstance(ProfileSetupPageBase._user_profile_write_state_obj(page), QueuedWorkerState)
+        self.assertIn("from ui.queued_worker_state import QueuedWorkerState", module_source)
+        self.assertIn("_user_profile_write_state = QueuedWorkerState", init_source)
+        self.assertIn("_user_profile_write_state_obj()", queue_source)
+        self.assertIn("state.pop_next()", pop_source)
+        self.assertIn("_user_profile_write_state_obj().has_pending()", has_pending_source)
+        self.assertIn("state.start_scheduled", schedule_source)
+        self.assertIn("_user_profile_write_state_obj().reset()", cleanup_source)
+
     def test_raw_profile_save_waits_while_settings_save_runs(self) -> None:
         page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
         page._settings_save_runtime = _Runtime(running=True)

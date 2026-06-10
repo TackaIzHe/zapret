@@ -53,6 +53,7 @@ from ui.accessibility import set_control_accessibility, set_state_text
 from ui.fluent_widgets import set_tooltip
 from ui.latest_value_worker_state import LatestValueWorkerState
 from ui.one_shot_worker_runtime import OneShotWorkerRuntime
+from ui.queued_worker_state import QueuedWorkerState
 from app.ui_texts import tr as tr_catalog
 from ui.theme import get_cached_qta_pixmap, get_theme_tokens, to_qcolor
 from ui.widgets.fluent_item_tooltip import FluentItemToolTipController
@@ -1071,13 +1072,12 @@ class ProfileSetupPageBase(BasePage):
         self._user_profile_update_runtime = OneShotWorkerRuntime()
         self._user_profile_update_request_id = 0
         self._user_profile_update_runtime_worker = None
-        self._pending_user_profile_updates: list[dict[str, str]] = []
         self._user_profile_delete_runtime = OneShotWorkerRuntime()
         self._user_profile_delete_request_id = 0
         self._user_profile_delete_runtime_worker = None
-        self._pending_user_profile_deletes: list[str] = []
-        self._pending_user_profile_operations: list[dict[str, str]] = []
-        self._user_profile_write_operation_start_scheduled = False
+        self._user_profile_write_state = QueuedWorkerState[dict[str, str]](
+            self._user_profile_update_runtime,
+        )
         self._strategy_apply_runtime = OneShotWorkerRuntime()
         self._strategy_apply_request_id = 0
         self._strategy_apply_runtime_worker = None
@@ -2098,7 +2098,7 @@ class ProfileSetupPageBase(BasePage):
         )
 
     def _user_profile_write_operation_running(self) -> bool:
-        if self.__dict__.get("_user_profile_write_operation_start_scheduled", False):
+        if self._user_profile_write_state_obj().start_scheduled:
             return True
         return self._worker_runtime("_user_profile_update_runtime").is_running() or self._worker_runtime(
             "_user_profile_delete_runtime"
@@ -2120,9 +2120,10 @@ class ProfileSetupPageBase(BasePage):
             "protocol": str(protocol or ""),
             "ports": str(ports or ""),
         }
+        state = self._user_profile_write_state_obj()
         if operation["action"] == "update":
             profile_id_to_replace = str(operation["profile_id"] or "")
-            pending_operations = self.__dict__.setdefault("_pending_user_profile_operations", [])
+            pending_operations = state.pending
             pending_operations[:] = [
                 pending
                 for pending in pending_operations
@@ -2131,72 +2132,27 @@ class ProfileSetupPageBase(BasePage):
                     and str(pending.get("profile_id") or "") == profile_id_to_replace
                 )
             ]
-            pending_updates = self.__dict__.setdefault("_pending_user_profile_updates", [])
-            pending_updates[:] = [
-                pending
-                for pending in pending_updates
-                if str(pending.get("profile_id") or "") != profile_id_to_replace
-            ]
-        self.__dict__.setdefault("_pending_user_profile_operations", []).append(operation)
-        if operation["action"] == "update":
-            self.__dict__.setdefault("_pending_user_profile_updates", []).append(
-                {
-                    "profile_id": operation["profile_id"],
-                    "name": operation["name"],
-                    "protocol": operation["protocol"],
-                    "ports": operation["ports"],
-                }
-            )
-        elif operation["action"] == "delete":
-            self.__dict__.setdefault("_pending_user_profile_deletes", []).append(operation["profile_id"])
+        state.append(operation)
 
     def _pop_next_pending_user_profile_write_operation(self) -> dict[str, str] | None:
-        pending_operations = self.__dict__.setdefault("_pending_user_profile_operations", [])
-        if pending_operations:
-            operation = dict(pending_operations.pop(0))
-            if operation.get("action") == "update":
-                pending_updates = self.__dict__.setdefault("_pending_user_profile_updates", [])
-                if pending_updates:
-                    pending_updates.pop(0)
-            elif operation.get("action") == "delete":
-                pending_deletes = self.__dict__.setdefault("_pending_user_profile_deletes", [])
-                if pending_deletes:
-                    pending_deletes.pop(0)
-            return operation
-        pending_updates = self.__dict__.setdefault("_pending_user_profile_updates", [])
-        if pending_updates:
-            pending = dict(pending_updates.pop(0))
-            pending["action"] = "update"
-            return pending
-        pending_deletes = self.__dict__.setdefault("_pending_user_profile_deletes", [])
-        if pending_deletes:
-            return {
-                "action": "delete",
-                "profile_id": str(pending_deletes.pop(0) or ""),
-                "name": "",
-                "protocol": "",
-                "ports": "",
-            }
+        state = self._user_profile_write_state_obj()
+        pending = state.pop_next()
+        if pending:
+            return dict(pending)
         return None
 
     def _has_pending_user_profile_write_operation(self) -> bool:
-        return any(
-            self.__dict__.get(attr)
-            for attr in (
-                "_pending_user_profile_operations",
-                "_pending_user_profile_updates",
-                "_pending_user_profile_deletes",
-            )
-        )
+        return self._user_profile_write_state_obj().has_pending()
 
     def _schedule_next_pending_user_profile_write_operation_start(self) -> bool:
         if self._user_profile_write_operation_running():
             return True
         if not self._has_pending_user_profile_write_operation():
             return False
-        if self.__dict__.get("_user_profile_write_operation_start_scheduled", False):
+        state = self._user_profile_write_state_obj()
+        if state.start_scheduled:
             return True
-        self._user_profile_write_operation_start_scheduled = True
+        state.start_scheduled = True
         try:
             QTimer.singleShot(0, self._run_scheduled_user_profile_write_operation_start)
         except Exception:
@@ -2204,8 +2160,136 @@ class ProfileSetupPageBase(BasePage):
         return True
 
     def _run_scheduled_user_profile_write_operation_start(self) -> None:
-        self._user_profile_write_operation_start_scheduled = False
+        self._user_profile_write_state_obj().start_scheduled = False
         self._start_next_pending_user_profile_write_operation()
+
+    def _user_profile_write_state_obj(self) -> QueuedWorkerState[dict[str, str]]:
+        state = self.__dict__.get("_user_profile_write_state")
+        runtime = self.__dict__.get("_user_profile_update_runtime")
+        if state is None:
+            pending = [
+                self._user_profile_write_operation_from_pending_operation(operation)
+                for operation in list(self.__dict__.pop("_pending_user_profile_operations", []) or [])
+            ]
+            if not pending:
+                pending.extend(
+                    self._user_profile_write_operation_from_update(update)
+                    for update in list(self.__dict__.pop("_pending_user_profile_updates", []) or [])
+                )
+                pending.extend(
+                    self._user_profile_write_operation_from_delete(profile_id)
+                    for profile_id in list(self.__dict__.pop("_pending_user_profile_deletes", []) or [])
+                )
+            else:
+                self.__dict__.pop("_pending_user_profile_updates", None)
+                self.__dict__.pop("_pending_user_profile_deletes", None)
+            start_scheduled = bool(self.__dict__.pop("_user_profile_write_operation_start_scheduled", False))
+            state = QueuedWorkerState(
+                runtime,
+                pending=pending,
+                start_scheduled=start_scheduled,
+            )
+            self.__dict__["_user_profile_write_state"] = state
+        elif getattr(state, "runtime", None) is None and runtime is not None:
+            state.runtime = runtime
+        return state
+
+    @property
+    def _pending_user_profile_operations(self) -> list[dict[str, str]]:
+        return self._user_profile_write_state_obj().pending
+
+    @_pending_user_profile_operations.setter
+    def _pending_user_profile_operations(self, value: list[dict[str, str]]) -> None:
+        self._user_profile_write_state_obj().pending = [
+            self._user_profile_write_operation_from_pending_operation(operation)
+            for operation in list(value or [])
+        ]
+
+    @property
+    def _pending_user_profile_updates(self) -> list[dict[str, str]]:
+        return [
+            {
+                "profile_id": str(operation.get("profile_id") or ""),
+                "name": str(operation.get("name") or ""),
+                "protocol": str(operation.get("protocol") or ""),
+                "ports": str(operation.get("ports") or ""),
+            }
+            for operation in self._user_profile_write_state_obj().pending
+            if str(operation.get("action") or "") == "update"
+        ]
+
+    @_pending_user_profile_updates.setter
+    def _pending_user_profile_updates(self, value: list[dict[str, str]]) -> None:
+        pending_operations = self._user_profile_write_state_obj().pending
+        pending_operations[:] = [
+            operation for operation in pending_operations if str(operation.get("action") or "") != "update"
+        ]
+        pending_operations.extend(
+            self._user_profile_write_operation_from_update(update)
+            for update in list(value or [])
+        )
+
+    @property
+    def _pending_user_profile_deletes(self) -> list[str]:
+        return [
+            str(operation.get("profile_id") or "")
+            for operation in self._user_profile_write_state_obj().pending
+            if str(operation.get("action") or "") == "delete"
+        ]
+
+    @_pending_user_profile_deletes.setter
+    def _pending_user_profile_deletes(self, value: list[str]) -> None:
+        pending_operations = self._user_profile_write_state_obj().pending
+        pending_operations[:] = [
+            operation for operation in pending_operations if str(operation.get("action") or "") != "delete"
+        ]
+        pending_operations.extend(
+            self._user_profile_write_operation_from_delete(profile_id)
+            for profile_id in list(value or [])
+        )
+
+    @property
+    def _user_profile_write_operation_start_scheduled(self) -> bool:
+        return bool(self._user_profile_write_state_obj().start_scheduled)
+
+    @_user_profile_write_operation_start_scheduled.setter
+    def _user_profile_write_operation_start_scheduled(self, value: bool) -> None:
+        self._user_profile_write_state_obj().start_scheduled = bool(value)
+
+    @staticmethod
+    def _user_profile_write_operation_from_pending_operation(operation) -> dict[str, str]:
+        pending = dict(operation or {})
+        action = str(pending.get("action") or "")
+        if action == "delete":
+            return ProfileSetupPageBase._user_profile_write_operation_from_delete(pending.get("profile_id"))
+        return {
+            "action": action,
+            "profile_id": str(pending.get("profile_id") or ""),
+            "name": str(pending.get("name") or ""),
+            "protocol": str(pending.get("protocol") or ""),
+            "ports": str(pending.get("ports") or ""),
+        }
+
+    @staticmethod
+    def _user_profile_write_operation_from_update(update) -> dict[str, str]:
+        pending = dict(update or {})
+        return {
+            "action": "update",
+            "profile_id": str(pending.get("profile_id") or ""),
+            "name": str(pending.get("name") or ""),
+            "protocol": str(pending.get("protocol") or ""),
+            "ports": str(pending.get("ports") or ""),
+        }
+
+    @staticmethod
+    def _user_profile_write_operation_from_delete(profile_id) -> dict[str, str]:
+        return {
+            "action": "delete",
+            "profile_id": str(profile_id or ""),
+            "name": "",
+            "protocol": "",
+            "ports": "",
+        }
 
     def _start_next_pending_user_profile_write_operation(self) -> bool:
         if self._user_profile_write_operation_running():
@@ -2257,7 +2341,7 @@ class ProfileSetupPageBase(BasePage):
     ) -> None:
         if request_id != int(getattr(self, "_user_profile_update_request_id", 0) or 0):
             return
-        if self.__dict__.get("_pending_user_profile_operations") or self.__dict__.get("_pending_user_profile_updates"):
+        if self._has_pending_user_profile_write_operation():
             return
         if str(profile_id or "").strip() != self._current_user_profile_id():
             return
@@ -2283,7 +2367,7 @@ class ProfileSetupPageBase(BasePage):
     def _on_user_profile_update_failed(self, request_id: int, error: str) -> None:
         if request_id != int(getattr(self, "_user_profile_update_request_id", 0) or 0):
             return
-        if not self.__dict__.get("_pending_user_profile_operations") and not self.__dict__.get("_pending_user_profile_updates"):
+        if not self._has_pending_user_profile_write_operation():
             self._set_user_profile_buttons_enabled(True)
         log(f"{self.__class__.__name__}: не удалось изменить пользовательский profile: {error}", "ERROR")
         InfoBar.error(
@@ -2342,7 +2426,7 @@ class ProfileSetupPageBase(BasePage):
     def _on_user_profile_delete_finished(self, request_id: int, profile_id: str, changed: int) -> None:
         if request_id != int(getattr(self, "_user_profile_delete_request_id", 0) or 0):
             return
-        if self.__dict__.get("_pending_user_profile_operations") or self.__dict__.get("_pending_user_profile_deletes"):
+        if self._has_pending_user_profile_write_operation():
             return
         if str(profile_id or "").strip() != self._current_user_profile_id():
             return
@@ -2357,7 +2441,7 @@ class ProfileSetupPageBase(BasePage):
     def _on_user_profile_delete_failed(self, request_id: int, error: str) -> None:
         if request_id != int(getattr(self, "_user_profile_delete_request_id", 0) or 0):
             return
-        if not self.__dict__.get("_pending_user_profile_operations") and not self.__dict__.get("_pending_user_profile_deletes"):
+        if not self._has_pending_user_profile_write_operation():
             self._set_user_profile_buttons_enabled(True)
         log(f"{self.__class__.__name__}: не удалось удалить пользовательский profile: {error}", "ERROR")
         InfoBar.error(
@@ -4431,11 +4515,10 @@ class ProfileSetupPageBase(BasePage):
         self._enabled_save_state_obj().reset()
         self._strategy_apply_state_obj().reset()
         self._strategy_feedback_save_state_obj().reset()
+        self._user_profile_write_state_obj().reset()
         self._profile_setup_payload_apply_scheduled = False
         self._profile_setup_write_operation_start_scheduled = False
-        self._user_profile_write_operation_start_scheduled = False
         self.__dict__.setdefault("_pending_profile_setup_write_operations", []).clear()
-        self.__dict__.setdefault("_pending_user_profile_updates", []).clear()
         for attr in (
             "_setup_load_request_id",
             "_list_file_load_request_id",
@@ -4466,9 +4549,6 @@ class ProfileSetupPageBase(BasePage):
         self._enabled_save_runtime_worker = None
         self._strategy_apply_runtime_worker = None
         self._strategy_feedback_save_runtime_worker = None
-        self.__dict__.setdefault("_pending_user_profile_operations", []).clear()
-        self.__dict__.setdefault("_pending_user_profile_updates", []).clear()
-        self.__dict__.setdefault("_pending_user_profile_deletes", []).clear()
         try:
             super().cleanup()
         except Exception:
