@@ -265,6 +265,29 @@ class DnsWorkerArchitectureTests(unittest.TestCase):
             ],
         )
 
+    def test_dns_mutation_queues_use_shared_queued_worker_state(self) -> None:
+        from ui.queued_worker_state import QueuedWorkerState
+
+        page = NetworkPage.__new__(NetworkPage)
+        page._dns_apply_runtime = SimpleNamespace(is_running=Mock(return_value=False))
+        page._force_dns_action_runtime = SimpleNamespace(is_running=Mock(return_value=False))
+
+        init_source = inspect.getsource(NetworkPage.__init__)
+        dns_queue_source = inspect.getsource(NetworkPage._queue_dns_apply_request)
+        force_queue_source = inspect.getsource(NetworkPage._queue_force_dns_action)
+        cleanup_source = inspect.getsource(NetworkPage.cleanup)
+
+        self.assertIsInstance(page._dns_apply_state_obj(), QueuedWorkerState)
+        self.assertIsInstance(page._force_dns_action_state_obj(), QueuedWorkerState)
+        self.assertNotIn("_dns_apply_pending: list", init_source)
+        self.assertNotIn("_force_dns_action_pending: list", init_source)
+        self.assertNotIn("_dns_apply_start_scheduled = False", init_source)
+        self.assertNotIn("_force_dns_action_start_scheduled = False", init_source)
+        self.assertIn("_dns_apply_state_obj()", dns_queue_source)
+        self.assertIn("_force_dns_action_state_obj()", force_queue_source)
+        self.assertIn("_dns_apply_state_obj().reset()", cleanup_source)
+        self.assertIn("_force_dns_action_state_obj().reset()", cleanup_source)
+
     def test_dns_apply_waits_while_force_dns_worker_runs(self) -> None:
         class _Runtime:
             def __init__(self, running: bool) -> None:
