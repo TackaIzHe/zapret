@@ -8,6 +8,7 @@ from telegram_proxy.ui.worker_state import (
     TelegramProxyPageQueuedWorkerState,
     TelegramProxyPageWorkerState,
 )
+from ui.queued_worker_state import QueuedWorkerState
 
 
 class TelegramProxyPageWorkerStateTests(unittest.TestCase):
@@ -62,6 +63,9 @@ class TelegramProxyPageWorkerStateTests(unittest.TestCase):
 
 
 class TelegramProxyPageQueuedWorkerStateTests(unittest.TestCase):
+    def test_queued_state_uses_shared_ui_worker_state(self) -> None:
+        self.assertIs(TelegramProxyPageQueuedWorkerState, QueuedWorkerState)
+
     def test_start_or_queue_adds_payload_when_runtime_is_busy(self) -> None:
         state = TelegramProxyPageQueuedWorkerState(
             runtime=SimpleNamespace(is_running=Mock(return_value=True)),
