@@ -246,12 +246,24 @@ class OrchestraAccessibilityTests(unittest.TestCase):
 
         self.assertEqual(locked_row.accessibleName(), "Залоченная стратегия: example.com, TCP, стратегия 3")
         self.assertEqual(locked_row.strat_spin.accessibleName(), "Стратегия для example.com TCP, выбрано: 3")
+        self.assertEqual(
+            locked_row.strat_spin.property("screenReaderStateText"),
+            "Стратегия для example.com TCP, выбрано: 3",
+        )
         self.assertEqual(locked_row._delete_btn.accessibleName(), "Разлочить example.com TCP")
         locked_row.strat_spin.setValue(8)
         self.assertEqual(locked_row.strat_spin.accessibleName(), "Стратегия для example.com TCP, выбрано: 8")
+        self.assertEqual(
+            locked_row.strat_spin.property("screenReaderStateText"),
+            "Стратегия для example.com TCP, выбрано: 8",
+        )
 
         self.assertEqual(blocked_row.accessibleName(), "Заблокированная стратегия: blocked.example, UDP, стратегия 5")
         self.assertEqual(blocked_row.strat_spin.accessibleName(), "Заблокированная стратегия для blocked.example UDP, выбрано: 5")
+        self.assertEqual(
+            blocked_row.strat_spin.property("screenReaderStateText"),
+            "Заблокированная стратегия для blocked.example UDP, выбрано: 5",
+        )
         self.assertEqual(blocked_row._add_btn.accessibleName(), "Добавить ещё одну блокировку для blocked.example UDP")
         self.assertEqual(blocked_row._delete_btn.accessibleName(), "Разблокировать blocked.example UDP, стратегия 5")
 

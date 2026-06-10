@@ -147,14 +147,16 @@ class LockedDomainRow(QFrame):
     def _update_accessibility(self, strategy: int | None = None) -> None:
         selected_strategy = int(strategy if strategy is not None else self.strat_spin.value())
         proto_text = str(self.proto or "").upper()
+        strategy_state = f"Стратегия для {self.domain} {proto_text}, выбрано: {selected_strategy}"
         set_control_accessibility(
             self,
             name=f"Залоченная стратегия: {self.domain}, {proto_text}, стратегия {selected_strategy}",
             description="Стратегия зафиксирована для этого домена.",
         )
+        set_state_text(self.strat_spin, strategy_state)
         set_control_accessibility(
             self.strat_spin,
-            name=f"Стратегия для {self.domain} {proto_text}, выбрано: {selected_strategy}",
+            name=strategy_state,
             description="Стрелками вверх и вниз можно изменить номер стратегии. Изменение сохранится автоматически.",
         )
         if self._delete_btn is not None:

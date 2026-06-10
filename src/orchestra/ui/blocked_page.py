@@ -219,9 +219,11 @@ class BlockedDomainRow(QFrame):
             description = "Оркестратор не будет использовать эту стратегию для домена."
         set_control_accessibility(self, name=name, description=description)
         if hasattr(self, "strat_spin"):
+            strategy_state = f"Заблокированная стратегия для {self.hostname} {proto_text}, выбрано: {selected_strategy}"
+            set_state_text(self.strat_spin, strategy_state)
             set_control_accessibility(
                 self.strat_spin,
-                name=f"Заблокированная стратегия для {self.hostname} {proto_text}, выбрано: {selected_strategy}",
+                name=strategy_state,
                 description="Стрелками вверх и вниз можно изменить номер заблокированной стратегии.",
             )
         if self._add_btn is not None:
