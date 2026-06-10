@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import inspect
+from types import SimpleNamespace
 import unittest
+from unittest.mock import Mock
 
 
 class ProfileOrderWorkerArchitectureTests(unittest.TestCase):
@@ -72,6 +74,29 @@ class ProfileOrderWorkerArchitectureTests(unittest.TestCase):
         self.assertNotIn("self._model.set_profiles", set_source)
         self.assertNotIn("self._model.move_profile", move_source)
         self.assertIn("build_profile_order_list_view_state", worker_source)
+
+    def test_profile_order_load_queue_uses_shared_latest_worker_state(self) -> None:
+        from profile.ui.profile_order_page import ProfileOrderPageBase
+        from ui.latest_value_worker_state import LatestValueWorkerState
+
+        page = ProfileOrderPageBase.__new__(ProfileOrderPageBase)
+        page._order_load_runtime = SimpleNamespace(is_running=Mock(return_value=False))
+
+        init_source = inspect.getsource(ProfileOrderPageBase.__init__)
+        reload_source = inspect.getsource(ProfileOrderPageBase._reload_order_profiles)
+        finished_source = inspect.getsource(ProfileOrderPageBase._on_order_profiles_worker_finished)
+        scheduled_source = inspect.getsource(ProfileOrderPageBase._run_scheduled_order_profiles_reload)
+        cleanup_source = inspect.getsource(ProfileOrderPageBase.cleanup)
+
+        self.assertTrue(hasattr(ProfileOrderPageBase, "_order_load_state_obj"))
+        self.assertIsInstance(page._order_load_state_obj(), LatestValueWorkerState)
+        self.assertIn("_order_load_state = LatestValueWorkerState", init_source)
+        self.assertIn("_order_load_state_obj()", reload_source)
+        self.assertIn("_order_load_state_obj()", finished_source)
+        self.assertIn("_order_load_state_obj()", scheduled_source)
+        self.assertIn("_order_load_state_obj().reset()", cleanup_source)
+        self.assertNotIn("self._order_load_dirty = False", init_source)
+        self.assertNotIn("self._order_load_restart_scheduled = False", init_source)
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ from profile.ui.profile_order_list import ProfileOrderList
 from PyQt6.QtCore import QTimer
 from qfluentwidgets import BodyLabel, BreadcrumbBar, InfoBar
 from settings.mode import ZAPRET1_MODE, ZAPRET2_MODE
+from ui.latest_value_worker_state import LatestValueWorkerState
 from ui.one_shot_worker_runtime import OneShotWorkerRuntime
 from ui.pages.base_page import BasePage
 from app.ui_texts import tr as tr_catalog
@@ -38,8 +39,10 @@ class ProfileOrderPageBase(BasePage):
         self._payload = None
         self._order_list: ProfileOrderList | None = None
         self._order_load_runtime = OneShotWorkerRuntime()
-        self._order_load_dirty = False
-        self._order_load_restart_scheduled = False
+        self._order_load_state = LatestValueWorkerState(
+            self._order_load_runtime,
+            empty_value=False,
+        )
         self._order_payload_apply_scheduled = False
         self._pending_order_payload_apply = None
         self._order_move_runtime = OneShotWorkerRuntime()
@@ -81,17 +84,18 @@ class ProfileOrderPageBase(BasePage):
         if bool(self.__dict__.get("_cleanup_in_progress", False)):
             return
         runtime = self._order_load_runtime
-        if self.__dict__.get("_order_load_restart_scheduled", False):
+        state = self._order_load_state_obj()
+        if state.start_scheduled:
             if force:
-                self._order_load_dirty = True
+                state.pending = True
             return
         if runtime.is_running():
             if force:
                 runtime.next_request_id()
-                self._order_load_dirty = True
+                state.pending = True
                 return
             return
-        self._order_load_dirty = False
+        state.pending = False
         runtime.start_qthread_worker(
             worker_factory=lambda request_id: self._create_profile_order_load_worker(
                 request_id,
@@ -131,7 +135,8 @@ class ProfileOrderPageBase(BasePage):
         self._order_payload_apply_scheduled = False
         if payload is None or bool(self.__dict__.get("_cleanup_in_progress", False)):
             return
-        if self.__dict__.get("_order_load_dirty", False) or self.__dict__.get("_order_load_restart_scheduled", False):
+        state = self._order_load_state_obj()
+        if state.has_pending() or state.start_scheduled:
             return
         if self._order_list is not None:
             view_state = getattr(payload, "view_state", None)
@@ -154,24 +159,64 @@ class ProfileOrderPageBase(BasePage):
     def _on_order_profiles_worker_finished(self, _worker) -> None:
         if not self._is_current_worker_finish(self.__dict__.get("_order_load_runtime"), _worker):
             return
-        should_reload = bool(getattr(self, "_order_load_dirty", False))
-        if should_reload and not bool(self.__dict__.get("_cleanup_in_progress", False)):
+        if self._order_load_state_obj().has_pending() and not bool(self.__dict__.get("_cleanup_in_progress", False)):
             self._schedule_order_profiles_reload()
 
     def _schedule_order_profiles_reload(self) -> None:
-        if self.__dict__.get("_order_load_restart_scheduled", False):
-            return
-        self._order_load_restart_scheduled = True
-        try:
-            QTimer.singleShot(0, self._run_scheduled_order_profiles_reload)
-        except Exception:
-            self._run_scheduled_order_profiles_reload()
+        state = self._order_load_state_obj()
+
+        def _single_shot(delay: int, callback) -> None:
+            try:
+                QTimer.singleShot(delay, callback)
+            except Exception:
+                callback()
+
+        state.schedule_start(
+            _single_shot,
+            self._run_scheduled_order_profiles_reload,
+            cleanup_in_progress=bool(self.__dict__.get("_cleanup_in_progress", False)),
+        )
 
     def _run_scheduled_order_profiles_reload(self) -> None:
-        self._order_load_restart_scheduled = False
-        if bool(self.__dict__.get("_cleanup_in_progress", False)):
+        pending = self._order_load_state_obj().take_pending_for_scheduled_start(
+            cleanup_in_progress=bool(self.__dict__.get("_cleanup_in_progress", False)),
+        )
+        if not pending:
             return
         self._reload_order_profiles(force=True)
+
+    def _order_load_state_obj(self) -> LatestValueWorkerState:
+        state = self.__dict__.get("_order_load_state")
+        runtime = self.__dict__.get("_order_load_runtime")
+        if state is None:
+            pending = bool(self.__dict__.pop("_order_load_dirty", False))
+            start_scheduled = bool(self.__dict__.pop("_order_load_restart_scheduled", False))
+            state = LatestValueWorkerState(
+                runtime,
+                empty_value=False,
+                pending=pending,
+                start_scheduled=start_scheduled,
+            )
+            self.__dict__["_order_load_state"] = state
+        elif getattr(state, "runtime", None) is None and runtime is not None:
+            state.runtime = runtime
+        return state
+
+    @property
+    def _order_load_dirty(self) -> bool:
+        return bool(self._order_load_state_obj().pending)
+
+    @_order_load_dirty.setter
+    def _order_load_dirty(self, value: bool) -> None:
+        self._order_load_state_obj().pending = bool(value)
+
+    @property
+    def _order_load_restart_scheduled(self) -> bool:
+        return bool(self._order_load_state_obj().start_scheduled)
+
+    @_order_load_restart_scheduled.setter
+    def _order_load_restart_scheduled(self, value: bool) -> None:
+        self._order_load_state_obj().start_scheduled = bool(value)
 
     def _on_profile_move_requested(self, source_profile_key: str, destination_profile_key: str) -> None:
         self._request_profile_order_move(
@@ -390,8 +435,7 @@ class ProfileOrderPageBase(BasePage):
 
     def cleanup(self) -> None:
         self._cleanup_in_progress = True
-        self._order_load_dirty = False
-        self._order_load_restart_scheduled = False
+        self._order_load_state_obj().reset()
         self._pending_order_payload_apply = None
         self._order_payload_apply_scheduled = False
         self._order_move_start_scheduled = False
