@@ -68,6 +68,25 @@ class _EnabledWidget:
 
 
 class ProfileSetupPageContractTests(unittest.TestCase):
+    def test_profile_setup_page_tracks_detail_workers_by_request_id(self) -> None:
+        page_source = inspect.getsource(ProfileSetupPageBase)
+
+        self.assertIn("_accept_current_profile_setup_worker_finished", page_source)
+        self.assertIn("_request_id", page_source)
+        for attr in (
+            "_list_file_load_runtime_worker",
+            "_list_file_save_runtime_worker",
+            "_list_file_validation_runtime_worker",
+            "_settings_save_runtime_worker",
+            "_raw_profile_save_runtime_worker",
+            "_enabled_save_runtime_worker",
+            "_user_profile_update_runtime_worker",
+            "_user_profile_delete_runtime_worker",
+            "_strategy_apply_runtime_worker",
+            "_strategy_feedback_save_runtime_worker",
+        ):
+            self.assertNotIn(attr, page_source)
+
     def test_preset_setup_title_shows_selected_preset_name(self) -> None:
         payload = SimpleNamespace(
             selected_preset_name="YouTube Russia RTMPS",
@@ -2026,14 +2045,7 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             "_strategy_feedback_save_runtime",
         )
         worker_attrs = ()
-        worker_ref_attrs = (
-            "_list_file_save_runtime_worker",
-            "_settings_save_runtime_worker",
-            "_raw_profile_save_runtime_worker",
-            "_enabled_save_runtime_worker",
-            "_strategy_apply_runtime_worker",
-            "_strategy_feedback_save_runtime_worker",
-        )
+        worker_ref_attrs = ()
         request_attrs = (
             "_setup_load_request_id",
             "_list_file_load_request_id",
@@ -3343,7 +3355,9 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             "profile.ui.profile_setup_page.QTimer.singleShot",
             side_effect=lambda _delay, callback: callbacks.append(callback),
         ):
-            ProfileSetupPageBase._on_user_profile_update_worker_finished(page, object())
+            ProfileSetupPageBase._on_user_profile_update_worker_finished(
+                page, SimpleNamespace(_request_id=1)
+            )
 
         page.create_profile_user_update_worker.assert_not_called()
         next_worker.start.assert_not_called()
@@ -3885,7 +3899,9 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             "profile.ui.profile_setup_page.QTimer.singleShot",
             side_effect=lambda _delay, callback: callbacks.append(callback),
         ):
-            ProfileSetupPageBase._on_raw_profile_save_worker_finished(page, object())
+            ProfileSetupPageBase._on_raw_profile_save_worker_finished(
+                page, SimpleNamespace(_request_id=1)
+            )
 
         page.create_profile_raw_text_save_worker.assert_not_called()
         self.assertEqual(len(callbacks), 1)
@@ -4353,7 +4369,9 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             "profile.ui.profile_setup_page.QTimer.singleShot",
             side_effect=lambda _delay, callback: callbacks.append(callback),
         ):
-            ProfileSetupPageBase._on_list_file_save_worker_finished(page, object())
+            ProfileSetupPageBase._on_list_file_save_worker_finished(
+                page, SimpleNamespace(_request_id=1)
+            )
 
         page.create_profile_list_file_save_worker.assert_not_called()
         self.assertEqual(len(callbacks), 1)
@@ -4569,13 +4587,16 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         import profile.ui.profile_setup_page as profile_setup_page
 
         page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        page._list_file_validation_request_id = 1
         page._pending_list_file_validation = {"kind": "hostlist", "text": "old.example"}
         page._list_file_validation_runtime = SimpleNamespace(is_running=Mock(return_value=False))
         page._start_list_file_validation_worker = Mock()
         single_shot = Mock(side_effect=lambda _delay, _callback: None)
 
         with patch.object(profile_setup_page, "QTimer", SimpleNamespace(singleShot=single_shot)):
-            ProfileSetupPageBase._on_list_file_validation_worker_finished(page, object())
+            ProfileSetupPageBase._on_list_file_validation_worker_finished(
+                page, SimpleNamespace(_request_id=1)
+            )
             ProfileSetupPageBase._request_list_file_validation(
                 page,
                 {"kind": "hostlist", "text": "latest.example"},
@@ -5156,10 +5177,8 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         page._on_profile_changed_callback.assert_not_called()
 
     def test_stale_strategy_apply_worker_finished_does_not_flush_pending_choice(self) -> None:
-        old_worker = object()
-        current_worker = object()
         page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
-        page._strategy_apply_runtime_worker = current_worker
+        page._strategy_apply_request_id = 4
         page._strategy_apply_runtime_strategy_id = "current"
         page._strategy_apply_runtime_branch_id = "branch:1"
         page._pending_strategy_apply = "second"
@@ -5168,9 +5187,9 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         )
         page._schedule_profile_setup_write_operation_start = Mock()
 
-        ProfileSetupPageBase._on_strategy_apply_worker_finished(page, old_worker)
+        ProfileSetupPageBase._on_strategy_apply_worker_finished(page, SimpleNamespace(_request_id=3))
 
-        self.assertIs(page._strategy_apply_runtime_worker, current_worker)
+        self.assertEqual(page._strategy_apply_request_id, 4)
         self.assertEqual(page._strategy_apply_runtime_strategy_id, "current")
         self.assertEqual(page._strategy_apply_runtime_branch_id, "branch:1")
         self.assertEqual(page._pending_strategy_apply, "second")
@@ -5179,7 +5198,7 @@ class ProfileSetupPageContractTests(unittest.TestCase):
     def test_cleared_strategy_apply_worker_finished_does_not_flush_pending_choice(self) -> None:
         old_worker = object()
         page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
-        page._strategy_apply_runtime_worker = None
+        page._strategy_apply_request_id = 4
         page._strategy_apply_runtime_strategy_id = "current"
         page._strategy_apply_runtime_branch_id = "branch:1"
         page._pending_strategy_apply = "second"
@@ -5190,50 +5209,46 @@ class ProfileSetupPageContractTests(unittest.TestCase):
 
         ProfileSetupPageBase._on_strategy_apply_worker_finished(page, old_worker)
 
-        self.assertIsNone(page._strategy_apply_runtime_worker)
+        self.assertEqual(page._strategy_apply_request_id, 4)
         self.assertEqual(page._strategy_apply_runtime_strategy_id, "current")
         self.assertEqual(page._strategy_apply_runtime_branch_id, "branch:1")
         self.assertEqual(page._pending_strategy_apply, "second")
         page._schedule_profile_setup_write_operation_start.assert_not_called()
 
     def test_stale_list_file_save_worker_finished_does_not_drive_write_queue(self) -> None:
-        old_worker = object()
-        current_worker = object()
         page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
-        page._list_file_save_runtime_worker = current_worker
+        page._list_file_save_request_id = 4
         page._pending_list_file_save = ("profile-1", "example.com")
         page._start_next_profile_setup_write_operation = Mock(
             side_effect=AssertionError("stale list file worker must not drive write queue")
         )
         page._schedule_pending_list_file_save_start = Mock()
 
-        ProfileSetupPageBase._on_list_file_save_worker_finished(page, old_worker)
+        ProfileSetupPageBase._on_list_file_save_worker_finished(page, SimpleNamespace(_request_id=3))
 
-        self.assertIs(page._list_file_save_runtime_worker, current_worker)
+        self.assertEqual(page._list_file_save_request_id, 4)
         self.assertEqual(page._pending_list_file_save, ("profile-1", "example.com"))
         page._schedule_pending_list_file_save_start.assert_not_called()
 
     def test_stale_settings_save_worker_finished_does_not_drive_write_queue(self) -> None:
-        old_worker = object()
-        current_worker = object()
         page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
-        page._settings_save_runtime_worker = current_worker
+        page._settings_save_request_id = 4
         page._pending_settings_save = {"filter_kind": "hostlist"}
         page._start_next_profile_setup_write_operation = Mock(
             side_effect=AssertionError("stale settings worker must not drive write queue")
         )
         page._schedule_profile_setup_write_operation_start = Mock()
 
-        ProfileSetupPageBase._on_settings_save_worker_finished(page, old_worker)
+        ProfileSetupPageBase._on_settings_save_worker_finished(page, SimpleNamespace(_request_id=3))
 
-        self.assertIs(page._settings_save_runtime_worker, current_worker)
+        self.assertEqual(page._settings_save_request_id, 4)
         self.assertEqual(page._pending_settings_save, {"filter_kind": "hostlist"})
         page._schedule_profile_setup_write_operation_start.assert_not_called()
 
     def test_cleared_settings_save_worker_finished_does_not_drive_write_queue(self) -> None:
         old_worker = object()
         page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
-        page._settings_save_runtime_worker = None
+        page._settings_save_request_id = 4
         page._pending_settings_save = {"filter_kind": "hostlist"}
         page._start_next_profile_setup_write_operation = Mock(
             side_effect=AssertionError("cleared settings worker must not drive write queue")
@@ -5242,32 +5257,28 @@ class ProfileSetupPageContractTests(unittest.TestCase):
 
         ProfileSetupPageBase._on_settings_save_worker_finished(page, old_worker)
 
-        self.assertIsNone(page._settings_save_runtime_worker)
+        self.assertEqual(page._settings_save_request_id, 4)
         self.assertEqual(page._pending_settings_save, {"filter_kind": "hostlist"})
         page._schedule_profile_setup_write_operation_start.assert_not_called()
 
     def test_stale_raw_profile_save_worker_finished_does_not_drive_write_queue(self) -> None:
-        old_worker = object()
-        current_worker = object()
         page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
-        page._raw_profile_save_runtime_worker = current_worker
+        page._raw_profile_save_request_id = 4
         page._pending_raw_profile_save = ("profile-1", "--filter-tcp=443")
         page._start_next_profile_setup_write_operation = Mock(
             side_effect=AssertionError("stale raw profile worker must not drive write queue")
         )
         page._schedule_profile_setup_write_operation_start = Mock()
 
-        ProfileSetupPageBase._on_raw_profile_save_worker_finished(page, old_worker)
+        ProfileSetupPageBase._on_raw_profile_save_worker_finished(page, SimpleNamespace(_request_id=3))
 
-        self.assertIs(page._raw_profile_save_runtime_worker, current_worker)
+        self.assertEqual(page._raw_profile_save_request_id, 4)
         self.assertEqual(page._pending_raw_profile_save, ("profile-1", "--filter-tcp=443"))
         page._schedule_profile_setup_write_operation_start.assert_not_called()
 
     def test_stale_enabled_save_worker_finished_does_not_drive_write_queue(self) -> None:
-        old_worker = object()
-        current_worker = object()
         page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
-        page._enabled_save_runtime_worker = current_worker
+        page._enabled_save_request_id = 4
         page._enabled_save_runtime_enabled = True
         page._pending_enabled_save = False
         page._start_next_profile_setup_write_operation = Mock(
@@ -5275,26 +5286,24 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         )
         page._schedule_enabled_save_worker_start = Mock()
 
-        ProfileSetupPageBase._on_enabled_save_worker_finished(page, old_worker)
+        ProfileSetupPageBase._on_enabled_save_worker_finished(page, SimpleNamespace(_request_id=3))
 
-        self.assertIs(page._enabled_save_runtime_worker, current_worker)
+        self.assertEqual(page._enabled_save_request_id, 4)
         self.assertIs(page._enabled_save_runtime_enabled, True)
         self.assertIs(page._pending_enabled_save, False)
         page._schedule_enabled_save_worker_start.assert_not_called()
 
     def test_stale_strategy_feedback_save_worker_finished_does_not_reschedule_pending_save(self) -> None:
-        old_worker = object()
-        current_worker = object()
         page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
-        page._strategy_feedback_save_runtime_worker = current_worker
+        page._strategy_feedback_save_request_id = 4
         page._pending_strategy_feedback_save = {"rating": "work"}
         page._schedule_strategy_feedback_save_worker_start = Mock(
             side_effect=AssertionError("stale feedback worker must not reschedule save")
         )
 
-        ProfileSetupPageBase._on_strategy_feedback_save_worker_finished(page, old_worker)
+        ProfileSetupPageBase._on_strategy_feedback_save_worker_finished(page, SimpleNamespace(_request_id=3))
 
-        self.assertIs(page._strategy_feedback_save_runtime_worker, current_worker)
+        self.assertEqual(page._strategy_feedback_save_request_id, 4)
         self.assertEqual(page._pending_strategy_feedback_save, {"rating": "work"})
         page._schedule_strategy_feedback_save_worker_start.assert_not_called()
 
@@ -5634,13 +5643,16 @@ class ProfileSetupPageContractTests(unittest.TestCase):
                 return False
 
         page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        page._strategy_feedback_save_request_id = 1
         page._strategy_feedback_save_runtime = _Runtime()
         page._pending_strategy_feedback_save = {"rating": "work", "favorite": None}
         page._start_strategy_feedback_save_worker = Mock()
         single_shot = Mock(side_effect=lambda _delay, _callback: None)
 
         with patch.object(profile_setup_page, "QTimer", SimpleNamespace(singleShot=single_shot)):
-            ProfileSetupPageBase._on_strategy_feedback_save_worker_finished(page, object())
+            ProfileSetupPageBase._on_strategy_feedback_save_worker_finished(
+                page, SimpleNamespace(_request_id=1)
+            )
             ProfileSetupPageBase._request_strategy_feedback_save(
                 page,
                 {"rating": None, "favorite": True},

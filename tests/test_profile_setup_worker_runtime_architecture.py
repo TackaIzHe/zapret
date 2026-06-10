@@ -8,6 +8,9 @@ class ProfileSetupWorkerRuntimeArchitectureTests(unittest.TestCase):
     def test_profile_setup_save_workers_start_through_runtime(self) -> None:
         from profile.ui.profile_setup_page import ProfileSetupPageBase
 
+        module_source = inspect.getsource(
+            __import__("profile.ui.profile_setup_page", fromlist=[""])
+        )
         init_source = inspect.getsource(ProfileSetupPageBase.__init__)
         payload_source = inspect.getsource(ProfileSetupPageBase._request_profile_setup_payload)
         payload_start_source = inspect.getsource(ProfileSetupPageBase._start_profile_setup_load_worker)
@@ -47,8 +50,9 @@ class ProfileSetupWorkerRuntimeArchitectureTests(unittest.TestCase):
         )
         for attr in expected_runtimes:
             self.assertIn(f"{attr} = OneShotWorkerRuntime()", init_source)
-            self.assertIn(attr, cleanup_source)
+            self.assertIn(attr, module_source)
 
+        self.assertIn("_PROFILE_SETUP_CLEANUP_RUNTIMES", cleanup_source)
         for attr, source in (
             ("_setup_load_runtime", payload_source + payload_start_source),
             ("_list_file_load_runtime", list_load_source),

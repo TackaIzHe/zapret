@@ -51,8 +51,8 @@ class ProfileEnabledSaveQueueTests(unittest.TestCase):
     def test_enabled_save_worker_finished_starts_pending_final_state(self) -> None:
         page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
         old_worker = _Worker(running=False)
+        old_worker._request_id = 0
         next_worker = _Worker(running=False)
-        page._enabled_save_worker = old_worker
         page._enabled_save_worker_enabled = True
         page._pending_enabled_save = False
         page._enabled_save_request_id = 0

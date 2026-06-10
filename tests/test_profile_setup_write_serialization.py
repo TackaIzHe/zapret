@@ -115,7 +115,9 @@ class ProfileSetupWriteSerializationTests(unittest.TestCase):
             "profile.ui.profile_setup_page.QTimer.singleShot",
             side_effect=lambda _delay, callback: callbacks.append(callback),
         ):
-            ProfileSetupPageBase._on_settings_save_worker_finished(page, object())
+            ProfileSetupPageBase._on_settings_save_worker_finished(
+                page, SimpleNamespace(_request_id=0)
+            )
 
         page.create_profile_raw_text_save_worker.assert_not_called()
         self.assertEqual(len(callbacks), 1)
@@ -367,7 +369,9 @@ class ProfileSetupWriteSerializationTests(unittest.TestCase):
             "profile.ui.profile_setup_page.QTimer.singleShot",
             side_effect=lambda _delay, callback: callbacks.append(callback),
         ):
-            ProfileSetupPageBase._on_raw_profile_save_worker_finished(page, object())
+            ProfileSetupPageBase._on_raw_profile_save_worker_finished(
+                page, SimpleNamespace(_request_id=0)
+            )
 
         page.create_profile_strategy_apply_worker.assert_not_called()
         self.assertEqual(len(callbacks), 1)
@@ -417,7 +421,9 @@ class ProfileSetupWriteSerializationTests(unittest.TestCase):
             "profile.ui.profile_setup_page.QTimer.singleShot",
             side_effect=lambda _delay, callback: callbacks.append(callback),
         ):
-            ProfileSetupPageBase._on_settings_save_worker_finished(page, object())
+            ProfileSetupPageBase._on_settings_save_worker_finished(
+                page, SimpleNamespace(_request_id=0)
+            )
 
         page.create_profile_settings_save_worker.assert_not_called()
         self.assertEqual(len(callbacks), 1)
@@ -448,7 +454,9 @@ class ProfileSetupWriteSerializationTests(unittest.TestCase):
             "profile.ui.profile_setup_page.QTimer.singleShot",
             side_effect=lambda _delay, callback: callbacks.append(callback),
         ):
-            ProfileSetupPageBase._on_raw_profile_save_worker_finished(page, object())
+            ProfileSetupPageBase._on_raw_profile_save_worker_finished(
+                page, SimpleNamespace(_request_id=0)
+            )
 
         page.create_profile_raw_text_save_worker.assert_not_called()
         self.assertEqual(len(callbacks), 1)
@@ -478,7 +486,9 @@ class ProfileSetupWriteSerializationTests(unittest.TestCase):
             "profile.ui.profile_setup_page.QTimer.singleShot",
             side_effect=lambda _delay, callback: callbacks.append(callback),
         ):
-            ProfileSetupPageBase._on_strategy_apply_worker_finished(page, object())
+            ProfileSetupPageBase._on_strategy_apply_worker_finished(
+                page, SimpleNamespace(_request_id=0)
+            )
 
         page.create_profile_strategy_apply_worker.assert_not_called()
         self.assertEqual(len(callbacks), 1)
@@ -506,7 +516,9 @@ class ProfileSetupWriteSerializationTests(unittest.TestCase):
             "profile.ui.profile_setup_page.QTimer.singleShot",
             side_effect=lambda _delay, callback: callbacks.append(callback),
         ):
-            ProfileSetupPageBase._on_strategy_feedback_save_worker_finished(page, object())
+            ProfileSetupPageBase._on_strategy_feedback_save_worker_finished(
+                page, SimpleNamespace(_request_id=0)
+            )
 
         page.create_profile_strategy_feedback_save_worker.assert_not_called()
         self.assertEqual(len(callbacks), 1)
