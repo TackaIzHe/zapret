@@ -111,8 +111,7 @@ class StrategyScanPage(BasePage):
         self._support_prepare_runtime = OneShotWorkerRuntime()
         self._support_prepare_state = LatestValueWorkerState(self._support_prepare_runtime, empty_value=None)
         self._quick_targets_runtime = OneShotWorkerRuntime()
-        self._quick_targets_pending = None
-        self._quick_targets_start_scheduled = False
+        self._quick_targets_state = LatestValueWorkerState(self._quick_targets_runtime, empty_value=None)
         self._strategy_scan_resume_save_runtime = OneShotWorkerRuntime()
         self._strategy_scan_resume_save_pending = None
         self._strategy_scan_resume_save_start_scheduled = False
@@ -384,13 +383,11 @@ class StrategyScanPage(BasePage):
             "scan_protocol": str(scan_protocol or ""),
             "current_value": str(current_value or ""),
         }
-        if (
-            self._quick_targets_runtime.is_running()
-            or self.__dict__.get("_quick_targets_start_scheduled", False)
-        ):
-            self._quick_targets_pending = pending
+        state = self._quick_targets_state_obj()
+        if state.is_busy():
+            state.pending = pending
             return
-        self._quick_targets_pending = None
+        state.pending = None
 
         def worker_factory(request_id: int):
             return self.create_quick_targets_worker(
@@ -415,7 +412,7 @@ class StrategyScanPage(BasePage):
             cleanup_in_progress=self._cleanup_in_progress,
         ):
             return
-        if self.__dict__.get("_quick_targets_pending"):
+        if self._quick_targets_state_obj().has_pending():
             return
         self._open_quick_targets_menu(menu_plan)
 
@@ -428,27 +425,25 @@ class StrategyScanPage(BasePage):
         logger.warning("Failed to load quick targets: %s", error)
 
     def _on_quick_targets_worker_finished(self, worker) -> None:
-        if not self._is_current_worker_finish(self.__dict__.get("_quick_targets_runtime"), worker):
-            return
-        if self.__dict__.get("_cleanup_in_progress", False):
-            return
-        if self.__dict__.get("_quick_targets_pending"):
-            self._schedule_quick_targets_menu_start()
+        self._quick_targets_state_obj().schedule_pending_after_finish(
+            worker,
+            is_current_worker_finish=self._is_current_worker_finish,
+            single_shot=QTimer.singleShot,
+            run_scheduled=self._run_scheduled_quick_targets_menu_start,
+            cleanup_in_progress=self.__dict__.get("_cleanup_in_progress", False),
+        )
 
     def _schedule_quick_targets_menu_start(self) -> None:
-        if self.__dict__.get("_cleanup_in_progress", False):
-            return
-        if self.__dict__.get("_quick_targets_start_scheduled", False):
-            return
-        self._quick_targets_start_scheduled = True
-        QTimer.singleShot(0, self._run_scheduled_quick_targets_menu_start)
+        self._quick_targets_state_obj().schedule_start(
+            QTimer.singleShot,
+            self._run_scheduled_quick_targets_menu_start,
+            cleanup_in_progress=self.__dict__.get("_cleanup_in_progress", False),
+        )
 
     def _run_scheduled_quick_targets_menu_start(self) -> None:
-        self._quick_targets_start_scheduled = False
-        if self.__dict__.get("_cleanup_in_progress", False):
-            return
-        pending = self.__dict__.get("_quick_targets_pending")
-        self._quick_targets_pending = None
+        pending = self._quick_targets_state_obj().take_pending_for_scheduled_start(
+            cleanup_in_progress=self.__dict__.get("_cleanup_in_progress", False),
+        )
         if not pending:
             return
         self._request_quick_targets_menu(
@@ -883,6 +878,39 @@ class StrategyScanPage(BasePage):
     def _support_prepare_start_scheduled(self, value: bool) -> None:
         self._support_prepare_state_obj().start_scheduled = bool(value)
 
+    def _quick_targets_state_obj(self) -> LatestValueWorkerState:
+        state = self.__dict__.get("_quick_targets_state")
+        runtime = self.__dict__.get("_quick_targets_runtime")
+        if state is None:
+            pending = self.__dict__.pop("_quick_targets_pending", None)
+            start_scheduled = bool(self.__dict__.pop("_quick_targets_start_scheduled", False))
+            state = LatestValueWorkerState(
+                runtime,
+                empty_value=None,
+                pending=pending,
+                start_scheduled=start_scheduled,
+            )
+            self.__dict__["_quick_targets_state"] = state
+        elif getattr(state, "runtime", None) is None and runtime is not None:
+            state.runtime = runtime
+        return state
+
+    @property
+    def _quick_targets_pending(self):
+        return self._quick_targets_state_obj().pending
+
+    @_quick_targets_pending.setter
+    def _quick_targets_pending(self, value) -> None:
+        self._quick_targets_state_obj().pending = value
+
+    @property
+    def _quick_targets_start_scheduled(self) -> bool:
+        return bool(self._quick_targets_state_obj().start_scheduled)
+
+    @_quick_targets_start_scheduled.setter
+    def _quick_targets_start_scheduled(self, value: bool) -> None:
+        self._quick_targets_state_obj().start_scheduled = bool(value)
+
     # ------------------------------------------------------------------
     # Apply strategy
     # ------------------------------------------------------------------
@@ -1256,8 +1284,7 @@ class StrategyScanPage(BasePage):
         )
         self._support_prepare_runtime.cancel()
         self._support_prepare_state_obj().reset()
-        self._quick_targets_pending = None
-        self._quick_targets_start_scheduled = False
+        self._quick_targets_state_obj().reset()
         self._quick_targets_runtime.stop(
             blocking=False,
             warning_prefix="strategy scan quick targets worker",
