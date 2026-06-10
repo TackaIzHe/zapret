@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import unittest
+from datetime import datetime
 from types import SimpleNamespace
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -14,7 +15,11 @@ from donater.ui.build import (
     build_premium_device_info_section,
 )
 from donater.ui.page_plans import build_connection_test_start_plan
-from donater.ui.pairing_workflow import apply_pair_code_result_ui, apply_pair_code_start_ui
+from donater.ui.pairing_workflow import (
+    apply_device_info_snapshot_labels,
+    apply_pair_code_result_ui,
+    apply_pair_code_start_ui,
+)
 from donater.ui.page_lifecycle import apply_premium_language, render_activation_status_label
 from donater.ui.status_workflow import apply_connection_test_plan, render_server_status_label
 from donater.ui.page import PremiumPage
@@ -62,6 +67,34 @@ class PremiumControlsAccessibilityTests(unittest.TestCase):
         self.assertIn("Telegram-бота", actions.extend_btn.accessibleDescription())
         self.assertEqual(activation.key_input.accessibleName(), "Код привязки Premium: пока не создан")
         self.assertIn("код, который нужно отправить", activation.key_input.accessibleDescription())
+
+    def test_premium_device_info_labels_expose_state_text(self) -> None:
+        device = build_premium_device_info_section(
+            tr=lambda _key, default: default,
+            on_open_bot=lambda: None,
+        )
+
+        self.assertEqual(device.device_id_label.accessibleName(), "ID устройства: загрузка...")
+        self.assertEqual(device.saved_key_label.accessibleName(), "Токен устройства: не найден")
+        self.assertEqual(device.last_check_label.accessibleName(), "Последняя проверка Premium: —")
+        self.assertEqual(device.server_status_label.accessibleName(), "Статус Premium-сервера: проверка...")
+
+        apply_device_info_snapshot_labels(
+            snapshot={
+                "device_id": "abcdef0123456789abcdef",
+                "device_token": "token",
+                "pair_code": "ABCD12EF",
+                "last_check": datetime(2026, 6, 10, 12, 30),
+            },
+            tr=lambda _key, default, **kwargs: default.format(**kwargs) if kwargs else default,
+            device_id_label=device.device_id_label,
+            saved_key_label=device.saved_key_label,
+            last_check_label=device.last_check_label,
+        )
+
+        self.assertEqual(device.device_id_label.accessibleName(), "ID устройства: abcdef0123456789...")
+        self.assertEqual(device.saved_key_label.accessibleName(), "Токен устройства: есть. Код привязки: ABCD12EF")
+        self.assertEqual(device.last_check_label.accessibleName(), "Последняя проверка Premium: 10.06.2026 12:30")
 
     def test_premium_language_refresh_keeps_screen_reader_names(self) -> None:
         parent = QWidget()

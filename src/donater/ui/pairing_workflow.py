@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import QApplication
 
 import donater.ui.page_plans as premium_page_plans
 from donater.ui.accessibility import apply_premium_button_accessibility, apply_premium_pair_code_accessibility
+from ui.accessibility import set_state_text
 
 
 def apply_device_info_snapshot_labels(
@@ -28,21 +29,44 @@ def apply_device_info_snapshot_labels(
         pair_template_text=tr("page.premium.label.pair_code.value", "pair: {pair_code}"),
     )
 
-    device_id_label.setText(
-        tr(
-            plan.device_id_text_key,
-            plan.device_id_text_default,
-            **plan.device_id_kwargs,
-        )
+    device_id_text = tr(
+        plan.device_id_text_key,
+        plan.device_id_text_default,
+        **plan.device_id_kwargs,
     )
+    device_id_label.setText(device_id_text)
+    set_state_text(device_id_label, device_id_text)
     saved_key_label.setText(plan.saved_key_text)
-    last_check_label.setText(
-        tr(
-            plan.last_check_text_key,
-            plan.last_check_text_default,
-            **plan.last_check_kwargs,
-        )
+    set_state_text(
+        saved_key_label,
+        _device_token_accessible_text(
+            has_device_token=bool(snapshot.get("device_token")),
+            pair_code=str(snapshot.get("pair_code") or "").strip(),
+        ),
     )
+    last_check_text = tr(
+        plan.last_check_text_key,
+        plan.last_check_text_default,
+        **plan.last_check_kwargs,
+    )
+    last_check_label.setText(last_check_text)
+    set_state_text(last_check_label, _last_check_accessible_text(last_check_text))
+
+
+def _device_token_accessible_text(*, has_device_token: bool, pair_code: str) -> str:
+    parts = ["Токен устройства: есть" if has_device_token else "Токен устройства: не найден"]
+    if pair_code:
+        parts.append(f"Код привязки: {pair_code}")
+    return ". ".join(parts)
+
+
+def _last_check_accessible_text(text: str) -> str:
+    value = str(text or "").strip()
+    if value.startswith("Последняя проверка:"):
+        return value.replace("Последняя проверка:", "Последняя проверка Premium:", 1)
+    if value:
+        return f"Последняя проверка Premium: {value}"
+    return "Последняя проверка Premium: —"
 
 
 def apply_pair_code_start_ui(

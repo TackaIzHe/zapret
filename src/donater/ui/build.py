@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
 from qfluentwidgets import BodyLabel, CaptionLabel, FluentIcon, LineEdit, PrimaryPushButton, PushButton
 
 from donater.ui.accessibility import apply_premium_button_accessibility, apply_premium_pair_code_accessibility
+from ui.accessibility import set_state_text
 from ui.fluent_widgets import SettingsCard, RefreshButton, QuickActionsBar, set_tooltip
 
 
@@ -110,15 +111,19 @@ def build_premium_device_info_section(
     device_id_label = CaptionLabel(
         tr("page.premium.label.device_id.loading", "ID устройства: загрузка...")
     )
+    set_state_text(device_id_label, tr("page.premium.label.device_id.loading", "ID устройства: загрузка..."))
     saved_key_label = CaptionLabel(
         tr("page.premium.label.device_token.none", "device token: —")
     )
+    set_state_text(saved_key_label, tr("page.premium.device_token.accessible_absent", "Токен устройства: не найден"))
     last_check_label = CaptionLabel(
         tr("page.premium.label.last_check.none", "Последняя проверка: —")
     )
+    set_state_text(last_check_label, tr("page.premium.last_check.accessible_none", "Последняя проверка Premium: —"))
     server_status_label = CaptionLabel(
         tr("page.premium.label.server.checking", "Сервер: проверка...")
     )
+    set_state_text(server_status_label, tr("page.premium.server.accessible_checking", "Статус Premium-сервера: проверка..."))
 
     labels_layout = QVBoxLayout()
     labels_layout.setSpacing(4)
