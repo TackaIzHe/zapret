@@ -3111,6 +3111,42 @@ class WindowLifecycleEarlyEventTests(unittest.TestCase):
         window.close_to_tray.assert_not_called()
         self.assertEqual(window.calls, ["base_minimize"])
 
+    def test_tray_show_window_resyncs_sidebar_before_show(self) -> None:
+        from ui.window_adapter import show_window
+
+        calls: list[str] = []
+        geometry_runtime = SimpleNamespace(
+            remembered_zoom_state=Mock(side_effect=lambda: calls.append("remember_zoom") or "normal"),
+            request_zoom_state=Mock(side_effect=lambda _state: calls.append("request_zoom")),
+        )
+        window = SimpleNamespace(
+            show=Mock(side_effect=lambda: calls.append("show")),
+            showNormal=Mock(side_effect=lambda: calls.append("show_normal")),
+            window_geometry_runtime=geometry_runtime,
+            raise_=Mock(side_effect=lambda: calls.append("raise")),
+            activateWindow=Mock(side_effect=lambda: calls.append("activate")),
+        )
+
+        with patch(
+            "ui.navigation.sidebar_builder.sync_nav_visibility",
+            side_effect=lambda current_window: calls.append("sync_nav"),
+        ) as sync_nav_visibility:
+            show_window(window)
+
+        sync_nav_visibility.assert_called_once_with(window)
+        self.assertEqual(
+            calls,
+            [
+                "sync_nav",
+                "show",
+                "show_normal",
+                "remember_zoom",
+                "request_zoom",
+                "raise",
+                "activate",
+            ],
+        )
+
 
 class WindowsSessionShutdownTests(unittest.TestCase):
     def test_close_flow_receives_launch_state_snapshot_instead_of_full_runtime_feature(self) -> None:

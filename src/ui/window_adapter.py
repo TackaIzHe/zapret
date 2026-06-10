@@ -98,6 +98,13 @@ def hide_window(window) -> None:
 
 
 def show_window(window) -> None:
+    try:
+        from ui.navigation.sidebar_builder import sync_nav_visibility
+
+        sync_nav_visibility(window)
+    except Exception:
+        pass
+
     window.show()
     window.showNormal()
     window.window_geometry_runtime.request_zoom_state(
