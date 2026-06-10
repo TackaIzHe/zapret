@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import QLabel, QHBoxLayout
 from qfluentwidgets import FluentIcon
 
 from ui.pages.base_page import ScrollBlockingTextEdit
-from ui.accessibility import set_control_accessibility
+from ui.accessibility import set_control_accessibility, set_state_text
 from ui.fluent_widgets import set_tooltip
 
 
@@ -46,6 +46,21 @@ class OrchestraLogHistoryWidgets:
     clear_all_logs_btn: object
 
 
+def _clean_orchestra_status_text(text: object) -> str:
+    value = " ".join(str(text or "").strip().split())
+    for prefix in ("⏸", "🔄", "✅", "🔓"):
+        if value.startswith(prefix):
+            value = value[len(prefix):].strip()
+    return value
+
+
+def set_orchestra_status_accessibility(status_label, text: object) -> None:
+    status_text = _clean_orchestra_status_text(text)
+    if not status_text:
+        return
+    set_state_text(status_label, f"Статус обучения Оркестратора: {status_text}")
+
+
 def build_orchestra_status_card(
     *,
     create_card,
@@ -61,6 +76,7 @@ def build_orchestra_status_card(
     status_icon = QLabel()
     status_icon.setFixedSize(24, 24)
     status_label = body_label_cls(tr_fn("page.orchestra.status.not_started", "Не запущен"))
+    set_orchestra_status_accessibility(status_label, status_label.text())
     status_row.addWidget(status_icon)
     status_row.addWidget(status_label)
     status_row.addStretch()

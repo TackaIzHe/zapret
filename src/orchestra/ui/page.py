@@ -15,6 +15,7 @@ from orchestra.ui.page_build import (
     build_orchestra_log_card,
     build_orchestra_log_history_card,
     build_orchestra_status_card,
+    set_orchestra_status_accessibility,
 )
 from orchestra.ui.page_runtime_helpers import (
     append_log_line,
@@ -310,6 +311,7 @@ class OrchestraPage(BasePage):
         self.status_icon.setPixmap(get_cached_qta_pixmap("mdi.brain", color=plan.icon_color, size=24))
         self.status_label.setText(plan.label_text)
         self.status_label.setStyleSheet(f"color: {plan.label_color}; font-size: 14px;")
+        set_orchestra_status_accessibility(self.status_label, plan.label_text)
 
     def _clear_log(self):
         """Очищает лог"""

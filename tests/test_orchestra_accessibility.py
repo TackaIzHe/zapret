@@ -10,7 +10,8 @@ from qfluentwidgets import BodyLabel, CaptionLabel, ComboBox, LineEdit, PushButt
 
 from orchestra.ui.blocked_page import BlockedDomainRow, OrchestraBlockedPage
 from orchestra.ui.locked_page import LockedDomainRow, OrchestraLockedPage
-from orchestra.ui.page_build import build_orchestra_log_card, build_orchestra_log_history_card
+from orchestra.ui.page import OrchestraPage
+from orchestra.ui.page_build import build_orchestra_log_card, build_orchestra_log_history_card, build_orchestra_status_card
 from orchestra.ui.page_runtime_helpers import protocol_filter_items, set_protocol_filter_items
 from orchestra.ui.ratings_page import OrchestraRatingsPage
 from orchestra.ui.whitelist_page import OrchestraWhitelistPage, WhitelistDomainRow
@@ -115,6 +116,46 @@ class OrchestraAccessibilityTests(unittest.TestCase):
         self.assertEqual(page.stats_label.accessibleName(), "Статистика рейтингов: Загрузка...")
         self.assertEqual(page.history_text.accessibleName(), "История рейтингов стратегий")
         self.assertIn("результаты обучения", page.history_text.accessibleDescription())
+
+    def test_status_card_exposes_status_as_screen_reader_state(self) -> None:
+        def create_card(title: str):
+            card = QWidget()
+            layout = QVBoxLayout(card)
+            title_label = BodyLabel(title, card)
+            layout.addWidget(title_label)
+            return card, layout, title_label
+
+        widgets = build_orchestra_status_card(
+            create_card=create_card,
+            tr_fn=lambda _key, default, **_kwargs: default,
+            body_label_cls=BodyLabel,
+            caption_label_cls=CaptionLabel,
+        )
+        self.addCleanup(widgets.card.deleteLater)
+
+        self.assertEqual(widgets.status_label.accessibleName(), "Статус обучения Оркестратора: Не запущен")
+        self.assertEqual(
+            widgets.status_label.property("screenReaderStateText"),
+            "Статус обучения Оркестратора: Не запущен",
+        )
+
+    def test_status_update_exposes_status_as_screen_reader_state(self) -> None:
+        page = OrchestraPage(
+            orchestra_feature=_OrchestraFeatureStub(),
+            is_runtime_running=lambda: False,
+        )
+        self.addCleanup(page.deleteLater)
+
+        page._update_status(page.STATE_RUNNING)
+
+        self.assertEqual(
+            page.status_label.accessibleName(),
+            "Статус обучения Оркестратора: RUNNING - работает на лучших стратегиях",
+        )
+        self.assertEqual(
+            page.status_label.property("screenReaderStateText"),
+            "Статус обучения Оркестратора: RUNNING - работает на лучших стратегиях",
+        )
 
     def test_log_card_controls_are_named_for_screen_reader(self) -> None:
         def create_card(title: str):
