@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
 from config.build_info import APP_VERSION
 
 from app.ui_texts import tr as tr_catalog
-from ui.accessibility import set_control_accessibility
+from ui.accessibility import set_control_accessibility, set_state_text
 from ui.theme import get_cached_qta_pixmap, get_theme_tokens, get_themed_qta_icon
 from ui.theme_refresh import ThemeRefreshBinding
 import updater.update_page_plans as update_page_plans
@@ -186,11 +186,13 @@ class ChangelogCard(CardWidget):
             name=card_name,
             description="Карточка обновления. Содержит версию, список изменений и кнопки действий.",
         )
+        set_state_text(self, card_name)
         set_control_accessibility(
             self.install_btn,
             name=install_name,
             description="Запускает установку доступного обновления.",
         )
+        set_state_text(self.install_btn, install_name)
 
     def _apply_theme(self, tokens=None, force: bool = False) -> None:
         _ = force
