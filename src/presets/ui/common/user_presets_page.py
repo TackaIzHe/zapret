@@ -208,8 +208,9 @@ class UserPresetsPageBase(BasePage):
         self._preset_link_action_runtime = OneShotWorkerRuntime()
         self._preset_link_action_request_id = 0
         self._preset_link_action_runtime_worker = None
-        self._preset_link_action_pending: list[str] = []
-        self._preset_link_action_start_scheduled = False
+        self._preset_link_action_state = QueuedWorkerState[str](
+            self._preset_link_action_runtime,
+        )
         self._build_ui()
         self._after_ui_built()
         self.bind_ui_state_store(ui_state_store)
@@ -2521,7 +2522,8 @@ class UserPresetsPageBase(BasePage):
         if not action:
             return
         runtime = self._worker_runtime("_preset_link_action_runtime")
-        if runtime.is_running() or self.__dict__.get("_preset_link_action_start_scheduled", False):
+        state = self._preset_link_action_state_obj()
+        if state.is_busy():
             self._queue_preset_link_action(action)
             return
         self._preset_link_action_request_id = int(self.__dict__.get("_preset_link_action_request_id", 0) or 0) + 1
@@ -2542,7 +2544,7 @@ class UserPresetsPageBase(BasePage):
         clean_action = str(action or "").strip()
         if not clean_action:
             return
-        pending = self.__dict__.setdefault("_preset_link_action_pending", [])
+        pending = self._preset_link_action_state_obj().pending
         if clean_action in pending:
             return
         pending.append(clean_action)
@@ -2550,7 +2552,7 @@ class UserPresetsPageBase(BasePage):
     def _on_preset_link_action_finished(self, request_id: int, _action: str, result, _context) -> None:
         if request_id != int(getattr(self, "_preset_link_action_request_id", 0) or 0):
             return
-        if self.__dict__.get("_preset_link_action_pending"):
+        if self._preset_link_action_state_obj().has_pending():
             return
         log(str(getattr(result, "log_message", "") or ""), str(getattr(result, "log_level", "") or "INFO"))
         if (not bool(getattr(result, "ok", False))) and getattr(result, "infobar_level", "") == "warning":
@@ -2563,7 +2565,7 @@ class UserPresetsPageBase(BasePage):
     def _on_preset_link_action_failed(self, request_id: int, _action: str, error: str, _context) -> None:
         if request_id != int(getattr(self, "_preset_link_action_request_id", 0) or 0):
             return
-        if self.__dict__.get("_preset_link_action_pending"):
+        if self._preset_link_action_state_obj().has_pending():
             return
         log(f"{self.__class__.__name__}: не удалось открыть ссылку preset: {error}", "ERROR")
         InfoBar.warning(
@@ -2577,8 +2579,8 @@ class UserPresetsPageBase(BasePage):
         if current_worker is not None and worker is not current_worker:
             return
         self._preset_link_action_runtime_worker = None
-        pending_actions = self.__dict__.setdefault("_preset_link_action_pending", [])
-        pending = str(pending_actions.pop(0) if pending_actions else "").strip()
+        state = self._preset_link_action_state_obj()
+        pending = str(state.pop_next() or "").strip()
         if pending and not self._cleanup_in_progress:
             self._schedule_preset_link_action_start(pending)
 
@@ -2586,20 +2588,62 @@ class UserPresetsPageBase(BasePage):
         clean_action = str(action or "").strip()
         if self.__dict__.get("_cleanup_in_progress", False):
             return
-        if self.__dict__.get("_preset_link_action_start_scheduled", False):
+        state = self._preset_link_action_state_obj()
+        if state.start_scheduled:
             self._queue_preset_link_action(clean_action)
             return
-        self._preset_link_action_start_scheduled = True
+        state.start_scheduled = True
         try:
             QTimer.singleShot(0, lambda: self._run_scheduled_preset_link_action_start(clean_action))
         except Exception:
             self._run_scheduled_preset_link_action_start(clean_action)
 
     def _run_scheduled_preset_link_action_start(self, action: str) -> None:
-        self._preset_link_action_start_scheduled = False
+        state = self._preset_link_action_state_obj()
+        state.start_scheduled = False
         if self.__dict__.get("_cleanup_in_progress", False):
             return
         self._request_preset_link_action(str(action or "").strip())
+
+    def _preset_link_action_state_obj(self) -> QueuedWorkerState[str]:
+        state = self.__dict__.get("_preset_link_action_state")
+        runtime = self.__dict__.get("_preset_link_action_runtime")
+        if state is None:
+            pending = [
+                str(action or "").strip()
+                for action in list(self.__dict__.pop("_preset_link_action_pending", []) or [])
+                if str(action or "").strip()
+            ]
+            start_scheduled = bool(self.__dict__.pop("_preset_link_action_start_scheduled", False))
+            state = QueuedWorkerState(
+                runtime,
+                pending=pending,
+                start_scheduled=start_scheduled,
+            )
+            self.__dict__["_preset_link_action_state"] = state
+        elif getattr(state, "runtime", None) is None and runtime is not None:
+            state.runtime = runtime
+        return state
+
+    @property
+    def _preset_link_action_pending(self) -> list[str]:
+        return self._preset_link_action_state_obj().pending
+
+    @_preset_link_action_pending.setter
+    def _preset_link_action_pending(self, value: list[str]) -> None:
+        self._preset_link_action_state_obj().pending = [
+            str(action or "").strip()
+            for action in list(value or [])
+            if str(action or "").strip()
+        ]
+
+    @property
+    def _preset_link_action_start_scheduled(self) -> bool:
+        return bool(self._preset_link_action_state_obj().start_scheduled)
+
+    @_preset_link_action_start_scheduled.setter
+    def _preset_link_action_start_scheduled(self, value: bool) -> None:
+        self._preset_link_action_state_obj().start_scheduled = bool(value)
 
     def _open_presets_info(self):
         self._request_preset_link_action("info")
@@ -2613,9 +2657,8 @@ class UserPresetsPageBase(BasePage):
         self._preset_write_state_obj().reset()
         self._preset_folder_action_state_obj().reset()
         self._preset_open_folder_state_obj().reset()
+        self._preset_link_action_state_obj().reset()
         self._preset_open_folder_runtime_worker = None
-        self.__dict__.setdefault("_preset_link_action_pending", []).clear()
-        self._preset_link_action_start_scheduled = False
         self._preset_link_action_runtime_worker = None
         self._preset_bulk_action_kind = ""
         self._bulk_reset_running = False

@@ -202,6 +202,30 @@ class UserPresetsDependencyBoundaryTests(unittest.TestCase):
         self.assertEqual(page._preset_link_action_pending, ["info", "new_configs"])
         page.create_preset_link_action_worker.assert_not_called()
 
+    def test_user_presets_link_action_queue_lives_in_queued_worker_state(self) -> None:
+        from presets.ui.common.user_presets_page import UserPresetsPageBase
+        from ui.queued_worker_state import QueuedWorkerState
+
+        page = UserPresetsPageBase.__new__(UserPresetsPageBase)
+        init_source = inspect.getsource(UserPresetsPageBase.__init__)
+        request_source = inspect.getsource(UserPresetsPageBase._request_preset_link_action)
+        queue_source = inspect.getsource(UserPresetsPageBase._queue_preset_link_action)
+        finished_source = inspect.getsource(UserPresetsPageBase._on_preset_link_action_worker_finished)
+        schedule_source = inspect.getsource(UserPresetsPageBase._schedule_preset_link_action_start)
+        run_source = inspect.getsource(UserPresetsPageBase._run_scheduled_preset_link_action_start)
+        cleanup_source = inspect.getsource(UserPresetsPageBase._stop_action_workers_for_cleanup)
+
+        self.assertIsInstance(UserPresetsPageBase._preset_link_action_state_obj(page), QueuedWorkerState)
+        self.assertIn("_preset_link_action_state = QueuedWorkerState", init_source)
+        self.assertIn("_preset_link_action_state_obj()", request_source)
+        self.assertIn("_preset_link_action_state_obj().pending", queue_source)
+        self.assertIn("state.pop_next()", finished_source)
+        self.assertIn("state.start_scheduled", schedule_source)
+        self.assertIn("state.start_scheduled = False", run_source)
+        self.assertIn("_preset_link_action_state_obj().reset()", cleanup_source)
+        self.assertNotIn("self._preset_link_action_pending: list", init_source)
+        self.assertNotIn("self._preset_link_action_start_scheduled = False", init_source)
+
     def test_duplicate_user_presets_link_action_is_queued_once(self) -> None:
         from presets.ui.common.user_presets_page import UserPresetsPageBase
 
