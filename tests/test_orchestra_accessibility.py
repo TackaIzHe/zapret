@@ -32,8 +32,16 @@ class OrchestraAccessibilityTests(unittest.TestCase):
         self.assertEqual(page.domain_input.accessibleName(), "Домен для залочки стратегии")
         self.assertIn("example.com", page.domain_input.accessibleDescription())
         self.assertEqual(page.proto_combo.accessibleName(), "Протокол залочки стратегии, выбрано: TCP")
+        self.assertEqual(
+            page.proto_combo.property("screenReaderStateText"),
+            "Протокол залочки стратегии, выбрано: TCP",
+        )
         self.assertIn("TCP или UDP", page.proto_combo.accessibleDescription())
         self.assertEqual(page.strat_spin.accessibleName(), "Номер стратегии для залочки, выбрано: 1")
+        self.assertEqual(
+            page.strat_spin.property("screenReaderStateText"),
+            "Номер стратегии для залочки, выбрано: 1",
+        )
         self.assertEqual(page.lock_btn.accessibleName(), "Залочить стратегию для домена")
         self.assertEqual(page.search_input.accessibleName(), "Поиск по залоченным доменам")
         self.assertEqual(page.refresh_btn.accessibleName(), "Обновить список залоченных стратегий")
@@ -43,7 +51,15 @@ class OrchestraAccessibilityTests(unittest.TestCase):
         page.strat_spin.setValue(7)
 
         self.assertEqual(page.proto_combo.accessibleName(), "Протокол залочки стратегии, выбрано: UDP")
+        self.assertEqual(
+            page.proto_combo.property("screenReaderStateText"),
+            "Протокол залочки стратегии, выбрано: UDP",
+        )
         self.assertEqual(page.strat_spin.accessibleName(), "Номер стратегии для залочки, выбрано: 7")
+        self.assertEqual(
+            page.strat_spin.property("screenReaderStateText"),
+            "Номер стратегии для залочки, выбрано: 7",
+        )
 
     def test_blocked_page_main_controls_are_named_for_screen_reader(self) -> None:
         page = OrchestraBlockedPage(orchestra_feature=_OrchestraFeatureStub())
@@ -52,7 +68,15 @@ class OrchestraAccessibilityTests(unittest.TestCase):
         self.assertEqual(page.domain_input.accessibleName(), "Домен для блокировки стратегии")
         self.assertIn("example.com", page.domain_input.accessibleDescription())
         self.assertEqual(page.proto_combo.accessibleName(), "Протокол блокировки стратегии, выбрано: TCP")
+        self.assertEqual(
+            page.proto_combo.property("screenReaderStateText"),
+            "Протокол блокировки стратегии, выбрано: TCP",
+        )
         self.assertEqual(page.strat_spin.accessibleName(), "Номер блокируемой стратегии, выбрано: 1")
+        self.assertEqual(
+            page.strat_spin.property("screenReaderStateText"),
+            "Номер блокируемой стратегии, выбрано: 1",
+        )
         self.assertEqual(page.block_btn.accessibleName(), "Заблокировать стратегию для домена")
         self.assertEqual(page.search_input.accessibleName(), "Поиск по заблокированным доменам")
         self.assertEqual(page.refresh_btn.accessibleName(), "Обновить чёрный список стратегий")
@@ -62,7 +86,15 @@ class OrchestraAccessibilityTests(unittest.TestCase):
         page.strat_spin.setValue(9)
 
         self.assertEqual(page.proto_combo.accessibleName(), "Протокол блокировки стратегии, выбрано: UDP")
+        self.assertEqual(
+            page.proto_combo.property("screenReaderStateText"),
+            "Протокол блокировки стратегии, выбрано: UDP",
+        )
         self.assertEqual(page.strat_spin.accessibleName(), "Номер блокируемой стратегии, выбрано: 9")
+        self.assertEqual(
+            page.strat_spin.property("screenReaderStateText"),
+            "Номер блокируемой стратегии, выбрано: 9",
+        )
 
     def test_whitelist_page_main_controls_are_named_for_screen_reader(self) -> None:
         page = OrchestraWhitelistPage(orchestra_feature=_OrchestraFeatureStub())

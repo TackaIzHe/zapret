@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ui.pages.base_page import BasePage
-from ui.accessibility import set_control_accessibility
+from ui.accessibility import set_control_accessibility, set_state_text
 from ui.fluent_widgets import set_tooltip
 from ui.one_shot_worker_runtime import OneShotWorkerRuntime
 from qfluentwidgets import (
@@ -462,13 +462,17 @@ class OrchestraLockedPage(BasePage):
 
     def _update_accessibility_state(self, *_args) -> None:
         selected_proto = str(self.proto_combo.currentText() or "").strip() or "не выбрано"
+        proto_state = f"Протокол залочки стратегии, выбрано: {selected_proto}"
+        strategy_state = f"Номер стратегии для залочки, выбрано: {self.strat_spin.value()}"
+        set_state_text(self.proto_combo, proto_state)
+        set_state_text(self.strat_spin, strategy_state)
         set_control_accessibility(
             self.proto_combo,
-            name=f"Протокол залочки стратегии, выбрано: {selected_proto}",
+            name=proto_state,
         )
         set_control_accessibility(
             self.strat_spin,
-            name=f"Номер стратегии для залочки, выбрано: {self.strat_spin.value()}",
+            name=strategy_state,
         )
 
     def on_page_activated(self) -> None:
