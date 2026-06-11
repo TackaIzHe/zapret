@@ -111,6 +111,33 @@ class LogsAccessibilityTests(unittest.TestCase):
             "Вкладки страницы логов, выбрано: Поддержка",
         )
 
+    def test_tabs_items_read_name_and_selection_for_screen_reader(self) -> None:
+        page = logs_page.LogsPage(
+            logs_feature=SimpleNamespace(get_current_log_file=lambda: ""),
+            orchestra_feature=SimpleNamespace(),
+        )
+        self.addCleanup(page.deleteLater)
+
+        self.assertEqual(
+            page.tabs_pivot.items["logs"].accessibleName(),
+            "Вкладки страницы логов: Логи, выбрано",
+        )
+        self.assertEqual(
+            page.tabs_pivot.items["send"].accessibleName(),
+            "Вкладки страницы логов: Поддержка, не выбрано",
+        )
+
+        page.tabs_pivot.setCurrentItem("send")
+
+        self.assertEqual(
+            page.tabs_pivot.items["logs"].accessibleName(),
+            "Вкладки страницы логов: Логи, не выбрано",
+        )
+        self.assertEqual(
+            page.tabs_pivot.items["send"].accessibleName(),
+            "Вкладки страницы логов: Поддержка, выбрано",
+        )
+
     def test_logs_build_assigns_screen_reader_names_to_core_controls(self) -> None:
         source = inspect.getsource(logs_build.build_logs_primary_tab_ui)
         secondary_source = inspect.getsource(logs_build.build_logs_secondary_panels_ui)

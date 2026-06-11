@@ -26,6 +26,7 @@ import time
 
 from ui.accessibility import set_control_accessibility, set_state_text
 from ui.combo_accessibility import set_combo_items_accessibility
+from ui.segmented_accessibility import set_segmented_items_accessibility
 from ui.pages.base_page import BasePage, ScrollBlockingTextEdit
 from ui.latest_value_worker_state import LatestValueWorkerState
 from ui.one_shot_worker_runtime import OneShotWorkerRuntime
@@ -100,6 +101,11 @@ def update_logs_tabs_accessibility(pivot, *, current: object | None = None, lang
         pivot,
         name=state,
         description="Выберите раздел страницы логов: Логи или Поддержка.",
+    )
+    set_segmented_items_accessibility(
+        pivot,
+        name="Вкладки страницы логов",
+        labels=labels,
     )
 
 
