@@ -477,7 +477,7 @@ def _install_hidden_mode_nav_items(window) -> None:
             session.nav_mode_visibility[page_name] = False
 
     if added_count:
-        apply_nav_visibility_filter(window)
+        apply_nav_visibility_filter(window, method=method)
     try:
         window.log_startup_metric(
             "StartupHiddenModeNavReady",
@@ -545,7 +545,7 @@ def _install_secondary_sidebar_groups(window) -> None:
 
     def _finish() -> None:
         _refresh_existing_nav_mode_visibility(window, method)
-        apply_nav_visibility_filter(window)
+        apply_nav_visibility_filter(window, method=method)
         try:
             window.log_startup_metric(
                 "StartupSecondarySidebarReady",
@@ -686,7 +686,7 @@ def init_navigation(window) -> None:
     _restore_sidebar_expanded_state(window)
     _bind_sidebar_expanded_state(window)
     _refresh_existing_nav_mode_visibility(window, current_method)
-    apply_nav_visibility_filter(window)
+    apply_nav_visibility_filter(window, method=current_method)
 
 
 def sync_nav_visibility(window, method: str | None = None) -> None:
@@ -737,11 +737,11 @@ def sync_nav_visibility(window, method: str | None = None) -> None:
 
     _reorder_sidebar_scroll_layout_for_method(window, method)
     session.nav_mode_visibility = mode_visibility
-    apply_nav_visibility_filter(window)
+    apply_nav_visibility_filter(window, method=method)
     update_sidebar_search_suggestions(window)
 
 
-def apply_nav_visibility_filter(window) -> None:
+def apply_nav_visibility_filter(window, method: str | None = None) -> None:
     session = get_window_ui_session(window)
     if session is None or not session.nav_items:
         return
@@ -751,20 +751,19 @@ def apply_nav_visibility_filter(window) -> None:
 
     search_query = (session.nav_search_query or "").casefold()
     mode_visibility = session.nav_mode_visibility or {}
-    try:
-        current_method = window.get_launch_method()
-    except Exception:
-        current_method = None
+    current_method = method
+    if current_method is None:
+        try:
+            current_method = window.get_launch_method()
+        except Exception:
+            current_method = None
     fallback_mode_visibility = get_nav_visibility(current_method)
     visible_by_page: dict[PageName, bool] = {}
 
     for page_name, item in session.nav_items.items():
-        mode_visible = bool(
-            mode_visibility.get(
-                page_name,
-                fallback_mode_visibility.get(page_name, True),
-            )
-        )
+        schema_visible = bool(fallback_mode_visibility.get(page_name, True))
+        stored_visible = bool(mode_visibility.get(page_name, schema_visible))
+        mode_visible = schema_visible and stored_visible
         label = get_nav_label(window, page_name)
         matches_query = not search_query or (search_query in label.casefold())
         final_visible = mode_visible and matches_query

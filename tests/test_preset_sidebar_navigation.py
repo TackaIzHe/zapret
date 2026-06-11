@@ -986,6 +986,62 @@ class PresetSidebarNavigationTests(unittest.TestCase):
         self.assertFalse(z1_item.visible)
         self.assertTrue(dns_item.visible)
 
+    def test_nav_visibility_filter_rechecks_mode_schema_when_state_says_visible(self) -> None:
+        from app.page_names import PageName
+        from settings.mode import ZAPRET2_MODE
+        import ui.navigation.sidebar_builder as sidebar_builder
+
+        class FakeNavItem:
+            def __init__(self, visible: bool) -> None:
+                self.visible = bool(visible)
+
+            def isVisible(self) -> bool:
+                return self.visible
+
+            def setVisible(self, visible: bool) -> None:
+                self.visible = bool(visible)
+
+        z2_item = FakeNavItem(True)
+        z1_item = FakeNavItem(True)
+        orchestra_item = FakeNavItem(True)
+        orchestra_settings_item = FakeNavItem(True)
+        dns_item = FakeNavItem(True)
+        session = SimpleNamespace(
+            nav_items={
+                PageName.ZAPRET2_MODE_CONTROL: z2_item,
+                PageName.ZAPRET1_MODE_CONTROL: z1_item,
+                PageName.ORCHESTRA: orchestra_item,
+                PageName.ORCHESTRA_SETTINGS: orchestra_settings_item,
+                PageName.NETWORK: dns_item,
+            },
+            nav_labels={
+                PageName.ZAPRET2_MODE_CONTROL: "Управление Zapret 2",
+                PageName.ZAPRET1_MODE_CONTROL: "Управление Zapret 1",
+                PageName.ORCHESTRA: "Оркестратор",
+                PageName.ORCHESTRA_SETTINGS: "Настройки оркестратора",
+                PageName.NETWORK: "Настройка DNS",
+            },
+            nav_headers=[],
+            nav_search_query="",
+            nav_mode_visibility={
+                PageName.ZAPRET2_MODE_CONTROL: True,
+                PageName.ZAPRET1_MODE_CONTROL: True,
+                PageName.ORCHESTRA: True,
+                PageName.ORCHESTRA_SETTINGS: True,
+                PageName.NETWORK: True,
+            },
+            ui_language="ru",
+        )
+        window = SimpleNamespace(ui_session=session, get_launch_method=lambda: ZAPRET2_MODE)
+
+        sidebar_builder.apply_nav_visibility_filter(window)
+
+        self.assertTrue(z2_item.visible)
+        self.assertFalse(z1_item.visible)
+        self.assertFalse(orchestra_item.visible)
+        self.assertFalse(orchestra_settings_item.visible)
+        self.assertTrue(dns_item.visible)
+
     def test_mode_switch_reorders_existing_sidebar_items_for_new_mode(self) -> None:
         from app.page_names import PageName
         from settings.mode import ZAPRET1_MODE, ZAPRET2_MODE
