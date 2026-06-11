@@ -208,17 +208,11 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
 
     def _schedule_top_summary_reload_after_preset_switch(self) -> None:
         runtime = self._refresh_runtime
-        state = runtime.top_summary_preset_switch_reload_state
-        state.pending = True
-
-        def _single_shot(_delay: int, callback) -> None:
-            QTimer.singleShot(TOP_SUMMARY_PRESET_SWITCH_RELOAD_DELAY_MS, callback)
-
         try:
-            state.schedule_start(
-                _single_shot,
-                self._run_scheduled_top_summary_reload_after_preset_switch,
-                pending_when_already_scheduled=True,
+            runtime.schedule_top_summary_preset_switch_reload(
+                parent=self,
+                delay_ms=TOP_SUMMARY_PRESET_SWITCH_RELOAD_DELAY_MS,
+                callback=self._run_scheduled_top_summary_reload_after_preset_switch,
             )
         except Exception:
             self._run_scheduled_top_summary_reload_after_preset_switch()
@@ -612,17 +606,11 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
     def _schedule_additional_settings_reload_after_preset_switch(self) -> None:
         runtime = self._refresh_runtime
         runtime.additional_settings_dirty = True
-        state = runtime.additional_settings_preset_switch_reload_state
-        state.pending = True
-
-        def _single_shot(_delay: int, callback) -> None:
-            QTimer.singleShot(ADDITIONAL_SETTINGS_PRESET_SWITCH_RELOAD_DELAY_MS, callback)
-
         try:
-            state.schedule_start(
-                _single_shot,
-                self._run_scheduled_additional_settings_reload_after_preset_switch,
-                pending_when_already_scheduled=True,
+            runtime.schedule_additional_settings_preset_switch_reload(
+                parent=self,
+                delay_ms=ADDITIONAL_SETTINGS_PRESET_SWITCH_RELOAD_DELAY_MS,
+                callback=self._run_scheduled_additional_settings_reload_after_preset_switch,
             )
         except Exception:
             self._run_scheduled_additional_settings_reload_after_preset_switch()

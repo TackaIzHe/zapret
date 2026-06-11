@@ -3710,6 +3710,25 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("create_control_additional_settings_worker", zapret2_page_source)
         self.assertIn("launch_method=ZAPRET2_MODE", zapret2_page_source)
 
+    def test_control_preset_switch_refresh_uses_restartable_runtime_timers(self) -> None:
+        runtime_source = inspect.getsource(control_additional_settings_runtime.ModeControlRefreshRuntime)
+        page_sources = [
+            inspect.getsource(Zapret1ModeControlPage._schedule_top_summary_reload_after_preset_switch),
+            inspect.getsource(Zapret1ModeControlPage._schedule_additional_settings_reload_after_preset_switch),
+            inspect.getsource(Zapret2ModeControlPage._schedule_top_summary_reload_after_preset_switch),
+            inspect.getsource(Zapret2ModeControlPage._schedule_additional_settings_reload_after_preset_switch),
+        ]
+
+        self.assertIn("schedule_top_summary_preset_switch_reload", runtime_source)
+        self.assertIn("schedule_additional_settings_preset_switch_reload", runtime_source)
+        self.assertIn("timer.start(max(0, int(delay_ms)))", runtime_source)
+        self.assertIn("top_summary_preset_switch_reload_timer.stop()", runtime_source)
+        self.assertIn("additional_settings_preset_switch_reload_timer.stop()", runtime_source)
+        for source in page_sources:
+            self.assertIn("runtime.schedule_", source)
+            self.assertNotIn("QTimer.singleShot", source)
+            self.assertNotIn("state.schedule_start", source)
+
     def test_control_additional_settings_saves_through_worker(self) -> None:
         zapret1_discord_source = inspect.getsource(Zapret1ModeControlPage._on_discord_restart_changed)
         zapret1_wssize_source = inspect.getsource(Zapret1ModeControlPage._on_wssize_toggled)

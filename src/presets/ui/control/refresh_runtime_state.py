@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from PyQt6.QtCore import QTimer
+
 from ui.latest_value_worker_state import LatestValueWorkerState
 from ui.one_shot_worker_runtime import OneShotWorkerRuntime
 from ui.queued_worker_state import QueuedWorkerState
@@ -16,6 +18,7 @@ class ModeControlRefreshRuntime:
             None,
             empty_value=False,
         )
+        self.additional_settings_preset_switch_reload_timer: QTimer | None = None
         self.additional_settings_preset_apply_reload_state = LatestValueWorkerState(
             None,
             empty_value=False,
@@ -33,6 +36,7 @@ class ModeControlRefreshRuntime:
             None,
             empty_value=False,
         )
+        self.top_summary_preset_switch_reload_timer: QTimer | None = None
         self.top_summary_preset_apply_reload_state = LatestValueWorkerState(
             None,
             empty_value=False,
@@ -87,6 +91,21 @@ class ModeControlRefreshRuntime:
     def queue_top_summary_preset_apply_reload(self) -> None:
         self.top_summary_preset_apply_reload_state.pending = True
 
+    def schedule_top_summary_preset_switch_reload(
+        self,
+        *,
+        parent,
+        delay_ms: int,
+        callback,
+    ) -> None:
+        self._schedule_restartable_preset_switch_reload(
+            state_attr="top_summary_preset_switch_reload_state",
+            timer_attr="top_summary_preset_switch_reload_timer",
+            parent=parent,
+            delay_ms=delay_ms,
+            callback=callback,
+        )
+
     def take_top_summary_preset_apply_reload(self) -> bool:
         pending = bool(self.top_summary_preset_apply_reload_state.has_pending())
         self.top_summary_preset_apply_reload_state.reset()
@@ -95,10 +114,45 @@ class ModeControlRefreshRuntime:
     def queue_additional_settings_preset_apply_reload(self) -> None:
         self.additional_settings_preset_apply_reload_state.pending = True
 
+    def schedule_additional_settings_preset_switch_reload(
+        self,
+        *,
+        parent,
+        delay_ms: int,
+        callback,
+    ) -> None:
+        self._schedule_restartable_preset_switch_reload(
+            state_attr="additional_settings_preset_switch_reload_state",
+            timer_attr="additional_settings_preset_switch_reload_timer",
+            parent=parent,
+            delay_ms=delay_ms,
+            callback=callback,
+        )
+
     def take_additional_settings_preset_apply_reload(self) -> bool:
         pending = bool(self.additional_settings_preset_apply_reload_state.has_pending())
         self.additional_settings_preset_apply_reload_state.reset()
         return pending
+
+    def _schedule_restartable_preset_switch_reload(
+        self,
+        *,
+        state_attr: str,
+        timer_attr: str,
+        parent,
+        delay_ms: int,
+        callback,
+    ) -> None:
+        state = getattr(self, state_attr)
+        state.pending = True
+        state.start_scheduled = True
+        timer = getattr(self, timer_attr, None)
+        if timer is None:
+            timer = QTimer(parent)
+            timer.setSingleShot(True)
+            timer.timeout.connect(callback)
+            setattr(self, timer_attr, timer)
+        timer.start(max(0, int(delay_ms)))
 
     def has_pending_refresh(self) -> bool:
         return bool(self.additional_settings_dirty)
@@ -254,10 +308,14 @@ class ModeControlRefreshRuntime:
 
     def stop_workers(self, *, log_fn=None) -> None:
         self.additional_settings_load_start_scheduled = False
+        if self.additional_settings_preset_switch_reload_timer is not None:
+            self.additional_settings_preset_switch_reload_timer.stop()
         self.additional_settings_preset_switch_reload_state.reset()
         self.additional_settings_preset_apply_reload_state.reset()
         self.additional_settings_save_start_scheduled = False
         self.top_summary_start_scheduled = False
+        if self.top_summary_preset_switch_reload_timer is not None:
+            self.top_summary_preset_switch_reload_timer.stop()
         self.top_summary_preset_switch_reload_state.reset()
         self.top_summary_preset_apply_reload_state.reset()
         self.top_summary_profile_retry_state.reset()
