@@ -1048,6 +1048,24 @@ class DnsWorkerArchitectureTests(unittest.TestCase):
         self.assertIn("_quick_check_state_obj()", schedule_source)
         self.assertIn("_quick_check_state_obj().reset()", cleanup_source)
 
+    def test_dns_check_save_uses_shared_latest_worker_state(self) -> None:
+        from ui.latest_value_worker_state import LatestValueWorkerState
+
+        page = DNSCheckPage.__new__(DNSCheckPage)
+        page._save_runtime = SimpleNamespace(is_running=Mock(return_value=False))
+
+        init_source = inspect.getsource(DNSCheckPage.__init__)
+        start_source = inspect.getsource(DNSCheckPage._start_save_results_worker)
+        schedule_source = inspect.getsource(DNSCheckPage._schedule_save_results_worker_start)
+        cleanup_source = inspect.getsource(DNSCheckPage.cleanup)
+
+        self.assertIsInstance(DNSCheckPage._save_results_state_obj(page), LatestValueWorkerState)
+        self.assertNotIn("self._save_results_pending: dict[str, str] | None = None", init_source)
+        self.assertNotIn("self._save_results_start_scheduled = False", init_source)
+        self.assertIn("_save_results_state_obj()", start_source)
+        self.assertIn("_save_results_state_obj()", schedule_source)
+        self.assertIn("_save_results_state_obj().reset()", cleanup_source)
+
     def test_dns_check_save_queues_while_worker_runs(self) -> None:
         page = DNSCheckPage.__new__(DNSCheckPage)
         page._save_runtime = SimpleNamespace(is_running=Mock(return_value=True), start_qthread_worker=Mock())

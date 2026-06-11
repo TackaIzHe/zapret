@@ -49,8 +49,10 @@ class DNSCheckPage(BasePage):
             empty_value=False,
         )
         self._save_runtime = OneShotWorkerRuntime()
-        self._save_results_pending: dict[str, str] | None = None
-        self._save_results_start_scheduled = False
+        self._save_results_state = LatestValueWorkerState(
+            self._save_runtime,
+            empty_value=None,
+        )
         self._quick_runtime = OneShotWorkerRuntime()
         self._quick_check_state = LatestValueWorkerState(
             self._quick_runtime,
@@ -578,12 +580,14 @@ class DNSCheckPage(BasePage):
         )
 
     def _start_save_results_worker(self, *, file_path: str, plain_text: str | None) -> None:
-        if self._save_runtime.is_running() or self.__dict__.get("_save_results_start_scheduled", False):
-            self._save_results_pending = {
+        state = self._save_results_state_obj()
+        if state.is_busy():
+            state.pending = {
                 "file_path": str(file_path or ""),
                 "plain_text": None if plain_text is None else str(plain_text or ""),
             }
             return
+        state.pending = None
         plain_text = self._resolve_save_results_text(plain_text)
         self._save_runtime.start_qthread_worker(
             worker_factory=lambda request_id: self.create_dns_check_save_worker(
@@ -620,7 +624,7 @@ class DNSCheckPage(BasePage):
             cleanup_in_progress=self._cleanup_in_progress,
         ):
             return
-        if self.__dict__.get("_save_results_pending"):
+        if self._save_results_state_obj().has_pending():
             return
         if InfoBar:
             if bool(getattr(plan, "success", False)):
@@ -633,8 +637,7 @@ class DNSCheckPage(BasePage):
             return
         if self.__dict__.get("_cleanup_in_progress", False):
             return
-        pending = self.__dict__.get("_save_results_pending")
-        if pending:
+        if self._save_results_state_obj().has_pending():
             self._schedule_save_results_worker_start()
 
     def _is_current_request_finish(self, runtime, request_id: int) -> bool:
@@ -657,25 +660,57 @@ class DNSCheckPage(BasePage):
         return True
 
     def _schedule_save_results_worker_start(self) -> None:
-        if self.__dict__.get("_cleanup_in_progress", False):
-            return
-        if self.__dict__.get("_save_results_start_scheduled", False):
-            return
-        self._save_results_start_scheduled = True
-        QTimer.singleShot(0, self._run_scheduled_save_results_worker_start)
+        self._save_results_state_obj().schedule_start(
+            QTimer.singleShot,
+            self._run_scheduled_save_results_worker_start,
+            cleanup_in_progress=self.__dict__.get("_cleanup_in_progress", False),
+        )
 
     def _run_scheduled_save_results_worker_start(self) -> None:
-        self._save_results_start_scheduled = False
-        if self.__dict__.get("_cleanup_in_progress", False):
-            return
-        pending = self.__dict__.get("_save_results_pending")
-        self._save_results_pending = None
+        pending = self._save_results_state_obj().take_pending_for_scheduled_start(
+            cleanup_in_progress=self.__dict__.get("_cleanup_in_progress", False),
+        )
         if not pending:
             return
         self._start_save_results_worker(
             file_path=str(pending.get("file_path") or ""),
             plain_text=None if pending.get("plain_text") is None else str(pending.get("plain_text") or ""),
         )
+
+    def _save_results_state_obj(self) -> LatestValueWorkerState:
+        state = self.__dict__.get("_save_results_state")
+        runtime = self.__dict__.get("_save_runtime")
+        if state is None:
+            pending = self.__dict__.pop("_save_results_pending", None)
+            start_scheduled = bool(
+                self.__dict__.pop("_save_results_start_scheduled", False)
+            )
+            state = LatestValueWorkerState(
+                runtime,
+                empty_value=None,
+                pending=pending,
+                start_scheduled=start_scheduled,
+            )
+            self.__dict__["_save_results_state"] = state
+        elif getattr(state, "runtime", None) is None and runtime is not None:
+            state.runtime = runtime
+        return state
+
+    @property
+    def _save_results_pending(self):
+        return self._save_results_state_obj().pending
+
+    @_save_results_pending.setter
+    def _save_results_pending(self, value) -> None:
+        self._save_results_state_obj().pending = value
+
+    @property
+    def _save_results_start_scheduled(self) -> bool:
+        return bool(self._save_results_state_obj().start_scheduled)
+
+    @_save_results_start_scheduled.setter
+    def _save_results_start_scheduled(self, value: bool) -> None:
+        self._save_results_state_obj().start_scheduled = bool(value)
     
     def cleanup(self):
         """Очистка потоков при закрытии"""
@@ -684,8 +719,7 @@ class DNSCheckPage(BasePage):
         try:
             self._cleanup_in_progress = True
             self._check_state_obj().reset()
-            self._save_results_pending = None
-            self._save_results_start_scheduled = False
+            self._save_results_state_obj().reset()
             self._quick_check_state_obj().reset()
             self._check_runtime.stop(
                 blocking=False,
