@@ -33,6 +33,7 @@ class PresetListModel(QAbstractListModel):
         self._preset_rating_by_file_name: dict[str, int] = {}
         self._active_preset_file_names: set[str] = set()
         self._first_preset_row = -1
+        self._collapsed_rows_by_folder: dict[str, list[dict[str, object]]] = {}
 
     def set_rows(self, rows: list[dict[str, object]]) -> bool:
         next_rows = list(rows)
@@ -46,6 +47,7 @@ class PresetListModel(QAbstractListModel):
                 if current_row != next_row
             ]
             self._rows = next_rows
+            self._collapsed_rows_by_folder = {}
             self._rebuild_row_index()
             roles = _all_data_roles()
             for row_index in changed_rows:
@@ -64,6 +66,7 @@ class PresetListModel(QAbstractListModel):
                 }
                 self.beginMoveRows(QModelIndex(), source_index, source_index, QModelIndex(), destination_child)
                 self._rows = next_rows
+                self._collapsed_rows_by_folder = {}
                 self._rebuild_row_index()
                 self.endMoveRows()
                 roles = _all_data_roles()
@@ -77,6 +80,7 @@ class PresetListModel(QAbstractListModel):
 
         self.beginResetModel()
         self._rows = next_rows
+        self._collapsed_rows_by_folder = {}
         self._rebuild_row_index()
         self.endResetModel()
         return True
@@ -277,7 +281,23 @@ class PresetListModel(QAbstractListModel):
         if bool(folder_row.get("is_collapsed", False)) == next_collapsed:
             return False
         if not next_collapsed:
-            return False
+            cached_rows = [
+                dict(row)
+                for row in self._collapsed_rows_by_folder.pop(key, [])
+                if str(row.get("kind") or "") != "folder"
+            ]
+            if not cached_rows:
+                return False
+            folder_row["is_collapsed"] = False
+            insert_start = folder_index + 1
+            insert_end = insert_start + len(cached_rows) - 1
+            self.beginInsertRows(QModelIndex(), insert_start, insert_end)
+            self._rows[insert_start:insert_start] = cached_rows
+            self._rebuild_row_index()
+            self.endInsertRows()
+            model_index = self.index(folder_index, 0)
+            self.dataChanged.emit(model_index, model_index, [self.CollapsedRole])
+            return True
 
         remove_start = folder_index + 1
         remove_end = remove_start
@@ -289,10 +309,17 @@ class PresetListModel(QAbstractListModel):
 
         folder_row["is_collapsed"] = True
         if remove_end > remove_start:
+            self._collapsed_rows_by_folder[key] = [
+                dict(row)
+                for row in self._rows[remove_start:remove_end]
+                if str(row.get("kind") or "") != "folder"
+            ]
             self.beginRemoveRows(QModelIndex(), remove_start, remove_end - 1)
             del self._rows[remove_start:remove_end]
             self._rebuild_row_index()
             self.endRemoveRows()
+        else:
+            self._collapsed_rows_by_folder.pop(key, None)
 
         model_index = self.index(folder_index, 0)
         self.dataChanged.emit(model_index, model_index, [self.CollapsedRole])

@@ -221,6 +221,33 @@ class UserPresetWriteSerializationTests(unittest.TestCase):
         page._schedule_layout_resync.assert_called_once_with()
         page._refresh_presets_view_from_cache.assert_not_called()
 
+    def test_folder_expand_result_updates_cached_rows_without_full_refresh(self) -> None:
+        page = UserPresetsPageBase.__new__(UserPresetsPageBase)
+        page._preset_folder_action_request_id = 6
+        page._preset_folder_action_pending = []
+        page._runtime_service = Mock()
+        page._presets_model = Mock()
+        page._presets_model.set_folder_collapsed.return_value = True
+        page._update_presets_view_height = Mock()
+        page._schedule_layout_resync = Mock()
+        page._refresh_presets_view_from_cache = Mock(
+            side_effect=AssertionError("folder expand must not refresh the whole preset list when rows are cached")
+        )
+
+        UserPresetsPageBase._on_preset_folder_action_finished(
+            page,
+            6,
+            "set_collapsed",
+            True,
+            {"folder_key": "games", "collapsed": False, "folder_state": {"folders": {}, "items": {}}},
+        )
+
+        page._runtime_service.update_cached_folder_state.assert_called_once_with({"folders": {}, "items": {}})
+        page._presets_model.set_folder_collapsed.assert_called_once_with("games", False)
+        page._update_presets_view_height.assert_called_once_with()
+        page._schedule_layout_resync.assert_called_once_with()
+        page._refresh_presets_view_from_cache.assert_not_called()
+
     def test_storage_action_waits_while_next_write_start_is_scheduled(self) -> None:
         page = UserPresetsPageBase.__new__(UserPresetsPageBase)
         page._preset_write_action_start_scheduled = True

@@ -1282,13 +1282,13 @@ class UserPresetsPageBase(BasePage):
             self._refresh_presets_view_from_cache()
 
     def _apply_preset_folder_state_locally(self, action: str, context: dict[str, object]) -> bool:
-        if str(action or "") != "set_collapsed" or not bool(context.get("collapsed", False)):
+        if str(action or "") != "set_collapsed":
             return False
         model = getattr(self, "_presets_model", None)
         set_folder_collapsed = getattr(model, "set_folder_collapsed", None)
         if not callable(set_folder_collapsed):
             return False
-        if not set_folder_collapsed(str(context.get("folder_key") or ""), True):
+        if not set_folder_collapsed(str(context.get("folder_key") or ""), bool(context.get("collapsed", False))):
             return False
         self._update_presets_view_height()
         self._schedule_layout_resync()
