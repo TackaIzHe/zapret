@@ -1497,6 +1497,7 @@ class ProfileSetupPageBase(BasePage):
             accessible_name = f"{name}, выбрано: {selected}"
         else:
             accessible_name = f"{name}, не выбрано"
+        set_state_text(combo, accessible_name)
         set_control_accessibility(
             combo,
             name=accessible_name,

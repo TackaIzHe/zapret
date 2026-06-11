@@ -45,10 +45,26 @@ class ProfileSetupAccessibilityTests(unittest.TestCase):
         self.assertEqual(page._enabled_checkbox.property("screenReaderStateText"), "Profile, выключено")
         self.assertIn("Включает или отключает", page._enabled_checkbox.accessibleDescription())
         self.assertEqual(page._filter_combo.accessibleName(), "Тип списка profile, выбрано: Hostlist")
+        self.assertEqual(
+            page._filter_combo.property("screenReaderStateText"),
+            "Тип списка profile, выбрано: Hostlist",
+        )
         self.assertEqual(page._filter_value.accessibleName(), "Файл списка profile")
         self.assertEqual(page._in_range_mode.accessibleName(), "Режим in-range, выбрано: a — всегда")
+        self.assertEqual(
+            page._in_range_mode.property("screenReaderStateText"),
+            "Режим in-range, выбрано: a — всегда",
+        )
         self.assertEqual(page._out_range_mode.accessibleName(), "Режим out-range, выбрано: a — всегда")
+        self.assertEqual(
+            page._out_range_mode.property("screenReaderStateText"),
+            "Режим out-range, выбрано: a — всегда",
+        )
         self.assertEqual(page._strategy_branch_combo.accessibleName(), "Ветка готовой стратегии, не выбрано")
+        self.assertEqual(
+            page._strategy_branch_combo.property("screenReaderStateText"),
+            "Ветка готовой стратегии, не выбрано",
+        )
         self.assertEqual(page._list_file_base_text.accessibleName(), "Базовая часть списка profile")
         self.assertEqual(page._list_file_text.accessibleName(), "Ваши записи списка profile")
         self.assertEqual(page._list_file_save_button.accessibleName(), "Сохранить список profile")
