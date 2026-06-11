@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from qfluentwidgets import FluentIcon
 
 from ui.log_limits import BLOCKCHECK_LOG_VIEW_MAX_LINES, apply_text_line_limit
-from ui.accessibility import set_control_accessibility
+from ui.accessibility import set_control_accessibility, set_state_text
 
 
 @dataclass(slots=True)
@@ -72,6 +72,7 @@ def build_log_card_section(
         name="Подробный лог BlockCheck",
         description="Здесь появляется подробный текстовый лог проверки BlockCheck.",
     )
+    set_state_text(log_edit, "Подробный лог BlockCheck: пока нет записей")
     log_edit.setReadOnly(True)
     log_edit.setMinimumHeight(180)
     log_edit.setMaximumHeight(300)
