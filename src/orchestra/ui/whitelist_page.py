@@ -430,7 +430,10 @@ class OrchestraWhitelistPage(BasePage):
         set_control_accessibility(
             self.search_input,
             name="Поиск по белому списку",
-            description="Фильтрует домены белого списка по введённому тексту.",
+            description=(
+                "Фильтрует домены белого списка по введённому тексту. "
+                "После ввода перейдите к списку клавишей Tab."
+            ),
         )
         set_control_accessibility(
             self.clear_user_btn,

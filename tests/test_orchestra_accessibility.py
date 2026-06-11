@@ -196,6 +196,7 @@ class OrchestraAccessibilityTests(unittest.TestCase):
         self.assertEqual(page.domain_input.accessibleName(), "Домен для белого списка")
         self.assertEqual(page.add_btn.accessibleName(), "Добавить домен в белый список")
         self.assertEqual(page.search_input.accessibleName(), "Поиск по белому списку")
+        self.assertIn("После ввода перейдите к списку клавишей Tab", page.search_input.accessibleDescription())
         self.assertEqual(page.clear_user_btn.accessibleName(), "Очистить пользовательские домены белого списка")
 
     def test_locked_clear_confirmation_buttons_are_named_for_screen_reader(self) -> None:
