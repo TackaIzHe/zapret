@@ -4194,6 +4194,36 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertFalse(stack.animation_seen_during_switch)
         self.assertTrue(stack.isAnimationEnabled)
 
+    def test_page_host_does_not_switch_stack_when_page_is_already_current(self) -> None:
+        page = object()
+
+        class _FakeStack:
+            def __init__(self) -> None:
+                self.switch_count = 0
+
+            def currentWidget(self):  # noqa: N802
+                return page
+
+            def setCurrentWidget(self, _page, _need_pop_out=False):  # noqa: N802
+                self.switch_count += 1
+
+        class _FakeWindow:
+            def __init__(self) -> None:
+                self.stackedWidget = _FakeStack()
+
+            def get_launch_method(self) -> str:
+                return "zapret2_mode"
+
+        window = _FakeWindow()
+        host = WindowPageHost(window=window, page_factory=None)
+        host.pages[PageName.ZAPRET2_USER_PRESETS] = page
+        host._shown_pages.add(PageName.ZAPRET2_USER_PRESETS)
+
+        with patch("ui.page_host.apply_ui_language_to_page"):
+            self.assertTrue(host.show_page(PageName.ZAPRET2_USER_PRESETS, allow_internal=True))
+
+        self.assertEqual(window.stackedWidget.switch_count, 0)
+
     def test_page_host_defers_stack_repaint_during_direct_switch(self) -> None:
         class _FakeStack:
             def __init__(self) -> None:

@@ -277,7 +277,10 @@ class WindowPageHost:
         self._log_step_timing(page_name, "show.stack", step_started_at)
         use_nav_route = self.has_nav_item(page_name)
         step_started_at = _time.perf_counter()
-        switched = self.set_stacked_widget_current_page(page, animate=False, page_name=page_name)
+        if self.current_page() is page:
+            switched = True
+        else:
+            switched = self.set_stacked_widget_current_page(page, animate=False, page_name=page_name)
         self._log_step_timing(page_name, "show.switch", step_started_at)
         if not switched:
             return False
