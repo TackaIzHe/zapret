@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import QHBoxLayout, QVBoxLayout
 
 from qfluentwidgets import CardWidget, FluentIcon
 
+from presets.ui.control.control_page_runtime_shared import set_button_text_accessibility
 from ui.pulsing_dot import PulsingDot
 from ui.accessibility import set_control_accessibility, set_state_text
 from ui.theme import get_themed_qta_icon
@@ -184,6 +185,7 @@ def build_push_setting_card_common(
     on_click,
     button_icon_name=FluentIcon.LINK,
     button_alignment: str = "left",
+    button_accessible_name: str | None = None,
     parent=None,
 ):
     if isinstance(icon, QPixmap):
@@ -203,5 +205,23 @@ def build_push_setting_card_common(
             button_icon_name = button_icon_name.icon()
         button.setIcon(button_icon_name)
         button.setMinimumWidth(128)
+        set_button_text_accessibility(
+            button,
+            button_text,
+            accessible_name=button_accessible_name or _push_setting_button_accessible_name(button_text, title_text),
+            description=content_text,
+        )
     card.clicked.connect(on_click)
     return card
+
+
+def _push_setting_button_accessible_name(button_text: str, title_text: str) -> str:
+    button = str(button_text or "").strip()
+    title = str(title_text or "").strip()
+    if not button:
+        return title
+    if not title:
+        return button
+    if title.casefold().startswith(button.casefold()):
+        return title
+    return f"{button} {title[:1].lower()}{title[1:]}"

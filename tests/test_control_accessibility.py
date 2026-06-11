@@ -35,6 +35,12 @@ class _ButtonTarget:
     def setAccessibleDescription(self, text: str) -> None:  # noqa: N802
         self._accessible_description = str(text)
 
+    def setIcon(self, _icon) -> None:  # noqa: N802
+        pass
+
+    def setMinimumWidth(self, _width: int) -> None:  # noqa: N802
+        pass
+
 
 class _TitleLabel:
     def __init__(self) -> None:
@@ -54,6 +60,26 @@ class _CardTarget:
 
     def setContent(self, text: str) -> None:  # noqa: N802
         self.content = str(text)
+
+
+class _SignalTarget:
+    def __init__(self) -> None:
+        self.callback = None
+
+    def connect(self, callback) -> None:
+        self.callback = callback
+
+
+class _PushSettingCardTarget(_CardTarget):
+    def __init__(self, button_text, _icon, title_text, content_text, _parent=None) -> None:
+        super().__init__()
+        self.button.setText(button_text)
+        self.title = str(title_text)
+        self.content = str(content_text or "")
+        self.clicked = _SignalTarget()
+
+    def setProperty(self, _name: str, _value: object) -> None:  # noqa: N802
+        pass
 
 
 class _ToggleTarget:
@@ -147,6 +173,21 @@ class ControlAccessibilityTests(unittest.TestCase):
 
         get_icon.assert_called_once_with("fa5s.stop")
 
+    def test_push_setting_card_button_has_specific_screen_reader_name(self) -> None:
+        from presets.ui.control.shared_builders import build_push_setting_card_common
+
+        card = build_push_setting_card_common(
+            push_setting_card_cls=_PushSettingCardTarget,
+            button_text="Открыть",
+            icon=QIcon(),
+            title_text="Тест соединения",
+            content_text="Проверить доступность сети и состояние обхода",
+            on_click=lambda: None,
+        )
+
+        self.assertEqual(card.button.accessibleName(), "Открыть тест соединения")
+        self.assertIn("Проверить доступность сети", card.button.accessibleDescription())
+
     def test_winws1_language_refresh_updates_control_button_screen_reader_names(self) -> None:
         from presets.ui.control.zapret1.runtime_helpers import apply_winws1_pages_language
 
@@ -168,6 +209,25 @@ class ControlAccessibilityTests(unittest.TestCase):
         self.assertEqual(stop_btn.accessibleName(), "Остановить winws.exe")
         self.assertEqual(stop_exit_btn.accessibleName(), "Остановить и закрыть")
 
+    def test_winws1_language_refresh_updates_extra_action_button_screen_reader_names(self) -> None:
+        from presets.ui.control.zapret1.runtime_helpers import apply_winws1_pages_language
+
+        kwargs = _language_refresh_kwargs()
+        apply_winws1_pages_language(
+            **kwargs,
+            start_btn=_ButtonTarget(),
+            stop_winws_btn=_ButtonTarget(),
+            stop_and_exit_btn=_ButtonTarget(),
+            refresh_preset_name=lambda: None,
+            get_current_dpi_runtime_state=lambda: ("stopped", ""),
+            update_status=lambda _phase, _last_error: None,
+        )
+
+        self.assertEqual(kwargs["test_card"].button.accessibleName(), "Открыть тест соединения")
+        self.assertEqual(kwargs["internet_cleanup_card"].button.accessibleName(), "Сбросить сеть Windows")
+        self.assertEqual(kwargs["folder_card"].button.accessibleName(), "Открыть папку программы")
+        self.assertEqual(kwargs["docs_card"].button.accessibleName(), "Открыть документацию")
+
     def test_winws2_language_refresh_updates_control_button_screen_reader_names(self) -> None:
         from presets.ui.control.zapret2.runtime_helpers import apply_profile_language
 
@@ -183,6 +243,22 @@ class ControlAccessibilityTests(unittest.TestCase):
 
         self.assertEqual(start_btn.accessibleName(), "Запустить Zapret")
         self.assertEqual(stop_exit_btn.accessibleName(), "Остановить и закрыть программу")
+
+    def test_winws2_language_refresh_updates_extra_action_button_screen_reader_names(self) -> None:
+        from presets.ui.control.zapret2.runtime_helpers import apply_profile_language
+
+        kwargs = _language_refresh_kwargs()
+        apply_profile_language(
+            **kwargs,
+            start_btn=_ButtonTarget(),
+            stop_and_exit_btn=_ButtonTarget(),
+            update_stop_button_text=lambda: None,
+        )
+
+        self.assertEqual(kwargs["test_card"].button.accessibleName(), "Открыть тест соединения")
+        self.assertEqual(kwargs["internet_cleanup_card"].button.accessibleName(), "Сбросить сеть Windows")
+        self.assertEqual(kwargs["folder_card"].button.accessibleName(), "Открыть папку программы")
+        self.assertEqual(kwargs["docs_card"].button.accessibleName(), "Открыть документацию")
 
 
 if __name__ == "__main__":

@@ -118,45 +118,52 @@ def apply_profile_language(
         tr_catalog("page.winws2_control.card.advanced", language=language, default="Дополнительные настройки")
     )
 
-    test_card.setTitle(
-        tr_catalog("page.winws2_control.button.connection_test", language=language, default="Тест соединения")
+    connection_test_title = tr_catalog("page.winws2_control.button.connection_test", language=language, default="Тест соединения")
+    connection_test_desc = tr_catalog("page.winws2_control.button.connection_test.desc", language=language, default="Проверить доступность сети и состояние обхода")
+    test_card.setTitle(connection_test_title)
+    test_card.setContent(connection_test_desc)
+    set_button_text_accessibility(
+        test_card.button,
+        tr_catalog("page.winws2_control.button.open", language=language, default="Открыть"),
+        accessible_name=tr_catalog("page.winws2_control.button.connection_test.accessible_name", language=language, default="Открыть тест соединения"),
+        description=connection_test_desc,
     )
-    test_card.setContent(
-        tr_catalog("page.winws2_control.button.connection_test.desc", language=language, default="Проверить доступность сети и состояние обхода")
+
+    internet_cleanup_title = tr_catalog("page.control.internet_cleanup.title", language=language, default="Сбросить сеть Windows")
+    internet_cleanup_desc = tr_catalog(
+        "page.control.internet_cleanup.desc",
+        language=language,
+        default="Очистить DNS, proxy, Winsock и сетевые параметры. Может понадобиться перезагрузка",
     )
-    test_card.button.setText(
-        tr_catalog("page.winws2_control.button.open", language=language, default="Открыть")
+    internet_cleanup_card.setTitle(internet_cleanup_title)
+    internet_cleanup_card.setContent(internet_cleanup_desc)
+    set_button_text_accessibility(
+        internet_cleanup_card.button,
+        tr_catalog("page.control.internet_cleanup.button", language=language, default="Сбросить"),
+        accessible_name=tr_catalog("page.control.internet_cleanup.accessible_name", language=language, default="Сбросить сеть Windows"),
+        description=internet_cleanup_desc,
     )
-    internet_cleanup_card.setTitle(
-        tr_catalog("page.control.internet_cleanup.title", language=language, default="Сбросить сеть Windows")
+
+    folder_title = tr_catalog("page.winws2_control.button.open_folder", language=language, default="Открыть папку")
+    folder_desc = tr_catalog("page.winws2_control.button.open_folder.desc", language=language, default="Перейти в папку программы и служебных файлов")
+    folder_card.setTitle(folder_title)
+    folder_card.setContent(folder_desc)
+    set_button_text_accessibility(
+        folder_card.button,
+        tr_catalog("page.winws2_control.button.open", language=language, default="Открыть"),
+        accessible_name=tr_catalog("page.winws2_control.button.open_folder.accessible_name", language=language, default="Открыть папку программы"),
+        description=folder_desc,
     )
-    internet_cleanup_card.setContent(
-        tr_catalog(
-            "page.control.internet_cleanup.desc",
-            language=language,
-            default="Очистить DNS, proxy, Winsock и сетевые параметры. Может понадобиться перезагрузка",
-        )
-    )
-    internet_cleanup_card.button.setText(
-        tr_catalog("page.control.internet_cleanup.button", language=language, default="Сбросить")
-    )
-    folder_card.setTitle(
-        tr_catalog("page.winws2_control.button.open_folder", language=language, default="Открыть папку")
-    )
-    folder_card.setContent(
-        tr_catalog("page.winws2_control.button.open_folder.desc", language=language, default="Перейти в папку программы и служебных файлов")
-    )
-    folder_card.button.setText(
-        tr_catalog("page.winws2_control.button.open", language=language, default="Открыть")
-    )
-    docs_card.setTitle(
-        tr_catalog("page.winws2_control.button.documentation", language=language, default="Документация")
-    )
-    docs_card.setContent(
-        tr_catalog("page.winws2_control.button.documentation.desc", language=language, default="Открыть справку и описание возможностей")
-    )
-    docs_card.button.setText(
-        tr_catalog("page.winws2_control.button.open", language=language, default="Открыть")
+
+    docs_title = tr_catalog("page.winws2_control.button.documentation", language=language, default="Документация")
+    docs_desc = tr_catalog("page.winws2_control.button.documentation.desc", language=language, default="Открыть справку и описание возможностей")
+    docs_card.setTitle(docs_title)
+    docs_card.setContent(docs_desc)
+    set_button_text_accessibility(
+        docs_card.button,
+        tr_catalog("page.winws2_control.button.open", language=language, default="Открыть"),
+        accessible_name=tr_catalog("page.winws2_control.button.documentation.accessible_name", language=language, default="Открыть документацию"),
+        description=docs_desc,
     )
 
     update_stop_button_text()

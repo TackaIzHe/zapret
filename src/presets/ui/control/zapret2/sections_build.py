@@ -150,6 +150,7 @@ def build_winws2_pages_settings_sections(
         title_text=tr_fn("page.winws2_control.button.connection_test", "Тест соединения"),
         content_text=tr_fn("page.winws2_control.button.connection_test.desc", "Проверить доступность сети и состояние обхода"),
         on_click=on_open_connection_test,
+        button_accessible_name=tr_fn("page.winws2_control.button.connection_test.accessible_name", "Открыть тест соединения"),
         parent=content_parent,
     )
     internet_cleanup_card = build_push_setting_card_common(
@@ -162,6 +163,7 @@ def build_winws2_pages_settings_sections(
             "Очистить DNS, proxy, Winsock и сетевые параметры. Может понадобиться перезагрузка",
         ),
         on_click=on_open_internet_cleanup,
+        button_accessible_name=tr_fn("page.control.internet_cleanup.accessible_name", "Сбросить сеть Windows"),
         parent=content_parent,
     )
     folder_card = build_push_setting_card_common(
@@ -171,6 +173,7 @@ def build_winws2_pages_settings_sections(
         title_text=tr_fn("page.winws2_control.button.open_folder", "Открыть папку"),
         content_text=tr_fn("page.winws2_control.button.open_folder.desc", "Перейти в папку программы и служебных файлов"),
         on_click=on_open_folder,
+        button_accessible_name=tr_fn("page.winws2_control.button.open_folder.accessible_name", "Открыть папку программы"),
         parent=content_parent,
     )
     docs_card = build_push_setting_card_common(
@@ -180,6 +183,7 @@ def build_winws2_pages_settings_sections(
         title_text=tr_fn("page.winws2_control.button.documentation", "Документация"),
         content_text=tr_fn("page.winws2_control.button.documentation.desc", "Открыть справку и описание возможностей"),
         on_click=on_open_docs,
+        button_accessible_name=tr_fn("page.winws2_control.button.documentation.accessible_name", "Открыть документацию"),
         parent=content_parent,
     )
     extra_card.addSettingCard(test_card)
