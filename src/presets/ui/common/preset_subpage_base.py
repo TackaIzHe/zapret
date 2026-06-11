@@ -270,6 +270,9 @@ class PresetRawEditorPage(BasePage):
         self._active_preset_file_name = ""
         self._active_preset_name = ""
         self._raw_editor_text_snapshot: str | None = None
+        self._raw_preset_content_loaded_once = False
+        self._raw_preset_content_dirty = True
+        self._ignore_next_raw_preset_content_revision = False
         self._raw_editor_text_cache_update_suspended = False
         self._is_loading = False
         self._raw_load_runtime = OneShotWorkerRuntime()
@@ -669,13 +672,27 @@ class PresetRawEditorPage(BasePage):
     def set_preset_file_name(self, file_name: str) -> None:
         if not self._run_after_raw_preset_save(lambda: self.set_preset_file_name(file_name)):
             return
-        self._preset_file_name = str(file_name or "").strip()
+        next_file_name = str(file_name or "").strip()
+        if self._can_reuse_loaded_raw_preset(next_file_name):
+            self._refresh_header()
+            return
+        self._preset_file_name = next_file_name
         self._preset_name = Path(self._preset_file_name).stem if self._preset_file_name else ""
         self._preset_path = None
         self._preset_origin = "user"
         self._raw_editor_text_snapshot = None
+        self._raw_preset_content_dirty = True
         self._load_file()
         self._refresh_header()
+
+    def _can_reuse_loaded_raw_preset(self, file_name: str) -> bool:
+        current = str(self.__dict__.get("_preset_file_name", "") or "").strip().lower()
+        requested = str(file_name or "").strip().lower()
+        if not current or not requested or current != requested:
+            return False
+        if not bool(self.__dict__.get("_raw_preset_content_loaded_once", False)):
+            return False
+        return not bool(self.__dict__.get("_raw_preset_content_dirty", True))
 
     def handle_page_command(self, command: str, payload: dict) -> bool:
         if command == "open_raw_preset":
@@ -841,6 +858,8 @@ class PresetRawEditorPage(BasePage):
             getattr(result, "active_name", ""),
         )
         self._apply_raw_editor_text(result.text)
+        self._raw_preset_content_loaded_once = True
+        self._raw_preset_content_dirty = False
         self._set_footer(result.footer_text)
         self._is_loading = False
         self._refresh_header()
@@ -867,6 +886,7 @@ class PresetRawEditorPage(BasePage):
         load_state = self._raw_load_state_obj()
         if load_state.has_pending() or load_state.start_scheduled:
             return
+        self._raw_preset_content_dirty = True
         self._set_footer(f"Ошибка загрузки: {error}")
         self._is_loading = False
 
@@ -976,6 +996,7 @@ class PresetRawEditorPage(BasePage):
             return
         if self._is_loading:
             return
+        self._raw_preset_content_dirty = True
         self._content_publish_pending = True
         self._save_timer.stop()
         self._commit_timer.stop()
@@ -1112,6 +1133,10 @@ class PresetRawEditorPage(BasePage):
         self._preset_file_name = updated.file_name
         self._preset_path = result.path
         self._preset_origin = str(getattr(updated, "kind", "") or self._preset_origin or "user").strip().lower() or "user"
+        self._raw_preset_content_loaded_once = True
+        self._raw_preset_content_dirty = False
+        if publish_content_changed:
+            self._ignore_next_raw_preset_content_revision = True
         if publish_content_changed:
             self._content_publish_pending = False
         self._set_footer(result.footer_text)
@@ -1274,6 +1299,8 @@ class PresetRawEditorPage(BasePage):
                     "launch_busy_text",
                     "last_status_message",
                     "active_preset_revision",
+                    "preset_content_revision",
+                    "preset_structure_revision",
                 },
                 emit_initial=True,
             )
@@ -1326,6 +1353,12 @@ class PresetRawEditorPage(BasePage):
             self._render_runtime_toggle(state)
         if footer_status_changed:
             self._render_footer_status(state)
+        content_revision_changed = bool(changed & {"preset_content_revision"})
+        if content_revision_changed and bool(self.__dict__.get("_ignore_next_raw_preset_content_revision", False)):
+            self._ignore_next_raw_preset_content_revision = False
+            content_revision_changed = False
+        if content_revision_changed or bool(changed & {"preset_structure_revision"}):
+            self._raw_preset_content_dirty = True
 
     def _render_runtime_toggle(self, state=None) -> None:
         button = getattr(self, "runtimeToggleButton", None)

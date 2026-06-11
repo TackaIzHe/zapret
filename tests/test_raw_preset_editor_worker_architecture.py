@@ -121,6 +121,81 @@ class RawPresetEditorWorkerArchitectureTests(unittest.TestCase):
         self.assertNotIn("menu.exec(", source)
         self.assertNotIn("triggered.connect", source)
 
+    def test_clean_same_raw_preset_open_skips_redundant_load_worker(self) -> None:
+        from presets.ui.common.preset_subpage_base import PresetRawEditorPage
+
+        page = PresetRawEditorPage.__new__(PresetRawEditorPage)
+        page._cleanup_in_progress = False
+        page._preset_file_name = "Default.txt"
+        page._preset_name = "Default"
+        page._preset_path = "C:/Zapret/Dev/presets/winws2/Default.txt"
+        page._preset_origin = "user"
+        page._raw_editor_text_snapshot = "--new\nloaded\n"
+        page._raw_preset_content_loaded_once = True
+        page._raw_preset_content_dirty = False
+        page._run_after_raw_preset_save = Mock(return_value=True)
+        page._load_file = Mock(side_effect=AssertionError("clean same preset must not reload"))
+        page._refresh_header = Mock()
+
+        PresetRawEditorPage.set_preset_file_name(page, "Default.txt")
+
+        page._load_file.assert_not_called()
+        page._refresh_header.assert_called_once_with()
+        self.assertEqual(page._raw_editor_text_snapshot, "--new\nloaded\n")
+
+    def test_raw_preset_content_revision_marks_loaded_text_dirty(self) -> None:
+        from presets.ui.common.preset_subpage_base import PresetRawEditorPage
+
+        page = PresetRawEditorPage.__new__(PresetRawEditorPage)
+        page._cleanup_in_progress = False
+        page._raw_preset_content_loaded_once = True
+        page._raw_preset_content_dirty = False
+        page._render_runtime_toggle = Mock()
+        page._render_footer_status = Mock()
+
+        PresetRawEditorPage._on_ui_state_changed(
+            page,
+            object(),
+            frozenset({"preset_content_revision"}),
+        )
+
+        self.assertTrue(page._raw_preset_content_dirty)
+        page._render_runtime_toggle.assert_not_called()
+        page._render_footer_status.assert_not_called()
+
+    def test_own_raw_preset_save_revision_keeps_loaded_text_clean(self) -> None:
+        from presets.ui.common.preset_subpage_base import PresetRawEditorPage
+
+        updated = SimpleNamespace(name="Default", file_name="Default.txt", kind="user")
+        result = SimpleNamespace(
+            updated=updated,
+            path="C:/Zapret/Dev/presets/winws2/Default.txt",
+            footer_text="Сохранено 12:00",
+        )
+        page = PresetRawEditorPage.__new__(PresetRawEditorPage)
+        page._cleanup_in_progress = False
+        page._raw_save_request_id = 3
+        page._preset_name = "Default"
+        page._preset_file_name = "Default.txt"
+        page._preset_path = "C:/Zapret/Dev/presets/winws2/Default.txt"
+        page._preset_origin = "user"
+        page._raw_preset_content_loaded_once = True
+        page._raw_preset_content_dirty = True
+        page._content_publish_pending = True
+        page._set_footer = Mock()
+        page._render_runtime_toggle = Mock()
+        page._render_footer_status = Mock()
+
+        PresetRawEditorPage._on_raw_preset_save_finished(page, 3, "Default.txt", result, True)
+        PresetRawEditorPage._on_ui_state_changed(
+            page,
+            object(),
+            frozenset({"preset_content_revision"}),
+        )
+
+        self.assertFalse(page._raw_preset_content_dirty)
+        self.assertFalse(page._ignore_next_raw_preset_content_revision)
+
     def test_raw_preset_save_queue_uses_shared_latest_worker_state(self) -> None:
         from presets.ui.common.preset_subpage_base import PresetRawEditorPage
         from ui.latest_value_worker_state import LatestValueWorkerState
