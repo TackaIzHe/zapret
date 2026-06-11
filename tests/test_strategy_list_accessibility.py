@@ -37,6 +37,16 @@ class StrategyListAccessibilityTests(unittest.TestCase):
         self.assertIn("выберите стратегию стрелками", description)
         self.assertIn("нажмите Enter", description)
 
+    def test_strategy_list_exposes_initial_loading_state(self) -> None:
+        widget = ProfileStrategyListWidget()
+        self.addCleanup(widget.deleteLater)
+
+        self.assertEqual(widget._list.accessibleName(), "Список готовых стратегий: список пока загружается")
+        self.assertEqual(
+            widget._list.property("screenReaderStateText"),
+            "Список готовых стратегий: список пока загружается",
+        )
+
     def test_strategy_summary_reads_visible_count(self) -> None:
         widget = ProfileStrategyListWidget()
         self.addCleanup(widget.deleteLater)

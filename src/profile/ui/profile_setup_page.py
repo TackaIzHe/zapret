@@ -480,6 +480,7 @@ class ProfileStrategyListWidget(QWidget):
             name="Список готовых стратегий",
             description="Выберите готовую стратегию стрелками вверх и вниз, затем нажмите Enter.",
         )
+        set_state_text(self._list, "Список готовых стратегий: список пока загружается")
         self._list.setMouseTracking(True)
         self._list.setSizeAdjustPolicy(QAbstractScrollArea.SizeAdjustPolicy.AdjustIgnored)
         self._list.setMinimumHeight(520)
