@@ -8,6 +8,7 @@ import diagnostics.page_plans as connection_page_plans
 from app.ui_texts import tr as tr_catalog
 from diagnostics.ui.components import clean_connection_status_text
 from ui.accessibility import set_control_accessibility, set_state_text
+from ui.combo_accessibility import set_combo_items_accessibility
 from ui.fluent_widgets import set_tooltip
 
 
@@ -82,6 +83,7 @@ def _update_test_combo_accessibility(combo) -> None:
         name=name,
         description="Выберите, какие соединения проверить: Discord и YouTube, только Discord или только YouTube.",
     )
+    set_combo_items_accessibility(combo, name="Сценарий диагностики", clean_label=_clean_combo_text)
 
 
 def _ensure_test_combo_accessibility_signal(combo) -> None:

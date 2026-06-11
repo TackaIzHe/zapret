@@ -5,6 +5,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QVBoxLayout, QWidget
 from qfluentwidgets import BodyLabel, CaptionLabel, ComboBox, IndeterminateProgressBar, ProgressBar, PushButton
 
@@ -69,6 +70,23 @@ class DiagnosticsControlsAccessibilityTests(unittest.TestCase):
         self.assertEqual(
             combo.property("screenReaderStateText"),
             "Сценарий диагностики, выбрано: Только Discord",
+        )
+
+    def test_test_combo_menu_items_are_named_for_screen_reader(self) -> None:
+        combo = ComboBox()
+
+        refresh_test_combo_items(combo=combo, language="ru")
+        create_menu = getattr(combo, "_create_accessible_combo_menu", None)
+        self.assertIsNotNone(create_menu)
+        menu = create_menu()
+
+        self.assertEqual(
+            menu.view.item(0).data(Qt.ItemDataRole.AccessibleTextRole),
+            "Сценарий диагностики: Все тесты (Discord + YouTube), выбран",
+        )
+        self.assertEqual(
+            menu.view.item(1).data(Qt.ItemDataRole.AccessibleTextRole),
+            "Сценарий диагностики: Только Discord, не выбран",
         )
 
     def test_status_text_is_exposed_as_screen_reader_state(self) -> None:
