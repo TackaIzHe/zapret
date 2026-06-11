@@ -32,11 +32,27 @@ class BlockcheckPageAccessibilityTests(unittest.TestCase):
 
         self.assertEqual(page._tabs_pivot.accessibleName(), "Раздел BlockCheck, выбрано: BlockCheck")
         self.assertIn("BlockCheck, Подбор стратегии, Диагностика или DNS подмена", page._tabs_pivot.accessibleDescription())
+        self.assertEqual(
+            page._tabs_pivot.items[page.TAB_BLOCKCHECK].accessibleName(),
+            "Раздел BlockCheck: BlockCheck, выбрано",
+        )
+        self.assertEqual(
+            page._tabs_pivot.items[page.TAB_STRATEGY_SCAN].accessibleName(),
+            "Раздел BlockCheck: Подбор стратегии, не выбрано",
+        )
         page._tabs_pivot.setCurrentItem(page.TAB_STRATEGY_SCAN)
         self.assertEqual(page._tabs_pivot.accessibleName(), "Раздел BlockCheck, выбрано: Подбор стратегии")
         self.assertEqual(
             page._tabs_pivot.property("screenReaderStateText"),
             "Раздел BlockCheck, выбрано: Подбор стратегии",
+        )
+        self.assertEqual(
+            page._tabs_pivot.items[page.TAB_BLOCKCHECK].accessibleName(),
+            "Раздел BlockCheck: BlockCheck, не выбрано",
+        )
+        self.assertEqual(
+            page._tabs_pivot.items[page.TAB_STRATEGY_SCAN].accessibleName(),
+            "Раздел BlockCheck: Подбор стратегии, выбрано",
         )
 
         self.assertEqual(page._mode_combo.accessibleName(), "Режим BlockCheck, выбрано: Полная")
