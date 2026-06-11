@@ -177,6 +177,8 @@ class UpdateStatusCard(CardWidget):
             description="Карточка проверки обновлений. Сообщает текущий статус проверки и доступное действие.",
         )
         set_state_text(self, card_name)
+        set_state_text(self.title_label, f"Заголовок проверки обновлений: {title or '—'}")
+        set_state_text(self.subtitle_label, f"Описание проверки обновлений: {subtitle or '—'}")
 
         if self._is_checking:
             button_state = "Проверка обновлений выполняется"

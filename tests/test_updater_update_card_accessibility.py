@@ -30,6 +30,15 @@ class UpdaterUpdateCardAccessibilityTests(unittest.TestCase):
         )
         self.assertIn("запускает проверку", card.check_btn.accessibleDescription().lower())
 
+    def test_update_status_card_text_labels_are_named_for_screen_reader(self) -> None:
+        card = UpdateStatusCard(language="ru")
+
+        self.assertEqual(card.title_label.accessibleName(), "Заголовок проверки обновлений: Проверка обновлений")
+        self.assertEqual(
+            card.subtitle_label.accessibleName(),
+            "Описание проверки обновлений: Нажмите для проверки доступных обновлений",
+        )
+
     def test_update_status_card_reports_checking_state(self) -> None:
         card = UpdateStatusCard(language="ru")
 
