@@ -23,6 +23,7 @@ from log.log import log
 from profile.match_filters import filter_values
 from profile.editable_settings import normalize_filter_value
 from profile.setup_match_text import build_profile_setup_match_tab_text
+from profile.strategy_list_filter import ProfileStrategyListFilterWorker, ProfileStrategyListPlan
 from profile.ui.profile_setup_controls import (
     range_expression_from_controls,
     set_combo_by_data,
@@ -421,6 +422,15 @@ class ProfileStrategyListWidget(QWidget):
         self._states = {}
         self._item_by_strategy_id = {}
         self._rows_signature = None
+        self._strategy_filter_runtime = OneShotWorkerRuntime()
+        self._strategy_filter_state = LatestValueWorkerState(
+            self._strategy_filter_runtime,
+            empty_value=None,
+        )
+        self._strategy_filter_timer = QTimer(self)
+        self._strategy_filter_timer.setSingleShot(True)
+        self._strategy_filter_timer.timeout.connect(self._run_debounced_tree_rebuild)
+        self.destroyed.connect(self._cleanup_strategy_filter_worker)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -537,7 +547,7 @@ class ProfileStrategyListWidget(QWidget):
         self._states = next_states
         self._current_strategy_id = next_current_id
         self._rows_signature = next_signature
-        self._rebuild_tree()
+        self._request_tree_rebuild()
 
     def _can_update_strategy_rows_in_place(self, next_entries: dict, next_states: dict) -> bool:
         if set(self._entries.keys()) != set(next_entries.keys()):
@@ -715,7 +725,188 @@ class ProfileStrategyListWidget(QWidget):
             set_state_text(self._list, "Список готовых стратегий")
 
     def _apply_filter(self) -> None:
-        self._rebuild_tree()
+        self._request_tree_rebuild()
+
+    def _request_tree_rebuild(self) -> None:
+        runtime = self.__dict__.get("_strategy_filter_runtime")
+        if runtime is None:
+            self._rebuild_tree()
+            return
+        search = ""
+        try:
+            search = self._search.text().strip().lower()
+        except Exception:
+            search = ""
+        self._strategy_filter_state_obj().pending = (
+            dict(self._entries),
+            dict(self._states),
+            str(self._current_strategy_id or "none").strip() or "none",
+            search,
+        )
+        try:
+            self._strategy_filter_timer.start(120)
+        except Exception:
+            self._run_debounced_tree_rebuild()
+
+    def _run_debounced_tree_rebuild(self) -> None:
+        state = self._strategy_filter_state_obj()
+        pending = state.pending
+        if pending is None:
+            return
+        if state.is_busy():
+            return
+        state.pending = None
+        entries, states, current_strategy_id, search_text = pending
+        self._start_strategy_filter_worker(entries, states, current_strategy_id, search_text)
+
+    def _start_strategy_filter_worker(self, entries, states, current_strategy_id: str, search_text: str) -> None:
+        self._strategy_filter_runtime.start_qthread_worker(
+            worker_factory=lambda request_id: self.create_strategy_filter_worker(
+                request_id,
+                entries=entries,
+                states=states,
+                current_strategy_id=current_strategy_id,
+                search_text=search_text,
+            ),
+            on_loaded=self._on_strategy_filter_loaded,
+            on_failed=self._on_strategy_filter_failed,
+            on_finished=self._on_strategy_filter_worker_finished,
+        )
+
+    def create_strategy_filter_worker(
+        self,
+        request_id: int,
+        *,
+        entries,
+        states,
+        current_strategy_id: str,
+        search_text: str,
+    ) -> ProfileStrategyListFilterWorker:
+        return ProfileStrategyListFilterWorker(
+            request_id,
+            entries=entries,
+            states=states,
+            current_strategy_id=current_strategy_id,
+            search_text=search_text,
+            parent=self,
+        )
+
+    def _on_strategy_filter_loaded(self, request_id: int, plan: ProfileStrategyListPlan) -> None:
+        runtime = self.__dict__.get("_strategy_filter_runtime")
+        if runtime is None or not runtime.is_current(request_id):
+            return
+        if self._strategy_filter_state_obj().has_pending():
+            return
+        if str(getattr(plan, "current_strategy_id", "") or "") != str(self._current_strategy_id or ""):
+            self._request_tree_rebuild()
+            return
+        self._apply_strategy_list_plan(plan)
+
+    def _on_strategy_filter_failed(self, request_id: int, error: str) -> None:
+        runtime = self.__dict__.get("_strategy_filter_runtime")
+        if runtime is None or not runtime.is_current(request_id):
+            return
+        if self._strategy_filter_state_obj().has_pending():
+            return
+        log(f"Ошибка подготовки списка готовых стратегий profile: {error}", "DEBUG")
+
+    def _on_strategy_filter_worker_finished(self, worker) -> None:
+        if not self._is_current_strategy_filter_worker_finish(worker):
+            return
+        if self._strategy_filter_state_obj().has_pending():
+            self._schedule_strategy_filter_worker_start()
+
+    def _schedule_strategy_filter_worker_start(self) -> None:
+        self._strategy_filter_state_obj().schedule_start(
+            QTimer.singleShot,
+            self._run_scheduled_strategy_filter_worker_start,
+            pending_when_already_scheduled=self._strategy_filter_state_obj().pending,
+        )
+
+    def _run_scheduled_strategy_filter_worker_start(self) -> None:
+        pending = self._strategy_filter_state_obj().take_pending_for_scheduled_start()
+        if pending is None:
+            return
+        entries, states, current_strategy_id, search_text = pending
+        self._start_strategy_filter_worker(entries, states, current_strategy_id, search_text)
+
+    def _is_current_strategy_filter_worker_finish(self, worker) -> bool:
+        runtime = self.__dict__.get("_strategy_filter_runtime")
+        if runtime is None:
+            return False
+        if getattr(runtime, "worker", None) is worker:
+            return True
+        request_id = getattr(worker, "_request_id", None)
+        if request_id is None:
+            return False
+        return int(request_id) == int(getattr(runtime, "request_id", 0) or 0)
+
+    def _strategy_filter_state_obj(self) -> LatestValueWorkerState:
+        state = self.__dict__.get("_strategy_filter_state")
+        runtime = self.__dict__.get("_strategy_filter_runtime")
+        if state is None:
+            pending = self.__dict__.pop("_strategy_filter_pending", None)
+            start_scheduled = bool(self.__dict__.pop("_strategy_filter_start_scheduled", False))
+            state = LatestValueWorkerState(
+                runtime,
+                empty_value=None,
+                pending=pending,
+                start_scheduled=start_scheduled,
+            )
+            self.__dict__["_strategy_filter_state"] = state
+        elif getattr(state, "runtime", None) is None and runtime is not None:
+            state.runtime = runtime
+        return state
+
+    def _apply_strategy_list_plan(self, plan: ProfileStrategyListPlan) -> None:
+        self._item_by_strategy_id.clear()
+        self._list.clear()
+        current_item = None
+
+        for row in tuple(getattr(plan, "rows", ()) or ()):
+            item = QListWidgetItem()
+            item.setText(row.name)
+            item.setData(self._ROLE_STRATEGY_ID, row.strategy_id)
+            item.setData(self._ROLE_NAME_TEXT, row.name)
+            item.setData(self._ROLE_STATUS_TEXT, row.status_text)
+            item.setData(self._ROLE_IS_ACTIVE, row.is_current)
+            item.setData(self._ROLE_VISUAL_ICON_NAME, row.visual_icon_name)
+            item.setData(self._ROLE_VISUAL_COLOR, row.visual_color)
+            item.setData(self._ROLE_VISUAL_LABEL_TEXT, row.visual_label)
+            item.setData(self._ROLE_VISUAL_DESCRIPTION, row.visual_description)
+            item.setData(Qt.ItemDataRole.AccessibleTextRole, row.accessible_text)
+            item.setData(self._ROLE_TOOLTIP_TEXT, row.tooltip_text)
+            item.setSizeHint(QSize(0, 31))
+            if row.is_current:
+                current_item = item
+            self._item_by_strategy_id[row.strategy_id] = item
+            self._list.addItem(item)
+
+        summary_text = f"{int(getattr(plan, 'visible_count', 0) or 0)} из {int(getattr(plan, 'total_count', 0) or 0)}"
+        set_widget_text_if_changed(self._summary, summary_text)
+        set_state_text(self._summary, f"Показано готовых стратегий: {summary_text}")
+        if current_item is not None:
+            self._list.setCurrentItem(current_item)
+            current_item.setSelected(True)
+        self._update_current_strategy_accessibility(self._list.currentItem())
+
+    def _cleanup_strategy_filter_worker(self, *_args) -> None:
+        try:
+            self._strategy_filter_timer.stop()
+        except Exception:
+            pass
+        try:
+            self._strategy_filter_state_obj().reset()
+        except Exception:
+            pass
+        runtime = self.__dict__.get("_strategy_filter_runtime")
+        if runtime is not None:
+            runtime.stop(
+                blocking=False,
+                log_fn=log,
+                warning_prefix="Profile strategy filter worker",
+            )
+            runtime.cancel()
 
     def _strategy_id_for_item(self, item) -> str:
         return str(item.data(self._ROLE_STRATEGY_ID) or "").strip() if item is not None else ""

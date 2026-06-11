@@ -31,6 +31,7 @@ from profile.profile_setup_loader import (
     ProfileUserProfileDeleteWorker,
     ProfileUserProfileUpdateWorker,
 )
+from profile.strategy_list_filter import ProfileStrategyListFilterWorker, build_profile_strategy_list_plan
 from profile.state import ProfileListItem, ProfileSetupPayload
 from profile.strategy_catalog import StrategyEntry
 from profile.strategy_state import ProfileStrategyState
@@ -2842,6 +2843,87 @@ class ProfileSetupPageContractTests(unittest.TestCase):
 
         widget._rebuild_tree.assert_called_once()
         widget.set_current_strategy_id.assert_not_called()
+
+    def test_strategy_list_search_rebuild_is_debounced_through_worker(self) -> None:
+        from ui.latest_value_worker_state import LatestValueWorkerState
+
+        widget = ProfileStrategyListWidget.__new__(ProfileStrategyListWidget)
+        widget._entries = {
+            "fake": SimpleNamespace(
+                name="Fake",
+                args="--lua-desync=fake",
+                visual=SimpleNamespace(icon_name="bolt", color="#fff", label="Fake", description="Fake TLS"),
+            )
+        }
+        widget._states = {"fake": ProfileStrategyState(rating="work", favorite=False)}
+        widget._current_strategy_id = "fake"
+        widget._strategy_filter_runtime = SimpleNamespace(is_running=Mock(return_value=False))
+        widget._strategy_filter_state = LatestValueWorkerState(widget._strategy_filter_runtime, empty_value=None)
+        widget._strategy_filter_timer = SimpleNamespace(start=Mock())
+        widget._search = SimpleNamespace(text=Mock(return_value="fake"))
+        widget._rebuild_tree = Mock(side_effect=AssertionError("search must not rebuild rows in GUI thread"))
+
+        ProfileStrategyListWidget._apply_filter(widget)
+
+        widget._strategy_filter_timer.start.assert_called_once_with(120)
+        widget._rebuild_tree.assert_not_called()
+        self.assertEqual(widget._strategy_filter_state.pending[2:], ("fake", "fake"))
+
+    def test_strategy_list_filter_worker_builds_rows_without_widgets(self) -> None:
+        entries = {
+            "fake": SimpleNamespace(
+                name="Fake TLS",
+                args="--lua-desync=fake",
+                visual=SimpleNamespace(icon_name="bolt", color="#fff", label="Fake", description="Fake TLS"),
+            ),
+            "udp": SimpleNamespace(
+                name="UDP",
+                args="--filter-udp=443",
+                visual=SimpleNamespace(icon_name="wifi", color="#0ff", label="UDP", description="UDP mode"),
+            ),
+        }
+        states = {
+            "fake": ProfileStrategyState(rating="work", favorite=True),
+            "udp": ProfileStrategyState(rating="", favorite=False),
+        }
+
+        plan = build_profile_strategy_list_plan(
+            entries=entries,
+            states=states,
+            current_strategy_id="fake",
+            search_text="tls",
+        )
+
+        self.assertEqual(plan.visible_count, 1)
+        self.assertEqual(plan.total_count, 2)
+        self.assertEqual(plan.rows[0].strategy_id, "fake")
+        self.assertEqual(plan.rows[0].status_text, "Выбрана • В избранном • Работает")
+        self.assertIn("Fake TLS", plan.rows[0].accessible_text)
+
+    def test_strategy_list_filter_worker_emits_latest_plan(self) -> None:
+        loaded = []
+        failed = []
+        worker = ProfileStrategyListFilterWorker(
+            4,
+            entries={
+                "fake": SimpleNamespace(
+                    name="Fake",
+                    args="--lua-desync=fake",
+                    visual=SimpleNamespace(icon_name="bolt", color="#fff", label="Fake", description="Fake TLS"),
+                )
+            },
+            states={"fake": ProfileStrategyState(rating="", favorite=False)},
+            current_strategy_id="fake",
+            search_text="fake",
+        )
+        worker.loaded.connect(lambda request_id, plan: loaded.append((request_id, plan)))
+        worker.failed.connect(lambda request_id, error: failed.append((request_id, error)))
+
+        worker.run()
+
+        self.assertEqual(failed, [])
+        self.assertEqual(loaded[0][0], 4)
+        self.assertEqual(loaded[0][1].rows[0].strategy_id, "fake")
 
     def test_strategy_list_updates_state_rows_without_rebuild_when_order_is_stable(self) -> None:
         widget = ProfileStrategyListWidget.__new__(ProfileStrategyListWidget)
