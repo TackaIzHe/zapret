@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QLabel, QSpinBox, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
@@ -27,6 +28,7 @@ from telegram_proxy.ui.settings_build import build_telegram_proxy_advanced_setti
 from telegram_proxy.ui.proxy_runtime_workflow import apply_status_changed
 from telegram_proxy.ui.proxy_runtime_workflow import restart_proxy_if_running
 from telegram_proxy.ui.runtime_helpers import refresh_status_texts
+from telegram_proxy.ui.page import TelegramProxyPage
 from ui.widgets.win11_controls import Win11ComboRow, Win11ToggleRow
 
 
@@ -170,6 +172,41 @@ class TelegramProxyAccessibilityTests(unittest.TestCase):
         self.assertIn("номер дата-центра и IP", widgets.dc_ip_edit.accessibleDescription())
         self.assertEqual(widgets.pool_size_spin.accessibleName(), "Пул WSS Telegram Proxy")
         self.assertEqual(widgets.buffer_kb_spin.accessibleName(), "Размер буфера Telegram Proxy")
+
+    def test_upstream_catalog_refresh_updates_menu_item_accessibility(self) -> None:
+        row = Win11ComboRow(
+            icon_name="mdi.server-network",
+            title="Сервер",
+            description="Выберите сервер из списка или переключитесь на ручной ввод",
+            items=[],
+        )
+        self.addCleanup(row.deleteLater)
+
+        page = TelegramProxyPage.__new__(TelegramProxyPage)
+        page._advanced_settings_built = True
+        page._upstream_preset_row = row
+
+        TelegramProxyPage._apply_initial_upstream_catalog(
+            page,
+            {
+                "Основной сервер": "main",
+                "Запасной сервер": "backup",
+            },
+        )
+
+        create_menu = getattr(row.combo, "_create_accessible_combo_menu", None)
+        self.assertIsNotNone(create_menu)
+
+        menu = create_menu()
+        self.addCleanup(menu.deleteLater)
+        self.assertEqual(
+            menu.view.item(0).data(Qt.ItemDataRole.AccessibleTextRole),
+            "Сервер: Основной сервер, выбран",
+        )
+        self.assertEqual(
+            menu.view.item(1).data(Qt.ItemDataRole.AccessibleTextRole),
+            "Сервер: Запасной сервер, не выбран",
+        )
 
     def test_status_change_sets_screen_reader_state_text(self) -> None:
         status_dot = _AccessibleStatusDot()

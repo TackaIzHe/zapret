@@ -734,6 +734,10 @@ class TelegramProxyPage(BasePage):
                 combo.addItem(text, userData=data)
         finally:
             combo.blockSignals(False)
+        try:
+            self._upstream_preset_row.refresh_accessibility()
+        except Exception:
+            pass
 
     def _connect_signals(self):
         mgr = self._proxy_manager()

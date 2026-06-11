@@ -869,6 +869,9 @@ class Win11ComboRow(FluentSettingCard):
         except Exception:
             pass
 
+    def refresh_accessibility(self) -> None:
+        self._update_combo_accessibility()
+
     def _on_combo_index_changed(self, index: int) -> None:
         self._update_combo_accessibility()
         self.currentIndexChanged.emit(int(index))
