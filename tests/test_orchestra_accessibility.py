@@ -354,6 +354,17 @@ class OrchestraAccessibilityTests(unittest.TestCase):
             widgets.log_protocol_filter.property("screenReaderStateText"),
             "Фильтр лога Оркестратора по протоколу, выбрано: Все",
         )
+        create_menu = getattr(widgets.log_protocol_filter, "_create_accessible_combo_menu", None)
+        self.assertIsNotNone(create_menu)
+        menu = create_menu()
+        self.assertEqual(
+            menu.view.item(0).data(Qt.ItemDataRole.AccessibleTextRole),
+            "Фильтр лога Оркестратора по протоколу: Все, выбран",
+        )
+        self.assertEqual(
+            menu.view.item(1).data(Qt.ItemDataRole.AccessibleTextRole),
+            "Фильтр лога Оркестратора по протоколу: TLS, не выбран",
+        )
 
         widgets.log_protocol_filter.setCurrentIndex(2)
 

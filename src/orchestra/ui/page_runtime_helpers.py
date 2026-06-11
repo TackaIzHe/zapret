@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import QListWidgetItem
 import orchestra.page_runtime as orchestra_page_runtime
 from orchestra.orchestra_runner import MAX_ORCHESTRA_LOGS
 from ui.accessibility import set_control_accessibility, set_item_accessible_text, set_state_text
+from ui.combo_accessibility import set_combo_items_accessibility
 from ui.fluent_widgets import set_tooltip
 
 
@@ -62,6 +63,7 @@ def _update_protocol_filter_accessibility(combo) -> None:
         name=name,
         description="Выберите, какие строки показывать в логе Оркестратора: все, TLS, HTTP, UDP, успешные или ошибочные.",
     )
+    set_combo_items_accessibility(combo, name="Фильтр лога Оркестратора по протоколу")
 
 
 def _ensure_protocol_filter_accessibility_signal(combo) -> None:
