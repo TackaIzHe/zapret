@@ -65,7 +65,14 @@ def apply_user_presets_accessibility(
     set_control_accessibility(
         preset_search_input,
         name=tr_fn(f"{tr_prefix}.search.accessible_name", "Поиск пресетов"),
-        description=tr_fn(f"{tr_prefix}.search.placeholder", "Поиск пресетов по имени..."),
+        description=tr_fn(
+            f"{tr_prefix}.search.accessible_description",
+            (
+                "Поиск пресетов по имени. "
+                "После ввода перейдите в список клавишей Tab, "
+                "выберите пресет стрелками вверх и вниз, затем нажмите Enter."
+            ),
+        ),
     )
     list_name = tr_fn(f"{tr_prefix}.list.accessible_name", "Список пользовательских пресетов")
     set_control_accessibility(

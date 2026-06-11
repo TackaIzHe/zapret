@@ -371,6 +371,10 @@ class UserPresetsAccessibilityTests(unittest.TestCase):
                 self.assertEqual(widget.accessibleName(), name)
                 self.assertIn(description, widget.accessibleDescription())
 
+        search_description = widgets.preset_search_input.accessibleDescription()
+        self.assertIn("После ввода перейдите в список клавишей Tab", search_description)
+        self.assertIn("выберите пресет стрелками вверх и вниз", search_description)
+
 
 if __name__ == "__main__":
     unittest.main()
