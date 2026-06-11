@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import QHBoxLayout, QVBoxLayout
 
@@ -130,16 +130,14 @@ def build_mode_management_section_common(
     start_btn.clicked.connect(on_start)
     buttons_layout.addWidget(start_btn)
 
-    stop_winws_btn = stop_button_cls(
-        tr_fn(stop_key, stop_default),
-        icon=get_themed_qta_icon("fa5s.stop"),
-    )
+    stop_winws_btn = stop_button_cls(tr_fn(stop_key, stop_default))
     set_control_accessibility(
         stop_winws_btn,
         description="Останавливает запущенный процесс обхода блокировок.",
     )
     stop_winws_btn.clicked.connect(on_stop)
     stop_winws_btn.setVisible(False)
+    schedule_stop_button_icon(stop_winws_btn)
     buttons_layout.addWidget(stop_winws_btn)
 
     stop_and_exit_btn = stop_button_cls(
@@ -173,6 +171,19 @@ def build_mode_management_section_common(
     content_layout.addWidget(loading_label)
 
     return control_card, start_btn, stop_winws_btn, stop_and_exit_btn, progress_bar, loading_label
+
+
+def schedule_stop_button_icon(button, *, delay_ms: int = 250) -> None:
+    def _apply_icon() -> None:
+        try:
+            button.setIcon(get_themed_qta_icon("fa5s.stop"))
+        except Exception:
+            pass
+
+    try:
+        QTimer.singleShot(delay_ms, _apply_icon)
+    except Exception:
+        _apply_icon()
 
 
 def build_push_setting_card_common(

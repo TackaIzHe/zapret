@@ -146,13 +146,17 @@ class ControlAccessibilityTests(unittest.TestCase):
         self.assertEqual(loading.accessibleName(), "Статус запуска Zapret: нет активного запуска")
         self.assertEqual(loading.property("screenReaderStateText"), "Статус запуска Zapret: нет активного запуска")
 
-    def test_stop_button_uses_square_stop_icon(self) -> None:
+    def test_stop_button_loads_square_stop_icon_after_first_paint(self) -> None:
         from presets.ui.control.shared_builders import build_mode_management_section_common
 
+        scheduled: list[tuple[int, object]] = []
         with patch(
             "presets.ui.control.shared_builders.get_themed_qta_icon",
             return_value=QIcon(),
-        ) as get_icon:
+        ) as get_icon, patch(
+            "presets.ui.control.shared_builders.QTimer.singleShot",
+            side_effect=lambda delay_ms, callback: scheduled.append((delay_ms, callback)),
+        ):
             build_mode_management_section_common(
                 tr_fn=lambda _key, default: default,
                 caption_label_cls=CaptionLabel,
@@ -171,7 +175,11 @@ class ControlAccessibilityTests(unittest.TestCase):
                 parent=QWidget(),
             )
 
-        get_icon.assert_called_once_with("fa5s.stop")
+            get_icon.assert_not_called()
+            self.assertEqual(len(scheduled), 1)
+            self.assertGreaterEqual(scheduled[0][0], 200)
+            scheduled[0][1]()
+            get_icon.assert_called_once_with("fa5s.stop")
 
     def test_push_setting_card_button_has_specific_screen_reader_name(self) -> None:
         from presets.ui.control.shared_builders import build_push_setting_card_common

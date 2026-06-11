@@ -786,7 +786,10 @@ class Zapret1ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
                 runtime.queue_top_summary_preset_apply_reload()
                 runtime.queue_additional_settings_preset_apply_reload()
             else:
-                self._schedule_top_summary_reload_after_preset_switch()
+                try:
+                    self._schedule_top_summary_reload_after_preset_switch()
+                except Exception:
+                    pass
                 self._schedule_additional_settings_reload_after_preset_switch()
         top_summary_data_changed = (
             not changed
