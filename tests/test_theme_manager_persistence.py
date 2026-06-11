@@ -40,8 +40,28 @@ class ThemeManagerPersistenceTests(unittest.TestCase):
         self.assertNotIn("settings_store", worker_source)
         self.assertIn("_request_theme_persist", apply_source)
         self.assertNotIn("set_selected_theme(clean)", apply_source)
-        self.assertIn("_theme_persist_pending", request_source)
-        self.assertIn("_theme_persist_pending", finished_source)
+        self.assertIn("_theme_persist_state_obj()", request_source)
+        self.assertIn("_theme_persist_state_obj()", finished_source)
+
+    def test_theme_persist_uses_shared_latest_worker_state(self) -> None:
+        import ui.theme as theme
+        from ui.latest_value_worker_state import LatestValueWorkerState
+
+        manager = theme.ThemeManager.__new__(theme.ThemeManager)
+        manager._theme_persist_runtime = SimpleNamespace(is_running=Mock(return_value=False))
+
+        init_source = inspect.getsource(theme.ThemeManager.__init__)
+        request_source = inspect.getsource(theme.ThemeManager._request_theme_persist)
+        schedule_source = inspect.getsource(theme.ThemeManager._schedule_theme_persist_worker_start)
+        cleanup_source = inspect.getsource(theme.ThemeManager.cleanup)
+
+        self.assertIsInstance(manager._theme_persist_state_obj(), LatestValueWorkerState)
+        self.assertIn("_theme_persist_state", init_source)
+        self.assertNotIn("self._theme_persist_pending: str | None = None", init_source)
+        self.assertNotIn("self._theme_persist_start_scheduled = False", init_source)
+        self.assertIn("_theme_persist_state_obj()", request_source)
+        self.assertIn("_theme_persist_state_obj()", schedule_source)
+        self.assertIn("_theme_persist_state_obj().reset()", cleanup_source)
 
     def test_pending_theme_persist_restarts_after_event_loop_turn(self) -> None:
         import ui.theme as theme

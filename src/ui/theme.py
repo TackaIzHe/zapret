@@ -16,6 +16,7 @@ from settings.appearance_backgrounds import (
 
 from typing import Optional
 import time
+from ui.latest_value_worker_state import LatestValueWorkerState
 from ui.one_shot_worker_runtime import OneShotWorkerRuntime
 
 
@@ -1131,8 +1132,10 @@ class ThemeManager:
         self._active_theme_build_jobs: dict[int, OneShotWorkerRuntime] = {}
         self._theme_persist_runtime = OneShotWorkerRuntime()
         self._theme_persist_runtime_worker = None
-        self._theme_persist_pending: str | None = None
-        self._theme_persist_start_scheduled = False
+        self._theme_persist_state = LatestValueWorkerState(
+            self._theme_persist_runtime,
+            empty_value=None,
+        )
         
 
         # список тем — теперь пустой (тема определяется isDarkTheme() системно)
@@ -1164,8 +1167,7 @@ class ThemeManager:
                 except RuntimeError:
                     pass
             self._cleanup_theme_build_thread()
-            self._theme_persist_pending = None
-            self._theme_persist_start_scheduled = False
+            self._theme_persist_state_obj().reset()
             self._theme_persist_runtime_worker = None
             self._theme_persist_runtime.stop(
                 blocking=False,
@@ -1385,12 +1387,11 @@ class ThemeManager:
 
     def _request_theme_persist(self, theme_name: str) -> None:
         clean = _normalize_theme_name(theme_name)
-        if (
-            self._theme_persist_runtime.is_running()
-            or bool(self.__dict__.get("_theme_persist_start_scheduled", False))
-        ):
-            self._theme_persist_pending = clean
+        state = self._theme_persist_state_obj()
+        if state.is_busy():
+            state.pending = clean
             return
+        state.pending = None
         self._start_theme_persist_worker(clean)
 
     def _start_theme_persist_worker(self, theme_name: str) -> None:
@@ -1411,24 +1412,66 @@ class ThemeManager:
         if current_worker is not None and _worker is not current_worker:
             return
         self._theme_persist_runtime_worker = None
-        pending = self._theme_persist_pending
-        self._theme_persist_pending = None
+        pending = self._theme_persist_state_obj().pending
+        self._theme_persist_state_obj().pending = None
         if pending and not self._cleanup_in_progress:
             self._schedule_theme_persist_worker_start(pending)
 
     def _schedule_theme_persist_worker_start(self, theme_name: str) -> None:
-        self._theme_persist_pending = _normalize_theme_name(theme_name)
-        if bool(self.__dict__.get("_theme_persist_start_scheduled", False)):
-            return
-        self._theme_persist_start_scheduled = True
-        QTimer.singleShot(0, self._run_scheduled_theme_persist_worker_start)
+        pending = _normalize_theme_name(theme_name)
+        state = self._theme_persist_state_obj()
+        state.pending = pending
+        state.schedule_start(
+            QTimer.singleShot,
+            self._run_scheduled_theme_persist_worker_start,
+            cleanup_in_progress=bool(self.__dict__.get("_cleanup_in_progress", False)),
+            pending_when_already_scheduled=pending,
+        )
 
     def _run_scheduled_theme_persist_worker_start(self) -> None:
-        self._theme_persist_start_scheduled = False
-        pending = self._theme_persist_pending
-        self._theme_persist_pending = None
+        pending = self._theme_persist_state_obj().take_pending_for_scheduled_start(
+            cleanup_in_progress=bool(self.__dict__.get("_cleanup_in_progress", False)),
+        )
         if pending and not bool(self.__dict__.get("_cleanup_in_progress", False)):
             self._start_theme_persist_worker(pending)
+
+    def _theme_persist_state_obj(self) -> LatestValueWorkerState:
+        state = self.__dict__.get("_theme_persist_state")
+        runtime = self.__dict__.get("_theme_persist_runtime")
+        if state is None:
+            pending = self.__dict__.pop("_theme_persist_pending", None)
+            start_scheduled = bool(
+                self.__dict__.pop("_theme_persist_start_scheduled", False)
+            )
+            state = LatestValueWorkerState(
+                runtime,
+                empty_value=None,
+                pending=pending,
+                start_scheduled=start_scheduled,
+            )
+            self.__dict__["_theme_persist_state"] = state
+        elif getattr(state, "runtime", None) is None and runtime is not None:
+            state.runtime = runtime
+        return state
+
+    @property
+    def _theme_persist_pending(self) -> str | None:
+        pending = self._theme_persist_state_obj().pending
+        return None if pending is None else str(pending)
+
+    @_theme_persist_pending.setter
+    def _theme_persist_pending(self, value: str | None) -> None:
+        self._theme_persist_state_obj().pending = (
+            None if value is None else _normalize_theme_name(value)
+        )
+
+    @property
+    def _theme_persist_start_scheduled(self) -> bool:
+        return bool(self._theme_persist_state_obj().start_scheduled)
+
+    @_theme_persist_start_scheduled.setter
+    def _theme_persist_start_scheduled(self, value: bool) -> None:
+        self._theme_persist_state_obj().start_scheduled = bool(value)
 
     def _set_status(self, text):
         """Устанавливает текст статуса (через главное окно)"""
