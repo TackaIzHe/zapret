@@ -36,7 +36,7 @@ from profile.strategy_catalog import StrategyEntry
 from profile.strategy_state import ProfileStrategyState
 from profile.ui.preset_setup_page import PresetSetupPageBase, preset_setup_title_for_payload
 from profile.ui.shell import build_profile_shell
-from profile.ui.profiles_list import ProfilesList
+from profile.ui.profiles_list import ProfileListViewStateWorker, ProfilesList
 from ui.presets_menu.delegate import PresetListDelegate
 
 
@@ -841,12 +841,92 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         )
 
         profiles_list._model.move_profile.assert_not_called()
-        moved = profiles_list._request_view_state_rebuild.call_args.kwargs["items"]
-        self.assertEqual([item.key for item in moved], ["profile-1", "profile-2"])
-        self.assertEqual(getattr(moved[0], "group"), "video")
-        self.assertEqual(getattr(moved[0], "group_name"), "Видео")
-        self.assertEqual(getattr(moved[0], "order"), 1)
-        self.assertTrue(getattr(moved[0], "order_is_manual"))
+        self.assertEqual(
+            profiles_list._request_view_state_rebuild.call_args.kwargs,
+            {
+                "move_request": {
+                    "source_profile_key": "profile-1",
+                    "destination_kind": "profile_after",
+                    "destination_profile_key": "profile-2",
+                    "destination_group_key": "video",
+                },
+            },
+        )
+
+    def test_profile_list_move_builds_local_view_state_in_worker(self) -> None:
+        move_source = inspect.getsource(ProfilesList.move_profile_item)
+        worker_source = inspect.getsource(ProfileListViewStateWorker.run)
+
+        self.assertNotIn("_moved_profile_items", move_source)
+        self.assertNotIn("_group_expanded_with_target", move_source)
+        self.assertIn("_moved_profile_items", worker_source)
+        self.assertIn("_group_expanded_with_target", worker_source)
+
+    def test_profile_list_move_worker_returns_moved_view_state(self) -> None:
+        first = SimpleNamespace(
+            key="profile-1",
+            persistent_key="profile-1",
+            profile_index=0,
+            profile_name="First",
+            enabled=True,
+            in_preset=True,
+            strategy_id="none",
+            strategy_name="None",
+            match_lines=(),
+            list_type="",
+            rating="",
+            favorite=False,
+            group="common",
+            group_name="Общие",
+            order=0,
+            order_is_manual=False,
+            group_collapsed=False,
+            user_profile_id="",
+        )
+        second = SimpleNamespace(
+            key="profile-2",
+            persistent_key="profile-2",
+            profile_index=1,
+            profile_name="Second",
+            enabled=True,
+            in_preset=True,
+            strategy_id="none",
+            strategy_name="None",
+            match_lines=(),
+            list_type="",
+            rating="",
+            favorite=False,
+            group="video",
+            group_name="Видео",
+            order=1,
+            order_is_manual=False,
+            group_collapsed=False,
+            user_profile_id="",
+        )
+        loaded = []
+        worker = ProfileListViewStateWorker(
+            5,
+            items=(first, second),
+            active_profile_types={"all"},
+            search_query="",
+            group_expanded={"common": True, "video": True},
+            move_request={
+                "source_profile_key": "profile-1",
+                "destination_kind": "profile_after",
+                "destination_profile_key": "profile-2",
+                "destination_group_key": "video",
+            },
+        )
+        worker.loaded.connect(lambda _request_id, state: loaded.append(state))
+
+        worker.run()
+
+        self.assertEqual(len(loaded), 1)
+        moved = loaded[0].profile_items["profile-1"]
+        self.assertEqual(moved.group, "video")
+        self.assertEqual(moved.group_name, "Видео")
+        self.assertEqual(moved.order, 1)
+        self.assertTrue(moved.order_is_manual)
 
     def test_profile_list_reserves_space_for_visible_fluent_scrollbar(self) -> None:
         list_source = inspect.getsource(ProfilesList._build_ui)

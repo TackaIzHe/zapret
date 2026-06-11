@@ -34,6 +34,7 @@ class ProfileListViewStateWorker(QThread):
         search_query: str,
         group_expanded: dict[str, bool] | None,
         folder_state: dict[str, Any] | None = None,
+        move_request: dict[str, str] | None = None,
         parent=None,
     ):
         super().__init__(parent)
@@ -43,14 +44,32 @@ class ProfileListViewStateWorker(QThread):
         self._search_query = str(search_query or "")
         self._group_expanded = dict(group_expanded) if isinstance(group_expanded, dict) else None
         self._folder_state = dict(folder_state) if isinstance(folder_state, dict) else None
+        self._move_request = dict(move_request or {}) if isinstance(move_request, dict) else None
 
     def run(self) -> None:
         try:
+            items = self._items
+            group_expanded = self._group_expanded
+            if self._move_request:
+                items = _moved_profile_items(
+                    items,
+                    str(self._move_request.get("source_profile_key") or ""),
+                    str(self._move_request.get("destination_kind") or ""),
+                    str(self._move_request.get("destination_profile_key") or ""),
+                    str(self._move_request.get("destination_group_key") or ""),
+                )
+                if items is None:
+                    raise ValueError("Не удалось подготовить локальное перемещение profile")
+                group_expanded = _group_expanded_with_target(
+                    group_expanded,
+                    str(self._move_request.get("destination_group_key") or ""),
+                    items,
+                )
             state = build_profile_list_view_state(
-                self._items,
+                items,
                 active_profile_types=self._active_profile_types,
                 search_query=self._search_query,
-                group_expanded=self._group_expanded,
+                group_expanded=group_expanded,
                 folder_state=self._folder_state,
             )
         except Exception as exc:
@@ -79,6 +98,7 @@ class ProfilesList(QWidget):
         self._view_state_group_expanded: dict[str, bool] | None = None
         self._view_state_folder_state: dict[str, Any] | None = None
         self._view_state_items: tuple[Any, ...] | None = None
+        self._view_state_move_request: dict[str, str] | None = None
         self._view_state_reset_group_expanded = False
         self._build_ui()
 
@@ -278,17 +298,19 @@ class ProfilesList(QWidget):
         destination_profile_key: str = "",
         destination_group_key: str = "",
     ) -> bool:
-        next_items = self._moved_profile_items(
-            source_profile_key,
-            destination_kind,
-            destination_profile_key,
-            destination_group_key,
-        )
-        if next_items is None:
+        source_key = str(source_profile_key or "").strip()
+        kind = str(destination_kind or "").strip()
+        destination_key = str(destination_profile_key or "").strip()
+        group_key = str(destination_group_key or "").strip()
+        if not self._can_queue_profile_move(source_key, kind, destination_key, group_key):
             return False
         self._request_view_state_rebuild(
-            items=next_items,
-            group_expanded=self._group_expanded_with_target(destination_group_key, next_items),
+            move_request={
+                "source_profile_key": source_key,
+                "destination_kind": kind,
+                "destination_profile_key": destination_key,
+                "destination_group_key": group_key,
+            },
         )
         return True
 
@@ -378,6 +400,7 @@ class ProfilesList(QWidget):
         group_expanded: dict[str, bool] | None = None,
         folder_state: dict[str, Any] | None = None,
         items: tuple[Any, ...] | None = None,
+        move_request: dict[str, str] | None = None,
         reset_group_expanded: bool = False,
     ) -> None:
         if group_expanded is not None:
@@ -386,6 +409,8 @@ class ProfilesList(QWidget):
             self._view_state_folder_state = dict(folder_state)
         if items is not None:
             self._view_state_items = tuple(items or ())
+        if isinstance(move_request, dict):
+            self._view_state_move_request = dict(move_request)
         if reset_group_expanded:
             self._view_state_group_expanded = None
             self._view_state_reset_group_expanded = True
@@ -415,6 +440,7 @@ class ProfilesList(QWidget):
                 or {}
             )
         folder_state = self.__dict__.pop("_view_state_folder_state", None)
+        move_request = self.__dict__.pop("_view_state_move_request", None)
         active_profile_types = set(self._active_profile_types or {"all"})
         search_query = str(self._search_query or "")
 
@@ -426,6 +452,7 @@ class ProfilesList(QWidget):
                 search_query=search_query,
                 group_expanded=group_expanded,
                 folder_state=folder_state,
+                move_request=move_request,
                 parent=self,
             ),
             on_loaded=self._on_view_state_loaded,
@@ -455,102 +482,33 @@ class ProfilesList(QWidget):
             options = {}
         return tuple(options.get("items") or ())
 
-    def _moved_profile_items(
+    def _can_queue_profile_move(
         self,
         source_profile_key: str,
         destination_kind: str,
         destination_profile_key: str = "",
         destination_group_key: str = "",
-    ) -> tuple[Any, ...] | None:
+    ) -> bool:
         source_key = str(source_profile_key or "").strip()
         kind = str(destination_kind or "").strip()
         if not source_key:
-            return None
+            return False
         items = self._current_view_state_items()
-        source = next((item for item in items if str(getattr(item, "key", "") or "") == source_key), None)
-        if source is None:
-            return None
+        if not any(str(getattr(item, "key", "") or "") == source_key for item in items):
+            return False
 
         destination_key = str(destination_profile_key or "").strip()
-        destination = next((item for item in items if str(getattr(item, "key", "") or "") == destination_key), None)
         if kind in {"profile", "profile_after"}:
-            if destination is None or str(getattr(destination, "key", "") or "") == source_key:
-                return None
-            target_group = str(destination_group_key or getattr(destination, "group", "") or getattr(source, "group", "") or "common")
-        elif kind == "folder":
-            target_group = str(destination_group_key or "").strip()
-        elif kind == "end":
-            target_group = str(destination_group_key or getattr(source, "group", "") or "common").strip()
-        else:
-            return None
-        if not target_group:
-            return None
-
-        group_name = group_name_for_key(target_group, tuple(items))
-        source_for_target = _profile_item_with(
-            source,
-            group=target_group,
-            group_name=group_name,
-            order_is_manual=True,
-        )
-        target_items = [
-            item
-            for item in sorted(items, key=profile_display_sort_key)
-            if str(getattr(item, "key", "") or "") != source_key
-            and str(getattr(item, "group", "") or "common") == target_group
-        ]
-
-        if kind == "profile":
-            insert_index = next(
-                (index for index, item in enumerate(target_items) if str(getattr(item, "key", "") or "") == destination_key),
-                -1,
+            return bool(
+                destination_key
+                and destination_key != source_key
+                and any(str(getattr(item, "key", "") or "") == destination_key for item in items)
             )
-            if insert_index < 0:
-                return None
-            target_items.insert(insert_index, source_for_target)
-        elif kind == "profile_after":
-            insert_index = next(
-                (index for index, item in enumerate(target_items) if str(getattr(item, "key", "") or "") == destination_key),
-                -1,
-            )
-            if insert_index < 0:
-                return None
-            target_items.insert(insert_index + 1, source_for_target)
-        else:
-            target_items.append(source_for_target)
-
-        target_order = {str(getattr(item, "key", "") or ""): index for index, item in enumerate(target_items)}
-        next_items: list[Any] = []
-        for item in items:
-            item_key = str(getattr(item, "key", "") or "")
-            if item_key == source_key and item_key not in target_order:
-                continue
-            if item_key in target_order:
-                next_items.append(
-                    _profile_item_with(
-                        source_for_target if item_key == source_key else item,
-                        group=target_group,
-                        group_name=group_name,
-                        order=target_order[item_key],
-                        order_is_manual=True,
-                    )
-                )
-            else:
-                next_items.append(item)
-        return tuple(next_items)
-
-    def _group_expanded_with_target(self, destination_group_key: str, items: tuple[Any, ...]) -> dict[str, bool]:
-        try:
-            options = self._model.view_state_options()
-        except Exception:
-            options = {}
-        group_expanded = dict(options.get("group_expanded") or {})
-        target_group = str(destination_group_key or "").strip()
-        if target_group:
-            group_expanded.setdefault(target_group, True)
-        for item in tuple(items or ()):
-            group_expanded.setdefault(str(getattr(item, "group", "") or "common"), True)
-        return group_expanded
+        if kind == "folder":
+            return bool(str(destination_group_key or "").strip())
+        if kind == "end":
+            return True
+        return False
 
     def _on_view_state_loaded(self, request_id: int, state) -> None:
         runtime = self.__dict__.get("_view_state_runtime")
@@ -611,6 +569,118 @@ def _profile_item_with(item: Any, **changes):
         data = dict(getattr(item, "__dict__", {}) or {})
         data.update(changes)
         return SimpleNamespace(**data)
+
+
+def _moved_profile_items(
+    items: tuple[Any, ...],
+    source_profile_key: str,
+    destination_kind: str,
+    destination_profile_key: str = "",
+    destination_group_key: str = "",
+) -> tuple[Any, ...] | None:
+    source_key = str(source_profile_key or "").strip()
+    kind = str(destination_kind or "").strip()
+    if not source_key:
+        return None
+    items = tuple(items or ())
+    source = next((item for item in items if str(getattr(item, "key", "") or "") == source_key), None)
+    if source is None:
+        return None
+
+    destination_key = str(destination_profile_key or "").strip()
+    destination = next((item for item in items if str(getattr(item, "key", "") or "") == destination_key), None)
+    if kind in {"profile", "profile_after"}:
+        if destination is None or str(getattr(destination, "key", "") or "") == source_key:
+            return None
+        target_group = str(
+            destination_group_key
+            or getattr(destination, "group", "")
+            or getattr(source, "group", "")
+            or "common"
+        )
+    elif kind == "folder":
+        target_group = str(destination_group_key or "").strip()
+    elif kind == "end":
+        target_group = str(destination_group_key or getattr(source, "group", "") or "common").strip()
+    else:
+        return None
+    if not target_group:
+        return None
+
+    group_name = group_name_for_key(target_group, items)
+    source_for_target = _profile_item_with(
+        source,
+        group=target_group,
+        group_name=group_name,
+        order_is_manual=True,
+    )
+    target_items = [
+        item
+        for item in sorted(items, key=profile_display_sort_key)
+        if str(getattr(item, "key", "") or "") != source_key
+        and str(getattr(item, "group", "") or "common") == target_group
+    ]
+
+    if kind == "profile":
+        insert_index = next(
+            (
+                index
+                for index, item in enumerate(target_items)
+                if str(getattr(item, "key", "") or "") == destination_key
+            ),
+            -1,
+        )
+        if insert_index < 0:
+            return None
+        target_items.insert(insert_index, source_for_target)
+    elif kind == "profile_after":
+        insert_index = next(
+            (
+                index
+                for index, item in enumerate(target_items)
+                if str(getattr(item, "key", "") or "") == destination_key
+            ),
+            -1,
+        )
+        if insert_index < 0:
+            return None
+        target_items.insert(insert_index + 1, source_for_target)
+    else:
+        target_items.append(source_for_target)
+
+    target_order = {str(getattr(item, "key", "") or ""): index for index, item in enumerate(target_items)}
+    next_items: list[Any] = []
+    for item in items:
+        item_key = str(getattr(item, "key", "") or "")
+        if item_key == source_key and item_key not in target_order:
+            continue
+        if item_key in target_order:
+            next_items.append(
+                _profile_item_with(
+                    source_for_target if item_key == source_key else item,
+                    group=target_group,
+                    group_name=group_name,
+                    order=target_order[item_key],
+                    order_is_manual=True,
+                )
+            )
+        else:
+            next_items.append(item)
+    return tuple(next_items)
+
+
+def _group_expanded_with_target(
+    group_expanded: dict[str, bool] | None,
+    destination_group_key: str,
+    items: tuple[Any, ...],
+) -> dict[str, bool]:
+    next_group_expanded = dict(group_expanded or {})
+    target_group = str(destination_group_key or "").strip()
+    if target_group:
+        next_group_expanded.setdefault(target_group, True)
+    for item in tuple(items or ()):
+        next_group_expanded.setdefault(str(getattr(item, "group", "") or "common"), True)
+    return next_group_expanded
 
 
 __all__ = ["ProfilesList"]
