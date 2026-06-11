@@ -62,12 +62,12 @@ def activate_user_presets_page(
     except Exception:
         pass
     apply_mode_labels_fn()
-    resync_layout_metrics_fn()
     if runtime_service.is_ui_dirty():
+        resync_layout_metrics_fn()
         refresh_presets_view_if_possible_fn()
+        schedule_layout_resync_fn(include_delayed=True)
     else:
         update_presets_view_height_fn()
-    schedule_layout_resync_fn(include_delayed=True)
 
 
 def after_user_presets_ui_built(

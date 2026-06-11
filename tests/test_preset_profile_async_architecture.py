@@ -968,6 +968,33 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         schedule_resync.assert_not_called()
         runtime_service.ensure_preset_list_current_index.assert_called_once_with()
 
+    def test_user_presets_clean_activation_skips_full_layout_resync(self) -> None:
+        from presets.ui.common.user_presets_page_lifecycle import activate_user_presets_page
+
+        runtime_service = Mock()
+        runtime_service.is_ui_dirty.return_value = False
+        start_watching = Mock()
+        apply_mode_labels = Mock()
+        resync_layout = Mock(side_effect=AssertionError("clean activation must not fully resync layout"))
+        refresh_view = Mock(side_effect=AssertionError("clean activation must not reload preset rows"))
+        update_height = Mock()
+        schedule_resync = Mock(side_effect=AssertionError("clean activation must not schedule delayed layout resync"))
+
+        activate_user_presets_page(
+            cleanup_in_progress=False,
+            apply_mode_labels_fn=apply_mode_labels,
+            resync_layout_metrics_fn=resync_layout,
+            start_watching_presets_fn=start_watching,
+            runtime_service=runtime_service,
+            refresh_presets_view_if_possible_fn=refresh_view,
+            update_presets_view_height_fn=update_height,
+            schedule_layout_resync_fn=schedule_resync,
+        )
+
+        start_watching.assert_called_once_with()
+        apply_mode_labels.assert_called_once_with()
+        update_height.assert_called_once_with()
+
     def test_user_presets_delete_updates_visible_row_without_reload(self) -> None:
         result = SimpleNamespace(
             ok=True,
