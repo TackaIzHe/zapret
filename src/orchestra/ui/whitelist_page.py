@@ -22,7 +22,7 @@ from qfluentwidgets import (
 )
 
 from ui.pages.base_page import BasePage
-from ui.accessibility import set_control_accessibility
+from ui.accessibility import set_control_accessibility, set_state_text
 from ui.fluent_widgets import set_tooltip
 from ui.latest_value_worker_state import LatestValueWorkerState
 from ui.one_shot_worker_runtime import OneShotWorkerRuntime
@@ -628,15 +628,15 @@ class OrchestraWhitelistPage(BasePage):
                 self.rows_layout.addWidget(row)
                 self._domain_rows.append(row)
 
-        self.count_label.setText(
-            self._tr(
-                "page.orchestra.whitelist.count.total",
-                "Всего: {total} ({system} системных + {user} пользовательских)",
-                total=len(whitelist),
-                system=system_count,
-                user=user_count,
-            )
+        count_text = self._tr(
+            "page.orchestra.whitelist.count.total",
+            "Всего: {total} ({system} системных + {user} пользовательских)",
+            total=len(whitelist),
+            system=system_count,
+            user=user_count,
         )
+        self.count_label.setText(count_text)
+        set_state_text(self.count_label, f"Счётчик белого списка Оркестратора: {count_text}")
         self._apply_filter()
 
         self._apply_page_theme()

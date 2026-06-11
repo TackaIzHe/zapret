@@ -867,15 +867,15 @@ class OrchestraLockedPage(BasePage):
         """Обновляет счётчик"""
         snapshot = self._orchestra.current_locked_snapshot()
 
-        self.count_label.setText(
-            self._tr(
-                "page.orchestra.locked.count.total",
-                "Всего залочено: {total} (TCP: {tcp_count}, UDP: {udp_count})",
-                total=snapshot.total_count,
-                tcp_count=snapshot.tcp_count,
-                udp_count=snapshot.udp_count,
-            )
+        count_text = self._tr(
+            "page.orchestra.locked.count.total",
+            "Всего залочено: {total} (TCP: {tcp_count}, UDP: {udp_count})",
+            total=snapshot.total_count,
+            tcp_count=snapshot.tcp_count,
+            udp_count=snapshot.udp_count,
         )
+        self.count_label.setText(count_text)
+        set_state_text(self.count_label, f"Счётчик залоченных стратегий Оркестратора: {count_text}")
 
     def _lock_strategy(self):
         """Залочивает стратегию"""

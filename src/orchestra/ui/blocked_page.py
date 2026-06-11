@@ -1000,15 +1000,15 @@ class OrchestraBlockedPage(BasePage):
     def _update_count(self):
         """Обновляет счётчик"""
         snapshot = self._orchestra.current_blocked_snapshot()
-        self.count_label.setText(
-            self._tr(
-                "page.orchestra.blocked.count.total",
-                "Всего: {total} ({user_count} пользовательских + {default_count} системных)",
-                total=snapshot.total_count,
-                user_count=snapshot.user_count,
-                default_count=snapshot.default_count,
-            )
+        count_text = self._tr(
+            "page.orchestra.blocked.count.total",
+            "Всего: {total} ({user_count} пользовательских + {default_count} системных)",
+            total=snapshot.total_count,
+            user_count=snapshot.user_count,
+            default_count=snapshot.default_count,
         )
+        self.count_label.setText(count_text)
+        set_state_text(self.count_label, f"Счётчик заблокированных стратегий Оркестратора: {count_text}")
 
     def _block_strategy(self):
         """Блокирует стратегию"""

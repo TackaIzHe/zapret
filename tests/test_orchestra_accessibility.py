@@ -1,5 +1,6 @@
 import os
 import unittest
+from types import SimpleNamespace
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -106,6 +107,40 @@ class OrchestraAccessibilityTests(unittest.TestCase):
         self.assertEqual(page.add_btn.accessibleName(), "Добавить домен в белый список")
         self.assertEqual(page.search_input.accessibleName(), "Поиск по белому списку")
         self.assertEqual(page.clear_user_btn.accessibleName(), "Очистить пользовательские домены белого списка")
+
+    def test_orchestra_list_counters_read_current_counts(self) -> None:
+        whitelist_page = OrchestraWhitelistPage(orchestra_feature=_OrchestraFeatureStub())
+        locked_page = OrchestraLockedPage(orchestra_feature=_OrchestraFeatureStub())
+        blocked_page = OrchestraBlockedPage(orchestra_feature=_OrchestraFeatureStub())
+        self.addCleanup(whitelist_page.deleteLater)
+        self.addCleanup(locked_page.deleteLater)
+        self.addCleanup(blocked_page.deleteLater)
+
+        whitelist_page._apply_whitelist_entries((
+            ("system.example", True),
+            ("user.example", False),
+        ))
+        locked_page._orchestra = SimpleNamespace(
+            current_locked_snapshot=lambda: SimpleNamespace(total_count=3, tcp_count=2, udp_count=1),
+        )
+        locked_page._update_count()
+        blocked_page._orchestra = SimpleNamespace(
+            current_blocked_snapshot=lambda: SimpleNamespace(total_count=4, user_count=3, default_count=1),
+        )
+        blocked_page._update_count()
+
+        self.assertEqual(
+            whitelist_page.count_label.property("screenReaderStateText"),
+            "Счётчик белого списка Оркестратора: Всего: 2 (1 системных + 1 пользовательских)",
+        )
+        self.assertEqual(
+            locked_page.count_label.property("screenReaderStateText"),
+            "Счётчик залоченных стратегий Оркестратора: Всего залочено: 3 (TCP: 2, UDP: 1)",
+        )
+        self.assertEqual(
+            blocked_page.count_label.property("screenReaderStateText"),
+            "Счётчик заблокированных стратегий Оркестратора: Всего: 4 (3 пользовательских + 1 системных)",
+        )
 
     def test_ratings_page_main_controls_are_named_for_screen_reader(self) -> None:
         page = OrchestraRatingsPage(orchestra_feature=_OrchestraFeatureStub())
