@@ -75,6 +75,14 @@ class TelegramProxyAccessibilityTests(unittest.TestCase):
 
         self.assertEqual(widgets.pivot.accessibleName(), "Раздел Telegram Proxy, выбрано: Настройки")
         self.assertIn("Настройки, Логи или Диагностика", widgets.pivot.accessibleDescription())
+        self.assertEqual(
+            widgets.pivot.items["settings"].accessibleName(),
+            "Раздел Telegram Proxy: Настройки, выбрано",
+        )
+        self.assertEqual(
+            widgets.pivot.items["logs"].accessibleName(),
+            "Раздел Telegram Proxy: Логи, не выбрано",
+        )
 
         widgets.pivot.setCurrentItem("logs")
 
@@ -82,6 +90,14 @@ class TelegramProxyAccessibilityTests(unittest.TestCase):
         self.assertEqual(
             widgets.pivot.property("screenReaderStateText"),
             "Раздел Telegram Proxy, выбрано: Логи",
+        )
+        self.assertEqual(
+            widgets.pivot.items["settings"].accessibleName(),
+            "Раздел Telegram Proxy: Настройки, не выбрано",
+        )
+        self.assertEqual(
+            widgets.pivot.items["logs"].accessibleName(),
+            "Раздел Telegram Proxy: Логи, выбрано",
         )
 
     def test_logs_panel_controls_are_named_for_screen_reader(self) -> None:

@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget
 from qfluentwidgets import FluentIcon
 
 from ui.accessibility import set_control_accessibility, set_state_text
+from ui.segmented_accessibility import set_segmented_items_accessibility
 from ui.pages.base_page import ScrollBlockingPlainTextEdit
 from ui.log_limits import (
     TELEGRAM_PROXY_DIAG_VIEW_MAX_LINES,
@@ -66,6 +67,7 @@ def update_telegram_proxy_pivot_accessibility(pivot, *, current: object | None =
         name=state,
         description="Выберите раздел Telegram Proxy: Настройки, Логи или Диагностика.",
     )
+    set_segmented_items_accessibility(pivot, name="Раздел Telegram Proxy")
 
 
 def build_telegram_proxy_shell(*, segmented_widget_cls, parent, on_switch_tab) -> TelegramProxyShellWidgets:
