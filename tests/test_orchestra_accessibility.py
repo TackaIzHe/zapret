@@ -396,8 +396,12 @@ class OrchestraAccessibilityTests(unittest.TestCase):
         )
         self.addCleanup(widgets.card.deleteLater)
 
-        self.assertEqual(widgets.log_text.accessibleName(), "Лог обучения Оркестратора")
+        self.assertEqual(widgets.log_text.accessibleName(), "Лог обучения Оркестратора: пока нет записей обучения")
         self.assertIn("строки обучения", widgets.log_text.accessibleDescription())
+        self.assertEqual(
+            widgets.log_text.property("screenReaderStateText"),
+            "Лог обучения Оркестратора: пока нет записей обучения",
+        )
         self.assertEqual(widgets.log_filter_input.accessibleName(), "Фильтр лога Оркестратора по домену")
         self.assertIn("example.com", widgets.log_filter_input.accessibleDescription())
         self.assertIn("После ввода перейдите к логу клавишей Tab", widgets.log_filter_input.accessibleDescription())

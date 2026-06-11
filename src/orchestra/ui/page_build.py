@@ -136,6 +136,7 @@ def build_orchestra_log_card(
             "Показывает строки обучения и события работы Оркестратора.",
         ),
     )
+    set_state_text(log_text, "Лог обучения Оркестратора: пока нет записей обучения")
     log_text.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
     log_text.customContextMenuRequested.connect(on_show_log_context_menu)
     log_layout.addWidget(log_text)
