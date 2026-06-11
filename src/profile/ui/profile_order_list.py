@@ -257,6 +257,7 @@ class ProfileOrderList(QWidget):
         )
         set_control_accessibility(self, name="Порядок profile", description=order_list_description)
         set_control_accessibility(self._view, name="Порядок profile", description=order_list_description)
+        self._view.set_screen_reader_list_name("Порядок profile")
         self._view.setModel(self._model)
         self._view.setSelectionMode(QListView.SelectionMode.SingleSelection)
         self._view.setEditTriggers(QListView.EditTrigger.NoEditTriggers)

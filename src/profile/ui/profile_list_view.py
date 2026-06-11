@@ -8,9 +8,11 @@ from PyQt6.QtWidgets import QApplication
 from qfluentwidgets import ListView
 
 from .profile_list_model import ProfileListModel
+from ui.accessibility import set_state_text
 
 
 PROFILE_DROP_MARKER_PROPERTY = "profileDropMarker"
+SCREEN_READER_LIST_NAME_PROPERTY = "screenReaderListName"
 
 
 def set_current_index_if_changed(view, index) -> bool:
@@ -101,6 +103,31 @@ class ProfileListView(ListView):
         super().__init__(parent)
         self._drag_start_pos: QPoint | None = None
         self.set_drop_marker(-1, "")
+
+    def set_screen_reader_list_name(self, name: str) -> None:
+        value = " ".join(str(name or "").strip().split())
+        if value:
+            self.setProperty(SCREEN_READER_LIST_NAME_PROPERTY, value)
+        self._update_current_row_accessibility(self.currentIndex())
+
+    def currentChanged(self, current, previous):  # noqa: N802
+        super().currentChanged(current, previous)
+        self._update_current_row_accessibility(current)
+
+    def _update_current_row_accessibility(self, index) -> None:
+        list_name = str(self.property(SCREEN_READER_LIST_NAME_PROPERTY) or "").strip()
+        if not list_name:
+            list_name = str(self.accessibleName() or "").strip()
+        row_text = ""
+        try:
+            if index is not None and index.isValid():
+                row_text = str(index.data(Qt.ItemDataRole.AccessibleTextRole) or "").strip()
+        except Exception:
+            row_text = ""
+        if list_name and row_text:
+            set_state_text(self, f"{list_name}: {row_text}")
+        elif list_name:
+            set_state_text(self, list_name)
 
     def set_drop_marker(self, row: int, destination_kind: str) -> None:
         marker = profile_drop_marker_for_target(row, destination_kind)
