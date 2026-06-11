@@ -186,6 +186,18 @@ class ProfileSetupAccessibilityTests(unittest.TestCase):
         self.assertTrue(dialog.exec_called)
         page._request_user_profile_delete.assert_not_called()
 
+    def test_preset_profile_info_dialog_close_button_is_named_for_screen_reader(self) -> None:
+        page = PresetSetupPageBase.__new__(PresetSetupPageBase)
+        _MessageBox.instances = []
+
+        with patch("profile.ui.preset_setup_page.MessageBox", _MessageBox):
+            PresetSetupPageBase._show_profile_info(page)
+
+        dialog = _MessageBox.instances[0]
+        self.assertEqual(dialog.yesButton.accessibleName(), "Закрыть справку о настройке пресета")
+        self.assertIn("Закрывает справку", dialog.yesButton.accessibleDescription())
+        self.assertTrue(dialog.exec_called)
+
 
 if __name__ == "__main__":
     unittest.main()

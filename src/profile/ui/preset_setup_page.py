@@ -2194,13 +2194,21 @@ class PresetSetupPageBase(BasePage):
         self._open_profile_order_page()
 
     def _show_profile_info(self) -> None:
-        MessageBox(
+        box = MessageBox(
             "Настройка пресета",
             "На этой странице показаны профили выбранного пресета. "
             "Если профиля ещё нет в пресете, включите его или выберите для него готовую стратегию. "
             "Если профиль выключить, программа добавит --skip, чтобы движок его пропустил.",
             self,
-        ).exec()
+        )
+        set_message_box_button_accessibility(
+            box,
+            yes_name="Закрыть справку о настройке пресета",
+            yes_description="Закрывает справку о профилях выбранного пресета.",
+            cancel_name="Отменить закрытие справки о настройке пресета",
+            cancel_description="Скрытая кнопка отмены в справочном окне.",
+        )
+        box.exec()
 
     def _on_add_user_profile_clicked(self) -> None:
         dialog = CreateUserProfileDialog(self)
