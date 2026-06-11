@@ -8,12 +8,14 @@ from types import SimpleNamespace
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QApplication
-from qfluentwidgets import ComboBox
+from PyQt6.QtGui import QFont
+from PyQt6.QtWidgets import QApplication, QHBoxLayout, QTextEdit, QVBoxLayout, QWidget
+from qfluentwidgets import CaptionLabel, ComboBox, PushButton, StrongBodyLabel, TransparentToolButton
 
 import log.ui.logs_build as logs_build
 import log.ui.page as logs_page
 import log.ui.runtime_helpers as runtime_helpers
+from ui.fluent_widgets import QuickActionsBar, SettingsCard
 
 
 class _FakeLabel:
@@ -150,6 +152,40 @@ class LogsAccessibilityTests(unittest.TestCase):
         self.assertIn("set_control_accessibility", secondary_source)
         self.assertIn("clear_errors_btn,", secondary_source)
         self.assertIn("errors_text,", secondary_source)
+
+    def test_log_combo_initial_description_explains_keyboard_selection(self) -> None:
+        parent = QWidget()
+        self.addCleanup(parent.deleteLater)
+        layout = QVBoxLayout(parent)
+
+        widgets = logs_build.build_logs_primary_tab_ui(
+            parent_layout=layout,
+            content_parent=parent,
+            ui_language="ru",
+            tr_catalog_fn=lambda _key, language, default, **_kwargs: default,
+            settings_card_cls=SettingsCard,
+            qvbox_layout_cls=QVBoxLayout,
+            qhbox_layout_cls=QHBoxLayout,
+            caption_label_cls=CaptionLabel,
+            strong_body_label_cls=StrongBodyLabel,
+            combo_box_cls=ComboBox,
+            tool_button_cls=TransparentToolButton,
+            push_button_cls=PushButton,
+            text_edit_cls=QTextEdit,
+            quick_actions_bar_cls=QuickActionsBar,
+            qfont_cls=QFont,
+            get_theme_tokens_fn=lambda: {},
+            on_log_selected=lambda *_args: None,
+            on_refresh=lambda: None,
+            on_spin_tick=lambda: None,
+            on_copy=lambda: None,
+            on_clear_view=lambda: None,
+            on_open_folder=lambda: None,
+            refresh_timer_parent=parent,
+        )
+
+        self.assertEqual(widgets.log_combo.accessibleName(), "Выбор файла лога")
+        self.assertIn("выберите файл стрелками вверх и вниз", widgets.log_combo.accessibleDescription())
 
     def test_log_page_routes_info_text_through_screen_reader_state(self) -> None:
         source = inspect.getsource(logs_page.LogsPage)

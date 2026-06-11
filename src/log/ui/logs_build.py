@@ -82,7 +82,7 @@ def build_logs_primary_tab_ui(
         description=tr_catalog_fn(
             "page.logs.accessibility.log_combo.description",
             language=ui_language,
-            default="Выберите файл лога для просмотра.",
+            default="Выберите файл лога для просмотра: выберите файл стрелками вверх и вниз.",
         ),
     )
     log_combo.currentIndexChanged.connect(on_log_selected)
