@@ -945,9 +945,7 @@ class UserPresetsPageBase(BasePage):
         )
 
     def _on_preset_edit_action_worker_finished(self, worker) -> None:
-        if not self._accept_current_preset_worker_request_finished("_preset_edit_action_request_id", worker):
-            return
-        self._start_next_preset_write_action()
+        self._schedule_next_preset_write_action_after_finish("_preset_edit_action_request_id", worker)
 
     def _on_create_clicked(self):
         self._show_inline_action_create()
@@ -1056,7 +1054,11 @@ class UserPresetsPageBase(BasePage):
         )
 
     def _on_preset_bulk_action_worker_finished(self, worker) -> None:
-        if not self._accept_current_preset_worker_request_finished("_preset_bulk_action_request_id", worker):
+        accepted, _scheduled = self._schedule_next_preset_write_action_after_finish(
+            "_preset_bulk_action_request_id",
+            worker,
+        )
+        if not accepted:
             return
         action = str(getattr(self, "_preset_bulk_action_kind", "") or "")
         self._preset_bulk_action_kind = ""
@@ -1064,7 +1066,6 @@ class UserPresetsPageBase(BasePage):
             self._bulk_reset_running = False
             if self._runtime_service.is_ui_dirty() and self.isVisible():
                 self.refresh_presets_view_if_possible()
-        self._start_next_preset_write_action()
 
     def _show_reset_all_result(self, success_count: int, total_count: int, failed_count: int = 0) -> None:
         show_reset_all_result(
@@ -1357,9 +1358,7 @@ class UserPresetsPageBase(BasePage):
         log(f"{self.__class__.__name__}: не удалось выполнить действие папки preset ({action}): {error}", "ERROR")
 
     def _on_preset_folder_action_worker_finished(self, worker) -> None:
-        if not self._accept_current_preset_worker_request_finished("_preset_folder_action_request_id", worker):
-            return
-        self._start_next_preset_write_action()
+        self._schedule_next_preset_write_action_after_finish("_preset_folder_action_request_id", worker)
 
     def _schedule_preset_folder_action_start(self, pending: dict[str, object]) -> None:
         queued = dict(pending or {})
@@ -1963,6 +1962,70 @@ class UserPresetsPageBase(BasePage):
         self._schedule_preset_write_action_start(pending)
         return True
 
+    def _queue_preset_write_action_from_dict(self, operation: dict[str, object]) -> bool:
+        pending = self._preset_write_operation_from_pending_operation(operation)
+        self._queue_preset_write_action(
+            str(pending.get("kind") or ""),
+            action=str(pending.get("action") or ""),
+            name=str(pending.get("name") or ""),
+            display_name=str(pending.get("display_name") or ""),
+            rating=int(pending.get("rating") or 0),
+            direction=int(pending.get("direction") or 0),
+            cached_metadata=pending.get("cached_metadata"),
+            source_kind=str(pending.get("source_kind") or ""),
+            source_id=str(pending.get("source_id") or ""),
+            destination_kind=str(pending.get("destination_kind") or ""),
+            destination_id=str(pending.get("destination_id") or ""),
+            destination_folder_key=str(pending.get("destination_folder_key") or ""),
+            file_name=str(pending.get("file_name") or ""),
+            file_path=str(pending.get("file_path") or ""),
+            current_name=str(pending.get("current_name") or ""),
+            new_name=str(pending.get("new_name") or ""),
+            from_current=bool(pending.get("from_current")),
+        )
+        return True
+
+    def _schedule_next_preset_write_action_after_finish(
+        self,
+        request_attr: str,
+        worker,
+    ) -> tuple[bool, bool]:
+        accepted = False
+
+        def _is_current_worker_finish(_runtime, finished_worker) -> bool:
+            nonlocal accepted
+            accepted = self._accept_current_preset_worker_request_finished(request_attr, finished_worker)
+            return accepted
+
+        def _single_shot(delay: int, callback) -> None:
+            try:
+                QTimer.singleShot(delay, callback)
+            except Exception:
+                callback()
+
+        cleanup_in_progress = lambda: bool(self.__dict__.get("_cleanup_in_progress", False))
+        folder_operation = self._preset_folder_action_state_obj().schedule_next_after_finish(
+            worker,
+            is_current_worker_finish=_is_current_worker_finish,
+            single_shot=_single_shot,
+            start=self._run_scheduled_preset_folder_action_start,
+            queue_item=self._queue_preset_folder_action,
+            is_cleanup_in_progress=cleanup_in_progress,
+        )
+        if not accepted:
+            return False, False
+        if folder_operation is not None:
+            return True, True
+        operation = self._preset_write_state_obj().schedule_next_after_finish(
+            worker,
+            is_current_worker_finish=_is_current_worker_finish,
+            single_shot=_single_shot,
+            start=lambda pending: self._run_preset_write_action(dict(pending or {})),
+            queue_item=self._queue_preset_write_action_from_dict,
+            is_cleanup_in_progress=cleanup_in_progress,
+        )
+        return True, operation is not None
+
     def _schedule_preset_write_action_start(self, operation: dict[str, object]) -> None:
         queued = dict(operation or {})
         state = self._preset_write_state_obj()
@@ -2147,9 +2210,7 @@ class UserPresetsPageBase(BasePage):
             log(f"Ошибка перетаскивания элемента: {error}", "ERROR")
 
     def _on_preset_storage_action_worker_finished(self, worker) -> None:
-        if not self._accept_current_preset_worker_request_finished("_preset_storage_action_request_id", worker):
-            return
-        self._start_next_preset_write_action()
+        self._schedule_next_preset_write_action_after_finish("_preset_storage_action_request_id", worker)
 
     def _on_activate_preset(self, name: str) -> bool:
         preset_file_name = str(name or "").strip()
@@ -2249,9 +2310,7 @@ class UserPresetsPageBase(BasePage):
         self._runtime_service.apply_active_preset_marker_for_file("")
 
     def _on_preset_activate_worker_finished(self, worker) -> None:
-        if not self._accept_current_preset_worker_request_finished("_preset_activate_request_id", worker):
-            return
-        self._start_next_preset_write_action()
+        self._schedule_next_preset_write_action_after_finish("_preset_activate_request_id", worker)
 
     def _on_edit_preset(self, name: str, global_pos: QPoint | None = None):
         open_edit_preset_menu_action(
@@ -2551,10 +2610,7 @@ class UserPresetsPageBase(BasePage):
         )
 
     def _on_preset_item_action_worker_finished(self, worker) -> None:
-        if not self._accept_current_preset_worker_request_finished("_preset_item_action_request_id", worker):
-            return
-        if not bool(self.__dict__.get("_cleanup_in_progress", False)):
-            self._start_next_preset_write_action()
+        self._schedule_next_preset_write_action_after_finish("_preset_item_action_request_id", worker)
 
     def create_preset_link_action_worker(self, request_id: int, *, action: str):
         return self._create_preset_link_action_worker_fn(

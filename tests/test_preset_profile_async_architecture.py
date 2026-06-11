@@ -673,8 +673,16 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
     def test_user_presets_pending_activation_uses_shared_write_queue_after_worker_signal(self) -> None:
         page = UserPresetsPageBase.__new__(UserPresetsPageBase)
         page._preset_activate_request_id = 5
+        page._preset_activate_runtime = SimpleNamespace(is_running=Mock(return_value=False))
+        page._preset_item_action_runtime = SimpleNamespace(is_running=Mock(return_value=False))
+        page._preset_bulk_action_runtime = SimpleNamespace(is_running=Mock(return_value=False))
+        page._preset_edit_action_runtime = SimpleNamespace(is_running=Mock(return_value=False))
+        page._preset_storage_action_runtime = SimpleNamespace(is_running=Mock(return_value=False))
+        page._preset_folder_action_runtime = SimpleNamespace(is_running=Mock(return_value=False))
+        page._preset_folder_action_pending = []
+        page._pending_preset_write_actions = []
         page._pending_preset_activation = ("Next.txt", "Next")
-        page._start_next_preset_write_action = Mock(return_value=False)
+        page._cleanup_in_progress = False
         page._start_preset_activation_worker = Mock()
         callbacks = []
 
@@ -685,8 +693,11 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
             UserPresetsPageBase._on_preset_activate_worker_finished(page, SimpleNamespace(_request_id=5))
 
         page._start_preset_activation_worker.assert_not_called()
-        page._start_next_preset_write_action.assert_called_once_with()
-        self.assertEqual(callbacks, [])
+        self.assertEqual(len(callbacks), 1)
+
+        callbacks[0]()
+
+        page._start_preset_activation_worker.assert_called_once_with("Next.txt", "Next")
 
     def test_preset_model_removes_visible_preset_without_full_reset(self) -> None:
         model = PresetListModel()
@@ -1731,7 +1742,8 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
             "_preset_folder_action_state_obj()",
             inspect.getsource(UserPresetsPageBase._queue_preset_folder_action),
         )
-        self.assertIn("_start_next_preset_write_action", finished_source)
+        self.assertIn("_schedule_next_preset_write_action_after_finish", finished_source)
+        self.assertIn("schedule_next_after_finish", inspect.getsource(UserPresetsPageBase._schedule_next_preset_write_action_after_finish))
         self.assertIn("_preset_folder_action_state_obj().pop_next()", next_write_source)
         self.assertIn("update_cached_folder_state", action_finished_source)
         self.assertIn("show_menu", action_finished_source)

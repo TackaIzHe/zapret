@@ -65,12 +65,19 @@ class UserPresetWriteSerializationTests(unittest.TestCase):
         self.assertIn("_preset_write_state_obj().reset()", cleanup_source)
         self.assertNotIn("self._pending_preset_write_actions: list", init_source)
 
-    def test_activation_finish_uses_shared_write_queue_without_legacy_scheduler(self) -> None:
+    def test_write_finish_uses_queued_state_finish_guard(self) -> None:
         import inspect
 
+        helper_source = inspect.getsource(UserPresetsPageBase._schedule_next_preset_write_action_after_finish)
         finished_source = inspect.getsource(UserPresetsPageBase._on_preset_activate_worker_finished)
+        folder_finished_source = inspect.getsource(UserPresetsPageBase._on_preset_folder_action_worker_finished)
 
-        self.assertIn("_start_next_preset_write_action()", finished_source)
+        self.assertIn("schedule_next_after_finish", helper_source)
+        self.assertIn("_accept_current_preset_worker_request_finished", helper_source)
+        self.assertIn("_preset_folder_action_state_obj().schedule_next_after_finish", helper_source)
+        self.assertIn("_preset_write_state_obj().schedule_next_after_finish", helper_source)
+        self.assertIn("_schedule_next_preset_write_action_after_finish", finished_source)
+        self.assertIn("_schedule_next_preset_write_action_after_finish", folder_finished_source)
         self.assertNotIn("_schedule_pending_preset_activation_start", finished_source)
         self.assertFalse(hasattr(UserPresetsPageBase, "_schedule_pending_preset_activation_start"))
 
