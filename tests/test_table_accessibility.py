@@ -132,6 +132,21 @@ class TableAccessibilityTests(unittest.TestCase):
             expected,
         )
 
+    def test_updater_server_headers_have_screen_reader_text(self) -> None:
+        from updater.ui.main_build import build_servers_header_widgets
+
+        parent = QWidget()
+        self.addCleanup(parent.deleteLater)
+
+        widgets = build_servers_header_widgets(
+            tr_fn=lambda _key, default: default,
+            parent=parent,
+            on_about_clicked=lambda: None,
+        )
+
+        self.assertEqual(widgets.page_title_label.accessibleName(), "Страница: Серверы")
+        self.assertEqual(widgets.servers_title_label.accessibleName(), "Раздел: Серверы обновлений")
+
     def test_blockcheck_result_tables_have_screen_reader_names(self) -> None:
         from blockcheck.ui.sections_build import build_results_section
 

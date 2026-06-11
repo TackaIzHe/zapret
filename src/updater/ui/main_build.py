@@ -22,6 +22,24 @@ def set_active_server_legend_accessibility(label) -> None:
     set_state_text(label, text)
 
 
+def _label_text(label) -> str:
+    try:
+        value = label.text()
+    except Exception:
+        value = getattr(label, "text", "")
+    return " ".join(str(value or "").strip().split())
+
+
+def set_servers_page_title_accessibility(label) -> None:
+    text = f"Страница: {_label_text(label)}"
+    set_state_text(label, text)
+
+
+def set_servers_section_title_accessibility(label) -> None:
+    text = f"Раздел: {_label_text(label)}"
+    set_state_text(label, text)
+
+
 @dataclass(slots=True)
 class ServersHeaderWidgets:
     header_widget: QWidget
@@ -45,12 +63,14 @@ def build_servers_header_widgets(*, tr_fn, parent, on_about_clicked) -> ServersH
     header_layout.addWidget(breadcrumb)
 
     page_title_label = TitleLabel(tr_fn("page.servers.title", "Серверы"))
+    set_servers_page_title_accessibility(page_title_label)
     header_layout.addWidget(page_title_label)
 
     servers_header = QHBoxLayout()
     servers_title_label = StrongBodyLabel(
         tr_fn("page.servers.section.update_servers", "Серверы обновлений")
     )
+    set_servers_section_title_accessibility(servers_title_label)
     servers_header.addWidget(servers_title_label)
     servers_header.addStretch()
 

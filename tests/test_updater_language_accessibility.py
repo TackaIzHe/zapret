@@ -177,6 +177,35 @@ class UpdaterLanguageAccessibilityTests(unittest.TestCase):
             expected,
         )
 
+    def test_language_refresh_updates_header_screen_reader_state(self) -> None:
+        page_title_label = _TextTarget("old")
+        servers_title_label = _TextTarget("old")
+
+        apply_servers_page_language(
+            tr_fn=lambda _key, default, **_kwargs: default,
+            ui_language="ru",
+            update_card=_Stateful(),
+            changelog_card=_Stateful(),
+            breadcrumb=_Breadcrumb(),
+            page_title_label=page_title_label,
+            servers_title_label=servers_title_label,
+            legend_active_label=_TextTarget(),
+            servers_table=_Table(),
+            settings_card=_Card(),
+            toggle_label=None,
+            auto_check_card=_Stateful(),
+            version_info_label=_TextTarget(),
+            telegram_card=_Card(),
+            telegram_info_label=None,
+            telegram_button=_TextTarget(),
+            refresh_server_rows=lambda: None,
+        )
+
+        self.assertEqual(page_title_label.accessibleName(), "Страница: Серверы")
+        self.assertEqual(page_title_label.property("screenReaderStateText"), "Страница: Серверы")
+        self.assertEqual(servers_title_label.accessibleName(), "Раздел: Серверы обновлений")
+        self.assertEqual(servers_title_label.property("screenReaderStateText"), "Раздел: Серверы обновлений")
+
     def test_language_refresh_updates_auto_check_screen_reader_state(self) -> None:
         auto_check_card = _Stateful()
 
