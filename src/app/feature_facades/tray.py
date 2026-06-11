@@ -5,6 +5,7 @@ from typing import Any
 
 from PyQt6.QtCore import QTimer
 
+from ui.latest_value_worker_state import LatestValueWorkerState
 from ui.one_shot_worker_runtime import OneShotWorkerRuntime
 
 
@@ -18,8 +19,7 @@ class TrayFeature:
     _tray_manager: Any = None
     _opacity_save_runtime: OneShotWorkerRuntime = field(default_factory=OneShotWorkerRuntime)
     _opacity_save_runtime_worker: Any = None
-    _opacity_save_pending: int | None = None
-    _opacity_save_start_scheduled: bool = False
+    _opacity_save_state: LatestValueWorkerState | None = None
     _github_api_removal_toggle_runtime: OneShotWorkerRuntime = field(default_factory=OneShotWorkerRuntime)
     _discord_restart_toggle_runtime: OneShotWorkerRuntime = field(default_factory=OneShotWorkerRuntime)
 
@@ -255,9 +255,11 @@ class TrayFeature:
 
     def _request_window_opacity_save(self, value: int) -> None:
         normalized = max(0, min(100, int(value)))
-        if self._opacity_save_runtime.is_running() or self._opacity_save_start_scheduled:
-            self._opacity_save_pending = normalized
+        state = self._opacity_save_state_obj()
+        if state.is_busy():
+            state.pending = normalized
             return
+        state.pending = None
         self._start_window_opacity_save_worker(normalized)
 
     def _start_window_opacity_save_worker(self, value: int) -> None:
@@ -277,24 +279,54 @@ class TrayFeature:
         if current_worker is not None and worker is not current_worker:
             return
         self._opacity_save_runtime_worker = None
-        pending = self._opacity_save_pending
-        self._opacity_save_pending = None
+        pending = self._opacity_save_state_obj().pending
+        self._opacity_save_state_obj().pending = None
         if pending is not None:
             self._schedule_window_opacity_save_worker_start(int(pending))
 
     def _schedule_window_opacity_save_worker_start(self, value: int) -> None:
-        self._opacity_save_pending = max(0, min(100, int(value)))
-        if self._opacity_save_start_scheduled:
-            return
-        self._opacity_save_start_scheduled = True
-        QTimer.singleShot(0, self._run_scheduled_window_opacity_save_worker_start)
+        pending = max(0, min(100, int(value)))
+        state = self._opacity_save_state_obj()
+        state.pending = pending
+        state.schedule_start(
+            QTimer.singleShot,
+            self._run_scheduled_window_opacity_save_worker_start,
+            pending_when_already_scheduled=pending,
+        )
 
     def _run_scheduled_window_opacity_save_worker_start(self) -> None:
-        self._opacity_save_start_scheduled = False
-        pending = self._opacity_save_pending
-        self._opacity_save_pending = None
+        pending = self._opacity_save_state_obj().take_pending_for_scheduled_start()
         if pending is not None:
             self._start_window_opacity_save_worker(int(pending))
+
+    def _opacity_save_state_obj(self) -> LatestValueWorkerState:
+        state = self._opacity_save_state
+        if state is None:
+            state = LatestValueWorkerState(self._opacity_save_runtime, empty_value=None)
+            self._opacity_save_state = state
+        elif getattr(state, "runtime", None) is None:
+            state.runtime = self._opacity_save_runtime
+        return state
+
+    @property
+    def _opacity_save_pending(self) -> int | None:
+        pending = self._opacity_save_state_obj().pending
+        return None if pending is None else int(pending)
+
+    @_opacity_save_pending.setter
+    def _opacity_save_pending(self, value: int | None) -> None:
+        if value is None:
+            self._opacity_save_state_obj().pending = None
+        else:
+            self._opacity_save_state_obj().pending = max(0, min(100, int(value)))
+
+    @property
+    def _opacity_save_start_scheduled(self) -> bool:
+        return bool(self._opacity_save_state_obj().start_scheduled)
+
+    @_opacity_save_start_scheduled.setter
+    def _opacity_save_start_scheduled(self, value: bool) -> None:
+        self._opacity_save_state_obj().start_scheduled = bool(value)
 
 
 def build_tray_feature(*, deps, runtime_feature, telegram_proxy_feature) -> TrayFeature:

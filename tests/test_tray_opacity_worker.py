@@ -26,10 +26,31 @@ class TrayOpacityWorkerTests(unittest.TestCase):
         self.assertNotIn("settings.store", command_source)
         self.assertNotIn("set_window_opacity as save_window_opacity", command_source)
         self.assertIn("_request_window_opacity_save", feature_source)
-        self.assertIn("_opacity_save_runtime", request_source)
-        self.assertIn("_opacity_save_pending", request_source)
+        self.assertIn("_opacity_save_state_obj()", request_source)
+        self.assertNotIn("_opacity_save_runtime.is_running()", request_source)
         self.assertIn("start_qthread_worker", start_source)
         self.assertNotIn("worker.start()", start_source)
+
+    def test_tray_opacity_save_uses_shared_latest_worker_state(self) -> None:
+        from app.feature_facades.tray import TrayFeature
+        from ui.latest_value_worker_state import LatestValueWorkerState
+
+        feature = TrayFeature(
+            _deps=SimpleNamespace(set_window_opacity=Mock()),
+            _runtime_feature=SimpleNamespace(),
+            _telegram_proxy_feature=SimpleNamespace(),
+        )
+
+        feature_source = inspect.getsource(TrayFeature)
+        request_source = inspect.getsource(TrayFeature._request_window_opacity_save)
+        schedule_source = inspect.getsource(TrayFeature._schedule_window_opacity_save_worker_start)
+
+        self.assertIsInstance(feature._opacity_save_state_obj(), LatestValueWorkerState)
+        self.assertIn("_opacity_save_state", feature_source)
+        self.assertNotIn("_opacity_save_pending: int | None = None", feature_source)
+        self.assertNotIn("_opacity_save_start_scheduled: bool = False", feature_source)
+        self.assertIn("_opacity_save_state_obj()", request_source)
+        self.assertIn("_opacity_save_state_obj()", schedule_source)
 
     def test_pending_tray_opacity_save_restarts_after_event_loop_turn(self) -> None:
         import app.feature_facades.tray as tray
