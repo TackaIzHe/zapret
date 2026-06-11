@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt, QPropertyAnimation, QEasingCurve, pyqtProperty, QRectF, pyqtSignal
+from PyQt6.QtCore import Qt, QPropertyAnimation, QEasingCurve, pyqtProperty, QRectF, pyqtSignal, QTimer
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel
 from PyQt6.QtGui import QPainter, QColor, QPainterPath, QIcon
 import qtawesome as qta
@@ -101,7 +101,7 @@ class Win11ToggleRow(FluentSettingCard):
         initial_tokens = get_theme_tokens()
         FluentSettingCard.__init__(
             self,
-            self._build_icon(initial_tokens),
+            QIcon(),
             title,
             description or None,
             parent=parent,
@@ -141,6 +141,7 @@ class Win11ToggleRow(FluentSettingCard):
             self._apply_theme_refresh,
             key_builder=_build_theme_refresh_key,
         )
+        self._schedule_initial_icon_refresh(initial_tokens)
 
     def _resolved_icon_color(self, tokens=None) -> str:
         theme_tokens = tokens or get_theme_tokens()
@@ -162,6 +163,15 @@ class Win11ToggleRow(FluentSettingCard):
                 icon_label.setPixmap(get_cached_qta_pixmap(self._icon_name, color=color, size=18))
             except Exception:
                 return
+
+    def _schedule_initial_icon_refresh(self, tokens=None) -> None:
+        def _apply_icon() -> None:
+            self._refresh_icon(tokens)
+
+        try:
+            QTimer.singleShot(250, _apply_icon)
+        except Exception:
+            _apply_icon()
 
     def _build_icon(self, tokens=None) -> QIcon:
         theme_tokens = tokens or get_theme_tokens()

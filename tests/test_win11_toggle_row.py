@@ -3,12 +3,12 @@ from __future__ import annotations
 import os
 import unittest
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtCore import QEvent, Qt
-from PyQt6.QtGui import QKeyEvent
+from PyQt6.QtGui import QIcon, QKeyEvent, QPixmap
 from PyQt6.QtWidgets import QApplication
 
 
@@ -171,6 +171,31 @@ class Win11ToggleRowTests(unittest.TestCase):
         self.assertEqual(row.property("screenReaderStateText"), "Автозапуск DPI, выключено")
         self.assertIn("Запускать DPI после старта программы", row.accessibleDescription())
         self.assertEqual(row._switch_button.accessibleName(), "Автозапуск DPI, выключено")
+
+    def test_toggle_row_loads_icon_after_first_paint(self) -> None:
+        from ui.widgets.win11_controls import Win11ToggleRow
+
+        scheduled: list[tuple[int, object]] = []
+        icon = QIcon(QPixmap(1, 1))
+        with patch(
+            "ui.widgets.win11_controls.get_themed_qta_icon",
+            return_value=icon,
+        ) as get_icon, patch(
+            "ui.widgets.win11_controls.QTimer.singleShot",
+            side_effect=lambda delay_ms, callback: scheduled.append((delay_ms, callback)),
+        ):
+            row = Win11ToggleRow(
+                "fa5s.bolt",
+                "Автозапуск DPI",
+                "Запускать DPI после старта программы",
+            )
+
+            get_icon.assert_not_called()
+            self.assertEqual(len(scheduled), 1)
+            self.assertGreaterEqual(scheduled[0][0], 200)
+            scheduled[0][1]()
+
+        get_icon.assert_called_once_with("fa5s.bolt", color=row._resolved_icon_color())
 
     def test_toggle_row_updates_screen_reader_state_after_set_checked(self) -> None:
         from ui.widgets.win11_controls import Win11ToggleRow
