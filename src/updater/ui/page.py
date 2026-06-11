@@ -29,6 +29,7 @@ from updater.ui.settings_build import (
     build_servers_settings_section,
     build_servers_telegram_section,
 )
+from ui.latest_value_worker_state import LatestValueWorkerState
 from ui.one_shot_worker_runtime import OneShotWorkerRuntime
 from ui.widgets.win11_controls import Win11ToggleRow
 from qfluentwidgets import (
@@ -79,8 +80,10 @@ class ServersPage(BasePage):
         self._cleanup_in_progress = False
         self._changelog_link_open_runtime = OneShotWorkerRuntime()
         self._changelog_link_open_runtime_worker = None
-        self._changelog_link_open_pending: str | None = None
-        self._changelog_link_open_start_scheduled = False
+        self._changelog_link_open_state = LatestValueWorkerState(
+            self._changelog_link_open_runtime,
+            empty_value=None,
+        )
 
         self._build_ui()
         self._apply_page_theme(force=True)
@@ -362,13 +365,11 @@ class ServersPage(BasePage):
 
     def _request_changelog_link_open(self, url: str) -> None:
         target = str(url or "").strip()
-        if (
-            self._changelog_link_open_runtime.is_running()
-            or self.__dict__.get("_changelog_link_open_start_scheduled", False)
-        ):
-            self._changelog_link_open_pending = target
+        state = self._changelog_link_open_state_obj()
+        if state.is_busy():
+            state.pending = target
             return
-        self._changelog_link_open_pending = None
+        state.pending = None
         self._start_changelog_link_open_worker(target)
 
     def _start_changelog_link_open_worker(self, url: str) -> None:
@@ -394,7 +395,7 @@ class ServersPage(BasePage):
             cleanup_in_progress=self._cleanup_in_progress,
         ):
             return
-        if self.__dict__.get("_changelog_link_open_pending") is not None:
+        if self._changelog_link_open_state_obj().has_pending():
             return
         if getattr(result, "ok", False):
             return
@@ -406,7 +407,7 @@ class ServersPage(BasePage):
             cleanup_in_progress=self._cleanup_in_progress,
         ):
             return
-        if self.__dict__.get("_changelog_link_open_pending") is not None:
+        if self._changelog_link_open_state_obj().has_pending():
             return
         self._show_changelog_link_open_error(str(error or ""))
 
@@ -415,27 +416,57 @@ class ServersPage(BasePage):
         if current_worker is not None and worker is not current_worker:
             return
         self._changelog_link_open_runtime_worker = None
-        pending = self._changelog_link_open_pending
-        if pending is not None and not self._cleanup_in_progress:
+        if self._changelog_link_open_state_obj().has_pending() and not self._cleanup_in_progress:
             self._schedule_changelog_link_open_worker_start()
 
     def _schedule_changelog_link_open_worker_start(self) -> None:
-        if self.__dict__.get("_cleanup_in_progress", False):
-            return
-        if self.__dict__.get("_changelog_link_open_start_scheduled", False):
-            return
-        self._changelog_link_open_start_scheduled = True
-        QTimer.singleShot(0, self._run_scheduled_changelog_link_open_worker_start)
+        self._changelog_link_open_state_obj().schedule_start(
+            QTimer.singleShot,
+            self._run_scheduled_changelog_link_open_worker_start,
+            cleanup_in_progress=self.__dict__.get("_cleanup_in_progress", False),
+        )
 
     def _run_scheduled_changelog_link_open_worker_start(self) -> None:
-        self._changelog_link_open_start_scheduled = False
-        if self.__dict__.get("_cleanup_in_progress", False):
-            return
-        pending = self.__dict__.get("_changelog_link_open_pending")
-        self._changelog_link_open_pending = None
+        pending = self._changelog_link_open_state_obj().take_pending_for_scheduled_start(
+            cleanup_in_progress=self.__dict__.get("_cleanup_in_progress", False),
+        )
         if pending is None:
             return
         self._start_changelog_link_open_worker(str(pending or "").strip())
+
+    def _changelog_link_open_state_obj(self) -> LatestValueWorkerState:
+        state = self.__dict__.get("_changelog_link_open_state")
+        runtime = self.__dict__.get("_changelog_link_open_runtime")
+        if state is None:
+            pending = self.__dict__.pop("_changelog_link_open_pending", None)
+            start_scheduled = bool(self.__dict__.pop("_changelog_link_open_start_scheduled", False))
+            state = LatestValueWorkerState(
+                runtime,
+                empty_value=None,
+                pending=None if pending is None else str(pending or ""),
+                start_scheduled=start_scheduled,
+            )
+            self.__dict__["_changelog_link_open_state"] = state
+        elif getattr(state, "runtime", None) is None and runtime is not None:
+            state.runtime = runtime
+        return state
+
+    @property
+    def _changelog_link_open_pending(self) -> str | None:
+        pending = self._changelog_link_open_state_obj().pending
+        return None if pending is None else str(pending or "")
+
+    @_changelog_link_open_pending.setter
+    def _changelog_link_open_pending(self, value: str | None) -> None:
+        self._changelog_link_open_state_obj().pending = None if value is None else str(value or "")
+
+    @property
+    def _changelog_link_open_start_scheduled(self) -> bool:
+        return bool(self._changelog_link_open_state_obj().start_scheduled)
+
+    @_changelog_link_open_start_scheduled.setter
+    def _changelog_link_open_start_scheduled(self, value: bool) -> None:
+        self._changelog_link_open_state_obj().start_scheduled = bool(value)
 
     def _show_changelog_link_open_error(self, error: str) -> None:
         InfoBar.warning(
@@ -448,8 +479,7 @@ class ServersPage(BasePage):
         )
 
     def _stop_changelog_link_open_worker(self) -> None:
-        self._changelog_link_open_pending = None
-        self._changelog_link_open_start_scheduled = False
+        self._changelog_link_open_state_obj().reset()
         self._changelog_link_open_runtime_worker = None
         self._changelog_link_open_runtime.stop(
             blocking=False,

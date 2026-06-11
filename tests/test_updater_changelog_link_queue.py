@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import sys
 import unittest
 from pathlib import Path
@@ -13,6 +14,25 @@ if str(PROJECT_SRC) not in sys.path:
 
 
 class UpdaterChangelogLinkQueueTests(unittest.TestCase):
+    def test_changelog_link_open_uses_shared_latest_worker_state(self) -> None:
+        from ui.latest_value_worker_state import LatestValueWorkerState
+        from updater.ui.page import ServersPage
+
+        page = ServersPage.__new__(ServersPage)
+        page._changelog_link_open_runtime = SimpleNamespace(is_running=Mock(return_value=False))
+
+        init_source = inspect.getsource(ServersPage.__init__)
+        request_source = inspect.getsource(ServersPage._request_changelog_link_open)
+        schedule_source = inspect.getsource(ServersPage._schedule_changelog_link_open_worker_start)
+        cleanup_source = inspect.getsource(ServersPage._stop_changelog_link_open_worker)
+
+        self.assertIsInstance(ServersPage._changelog_link_open_state_obj(page), LatestValueWorkerState)
+        self.assertNotIn("_changelog_link_open_pending: str | None = None", init_source)
+        self.assertNotIn("_changelog_link_open_start_scheduled = False", init_source)
+        self.assertIn("_changelog_link_open_state_obj()", request_source)
+        self.assertIn("_changelog_link_open_state_obj()", schedule_source)
+        self.assertIn("_changelog_link_open_state_obj().reset()", cleanup_source)
+
     def test_changelog_link_pending_restarts_after_event_loop_turn(self) -> None:
         import updater.ui.page as updater_page
         from updater.ui.page import ServersPage
