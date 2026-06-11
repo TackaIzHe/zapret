@@ -977,7 +977,10 @@ class LogsPage(BasePage):
             description=tr_catalog(
                 "page.logs.accessibility.log_combo.count_description",
                 language=self._ui_language,
-                default="Доступных файлов логов: {count}.",
+                default=(
+                    "Доступных файлов логов: {count}. "
+                    "Откройте список и выберите файл стрелками вверх и вниз."
+                ),
             ).format(count=max(0, int(count))),
         )
         set_combo_items_accessibility(self.log_combo, name="Выбор файла лога")

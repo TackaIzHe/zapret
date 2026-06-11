@@ -175,7 +175,8 @@ class LogsAccessibilityTests(unittest.TestCase):
         )
 
         self.assertEqual(page.log_combo.accessible_name, "Выбор файла лога, выбрано: current.log")
-        self.assertEqual(page.log_combo.accessible_description, "Доступных файлов логов: 2.")
+        self.assertIn("Доступных файлов логов: 2.", page.log_combo.accessible_description)
+        self.assertIn("выберите файл стрелками вверх и вниз", page.log_combo.accessible_description)
         self.assertEqual(
             page.log_combo.property("screenReaderStateText"),
             "Выбор файла лога, выбрано: current.log",
@@ -223,7 +224,8 @@ class LogsAccessibilityTests(unittest.TestCase):
 
         self.assertEqual(page.current_log_file, "C:/Zapret/Dev/logs/new.log")
         self.assertEqual(page.log_combo.accessible_name, "Выбор файла лога, выбрано: new.log")
-        self.assertEqual(page.log_combo.accessible_description, "Доступных файлов логов: 2.")
+        self.assertIn("Доступных файлов логов: 2.", page.log_combo.accessible_description)
+        self.assertIn("выберите файл стрелками вверх и вниз", page.log_combo.accessible_description)
         self.assertEqual(
             page.log_combo.property("screenReaderStateText"),
             "Выбор файла лога, выбрано: new.log",
