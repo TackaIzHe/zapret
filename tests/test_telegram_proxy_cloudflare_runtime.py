@@ -814,7 +814,7 @@ class TelegramProxyCloudflareRuntimeTests(unittest.TestCase):
 
         self.assertEqual(seen_hosts, ["slow.tls", "slow.tls", "fast.tls"])
 
-    def test_upstream_http80_zero_recv_does_not_penalize_proxy(self) -> None:
+    def test_upstream_http80_zero_recv_temporarily_prefers_next_bundled_proxy(self) -> None:
         from telegram_proxy.proxy.routing import UpstreamProxyConfig, UpstreamProxyEndpoint
         from telegram_proxy.wss_proxy import TelegramWSProxy
 
@@ -868,8 +868,8 @@ class TelegramProxyCloudflareRuntimeTests(unittest.TestCase):
         with patch("telegram_proxy.wss_proxy.socks5.connect_via_socks5", side_effect=fake_connect):
             asyncio.run(run_three(proxy))
 
-        self.assertEqual(seen_hosts, ["primary.tls", "primary.tls", "primary.tls"])
-        self.assertNotIn("temporarily deprioritized after recv=0", "\n".join(logs))
+        self.assertEqual(seen_hosts, ["primary.tls", "primary.tls", "backup.tls"])
+        self.assertIn("temporarily deprioritized after recv=0", "\n".join(logs))
 
     def test_upstream_plain_legacy_is_skipped_when_tls_candidates_exist(self) -> None:
         from telegram_proxy.proxy.routing import UpstreamProxyConfig, UpstreamProxyEndpoint
