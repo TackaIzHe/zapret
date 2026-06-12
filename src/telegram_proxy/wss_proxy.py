@@ -136,6 +136,7 @@ class TelegramWSProxy:
         self._fake_tls_domain = normalize_fake_tls_domain(fake_tls_domain)
         self._proxy_protocol = bool(proxy_protocol)
         self._upstream_connect_semaphore: asyncio.Semaphore | None = None
+        self._http_upstream_connect_semaphore: asyncio.Semaphore | None = None
         self._upstream_zero_recv_counts: dict[tuple[str, int, str, str, bool, str, bool], int] = {}
         self._upstream_connect_failure_counts: dict[tuple[str, int, str, str, bool, str, bool], int] = {}
         self._upstream_penalty_until: dict[tuple[str, int, str, str, bool, str, bool], float] = {}
@@ -265,6 +266,18 @@ class TelegramWSProxy:
             semaphore = asyncio.Semaphore(max(1, self._pool_size or 1))
             self._upstream_connect_semaphore = semaphore
         return semaphore
+
+    def _get_http_upstream_connect_semaphore(self) -> asyncio.Semaphore:
+        semaphore = self._http_upstream_connect_semaphore
+        if semaphore is None:
+            semaphore = asyncio.Semaphore(max(1, min(2, self._pool_size or 1)))
+            self._http_upstream_connect_semaphore = semaphore
+        return semaphore
+
+    def _get_upstream_semaphore_for_target(self, upstream_port: int) -> asyncio.Semaphore:
+        if int(upstream_port or 0) == 80:
+            return self._get_http_upstream_connect_semaphore()
+        return self._get_upstream_connect_semaphore()
 
     @staticmethod
     def _upstream_endpoint_key(endpoint: UpstreamProxyEndpoint) -> tuple[str, int, str, str, bool, str, bool]:
@@ -531,6 +544,7 @@ class TelegramWSProxy:
         # Reset semaphore for fresh event loop
         reset_wss_semaphore()
         self._upstream_connect_semaphore = None
+        self._http_upstream_connect_semaphore = None
 
         handler = self._handle_mtproxy_client if self._mode == "mtproxy" else self._handle_socks5_client
         server = await asyncio.start_server(
@@ -1690,6 +1704,25 @@ class TelegramWSProxy:
         """
         media_tag = " media" if is_media else ""
 
+        if (
+            int(dc or 0) > 0
+            and int(dc or 0) not in WSS_DOMAINS
+            and should_route_upstream(self._upstream, mode="fallback")
+        ):
+            self._log(f"[{label}] DC{dc}{media_tag} no WSS relay -> upstream proxy")
+            self._record_route(
+                dc=dc,
+                is_media=is_media,
+                route="TCP",
+                status="пропуск",
+                reason="для этого DC нет WSS relay",
+            )
+            await self._upstream_proxy_connect(
+                client_reader, client_writer,
+                target_host, target_port, init, label, dc, is_media,
+            )
+            return
+
         # If this DC is known-blocked and upstream is available, use upstream
         if ((dc, is_media) in self._dc_upstream_required
                 and should_route_upstream(self._upstream, mode="fallback")):
@@ -1817,7 +1850,7 @@ class TelegramWSProxy:
                 f"[{label}] DC{dc}{media_tag} upstream target "
                 f"{target_host}:{target_port} -> {upstream_host}:{upstream_port}"
             )
-        async with self._get_upstream_connect_semaphore():
+        async with self._get_upstream_semaphore_for_target(upstream_port):
             opened = await self._open_upstream_proxy(
                 upstream_host=upstream_host,
                 upstream_port=upstream_port,
