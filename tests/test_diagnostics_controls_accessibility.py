@@ -11,6 +11,7 @@ from qfluentwidgets import BodyLabel, CaptionLabel, ComboBox, IndeterminateProgr
 
 from diagnostics.ui.build import build_connection_controls, build_connection_log_viewer
 from diagnostics.ui.components import ConnectionStatusBadge
+from diagnostics.ui.page import ConnectionTestPage
 from diagnostics.ui.runtime_helpers import (
     apply_connection_language,
     apply_interaction_state,
@@ -156,6 +157,25 @@ class DiagnosticsControlsAccessibilityTests(unittest.TestCase):
         )
 
         expected = "Результат диагностики соединений: Запуск тестирования: Все тесты (Discord + YouTube)"
+        self.assertEqual(widgets.result_text.accessibleName(), expected)
+        self.assertEqual(widgets.result_text.property("screenReaderStateText"), expected)
+
+    def test_appended_result_line_updates_result_screen_reader_state(self) -> None:
+        from ui.accessibility import set_state_text
+
+        parent = QWidget()
+        layout = QVBoxLayout(parent)
+        widgets = build_connection_log_viewer(
+            container_layout=layout,
+            tr_fn=lambda _key, default: default,
+        )
+        page = ConnectionTestPage.__new__(ConnectionTestPage)
+        page.result_text = widgets.result_text
+        set_state_text(widgets.result_text, "Старый результат диагностики")
+
+        ConnectionTestPage._append(page, "🎉 Тестирование завершено")
+
+        expected = "Результат диагностики соединений: Тестирование завершено"
         self.assertEqual(widgets.result_text.accessibleName(), expected)
         self.assertEqual(widgets.result_text.property("screenReaderStateText"), expected)
 

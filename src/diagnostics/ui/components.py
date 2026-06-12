@@ -8,7 +8,24 @@ from ui.accessibility import set_state_text
 from ui.smooth_scroll import apply_editor_smooth_scroll_preference
 
 
-_STATUS_MARKERS = ("🔄", "✅", "⏹", "⚠", "❌", "ℹ", "️")
+_STATUS_MARKERS = (
+    "🔄",
+    "✅",
+    "⏹",
+    "⚠",
+    "❌",
+    "ℹ",
+    "🚀",
+    "🌐",
+    "🎮",
+    "🎬",
+    "🎉",
+    "💡",
+    "📦",
+    "📋",
+    "📁",
+    "️",
+)
 
 
 def clean_connection_status_text(text: object) -> str:

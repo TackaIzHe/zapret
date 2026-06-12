@@ -22,6 +22,7 @@ from diagnostics.ui.build import (
     build_connection_header,
     build_connection_log_viewer,
 )
+from diagnostics.ui.components import clean_connection_status_text
 from diagnostics.ui.runtime_helpers import (
     apply_connection_language,
     apply_interaction_state,
@@ -35,6 +36,7 @@ from diagnostics.ui.runtime_helpers import (
     stop_connection_test,
 )
 from app.ui_texts import tr as tr_catalog
+from ui.accessibility import set_state_text
 
 class ConnectionTestPage(BasePage):
     """Страница теста соединений, заменяющая старое диалоговое окно."""
@@ -410,6 +412,9 @@ class ConnectionTestPage(BasePage):
     # ──────────────────────────────────────────────────────────────
     def _append(self, text: str):
         self.result_text.append(text)
+        value = clean_connection_status_text(text)
+        if value and set(value) != {"="}:
+            set_state_text(self.result_text, f"Результат диагностики соединений: {value}")
 
     def _set_status(self, text: str, status: str = "muted"):
         set_connection_status(
