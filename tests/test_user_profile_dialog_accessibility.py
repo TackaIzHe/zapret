@@ -37,6 +37,28 @@ class UserProfileDialogAccessibilityTests(unittest.TestCase):
         self.assertIn("Создаёт profile", dialog.yesButton.accessibleDescription())
         self.assertEqual(dialog.cancelButton.accessibleName(), "Отменить создание пользовательского profile")
 
+    def test_input_clear_buttons_do_not_take_tab_focus(self) -> None:
+        parent = QWidget()
+        self.addCleanup(parent.deleteLater)
+        parent.resize(640, 480)
+        parent.show()
+
+        dialog = CreateUserProfileDialog(parent, name="YouTube", ports="80,443")
+        self.addCleanup(dialog.deleteLater)
+        dialog.show()
+        self.app.processEvents()
+
+        for line_edit in (dialog.nameEdit, dialog.portsEdit):
+            with self.subTest(name=line_edit.accessibleName()):
+                buttons = [
+                    child
+                    for child in line_edit.findChildren(object)
+                    if str(getattr(child, "objectName", lambda: "")() or "") == "lineEditButton"
+                    and hasattr(child, "setFocusPolicy")
+                ]
+                self.assertTrue(buttons)
+                self.assertTrue(all(button.focusPolicy() == Qt.FocusPolicy.NoFocus for button in buttons))
+
     def test_protocol_accessible_name_updates_after_keyboard_selection(self) -> None:
         parent = QWidget()
         self.addCleanup(parent.deleteLater)

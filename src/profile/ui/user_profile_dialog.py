@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from qfluentwidgets import BodyLabel, CaptionLabel, ComboBox, LineEdit, MessageBoxBase, SubtitleLabel
 
-from ui.accessibility import set_accessible_description, set_control_accessibility, set_state_text
+from ui.accessibility import (
+    remove_line_edit_buttons_from_tab_order,
+    set_accessible_description,
+    set_control_accessibility,
+    set_state_text,
+)
 from ui.combo_accessibility import set_combo_items_accessibility
 from ui.fluent_widgets import style_semantic_caption_label
 
@@ -82,6 +87,7 @@ class CreateUserProfileDialog(MessageBoxBase):
             name="Название пользовательского profile",
             description="Например YouTube или Discord. Это имя будет использоваться в preset-ах.",
         )
+        remove_line_edit_buttons_from_tab_order(self.nameEdit)
         self._update_protocol_accessibility()
         set_accessible_description(
             self.protocolCombo,
@@ -92,6 +98,7 @@ class CreateUserProfileDialog(MessageBoxBase):
             name="Порты или L7 для пользовательского profile",
             description="Например 80,443 или stun,discord. Для L7 можно указать текстовые имена.",
         )
+        remove_line_edit_buttons_from_tab_order(self.portsEdit)
         action = str(button_text or "").strip().lower()
         is_save = action.startswith("сохран")
         if is_save:
