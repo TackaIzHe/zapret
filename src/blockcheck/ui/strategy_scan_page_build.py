@@ -317,6 +317,7 @@ def build_strategy_scan_log_section(*, tr_fn, push_button_cls, parent, on_toggle
     log_header = QHBoxLayout()
     support_status_label = CaptionLabel("")
     support_status_label.setWordWrap(True)
+    set_state_text(support_status_label, "Статус обращения по подбору стратегии: нет статуса")
     log_header.addWidget(support_status_label, 1)
     log_header.addStretch()
 

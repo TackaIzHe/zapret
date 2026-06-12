@@ -88,6 +88,10 @@ class BlockcheckPageAccessibilityTests(unittest.TestCase):
         )
         self.assertEqual(page._expand_log_btn.accessibleName(), "Развернуть лог BlockCheck")
         self.assertEqual(page._prepare_support_btn.accessibleName(), "Подготовить обращение по BlockCheck")
+        self.assertEqual(
+            page._support_status_label.property("screenReaderStateText"),
+            "Статус обращения BlockCheck: нет статуса",
+        )
 
     def test_first_open_does_not_build_run_output_until_needed(self) -> None:
         with patch.object(BlockcheckPage, "_request_page_initial_state_load", lambda self: None):

@@ -93,6 +93,10 @@ class StrategyScanPageAccessibilityTests(unittest.TestCase):
             page._prepare_support_btn.property("screenReaderStateText"),
             "Подготовить обращение по подбору стратегии",
         )
+        self.assertEqual(
+            page._support_status_label.property("screenReaderStateText"),
+            "Статус обращения по подбору стратегии: нет статуса",
+        )
 
     def test_protocol_combo_menu_items_are_named_for_screen_reader(self) -> None:
         page = StrategyScanPage(

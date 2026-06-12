@@ -49,6 +49,7 @@ def build_log_card_section(
     log_header = qhbox_layout_cls()
     support_status_label = caption_label_cls("")
     support_status_label.setWordWrap(True)
+    set_state_text(support_status_label, "Статус обращения BlockCheck: нет статуса")
     log_header.addWidget(support_status_label, 1)
     log_header.addStretch()
 
