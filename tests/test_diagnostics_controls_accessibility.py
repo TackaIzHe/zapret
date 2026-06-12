@@ -45,10 +45,22 @@ class DiagnosticsControlsAccessibilityTests(unittest.TestCase):
         )
 
         self.assertEqual(widgets.start_btn.accessibleName(), "Запустить диагностический тест")
+        self.assertEqual(
+            widgets.start_btn.property("screenReaderStateText"),
+            "Запустить диагностический тест",
+        )
         self.assertIn("Discord и YouTube", widgets.start_btn.accessibleDescription())
         self.assertEqual(widgets.stop_btn.accessibleName(), "Остановить диагностический тест")
+        self.assertEqual(
+            widgets.stop_btn.property("screenReaderStateText"),
+            "Остановить диагностический тест",
+        )
         self.assertIn("Останавливает текущий тест", widgets.stop_btn.accessibleDescription())
         self.assertEqual(widgets.send_log_btn.accessibleName(), "Подготовить обращение с логами")
+        self.assertEqual(
+            widgets.send_log_btn.property("screenReaderStateText"),
+            "Подготовить обращение с логами",
+        )
         self.assertIn("архив логов", widgets.send_log_btn.accessibleDescription())
 
     def test_test_combo_name_includes_selected_scenario(self) -> None:
@@ -253,9 +265,21 @@ class DiagnosticsControlsAccessibilityTests(unittest.TestCase):
         )
 
         self.assertEqual(widgets.start_btn.accessibleName(), "Запустить диагностический тест")
+        self.assertEqual(
+            widgets.start_btn.property("screenReaderStateText"),
+            "Запустить диагностический тест",
+        )
         self.assertEqual(widgets.stop_btn.accessibleName(), "Остановить диагностический тест")
+        self.assertEqual(
+            widgets.stop_btn.property("screenReaderStateText"),
+            "Остановить диагностический тест",
+        )
         self.assertIn("Останавливает текущий тест", widgets.stop_btn.accessibleDescription())
         self.assertEqual(widgets.send_log_btn.accessibleName(), "Подготовить обращение с логами")
+        self.assertEqual(
+            widgets.send_log_btn.property("screenReaderStateText"),
+            "Подготовить обращение с логами",
+        )
 
 
 if __name__ == "__main__":

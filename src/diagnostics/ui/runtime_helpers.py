@@ -319,6 +319,10 @@ def apply_connection_language(
     )
     refresh_test_combo_items_callback()
 
+    def _set_action_accessibility(widget, *, name: str, description: str) -> None:
+        set_control_accessibility(widget, name=name, description=description)
+        set_state_text(widget, name)
+
     start_btn.setText(tr_catalog("page.connection.button.start", language=language, default="Запустить тест"))
     stop_btn.setText(tr_catalog("page.connection.button.stop", language=language, default="Стоп"))
     send_log_btn.setText(tr_catalog("page.connection.button.send_log", language=language, default="Подготовить обращение"))
@@ -330,7 +334,7 @@ def apply_connection_language(
             default="Запустить выбранный сценарий диагностики для Discord и YouTube.",
         )
     )
-    set_control_accessibility(
+    _set_action_accessibility(
         start_btn,
         name=tr_catalog(
             "page.connection.action.start.accessible_name",
@@ -351,7 +355,7 @@ def apply_connection_language(
             default="Останавливает текущий тест, если он уже запущен.",
         )
     )
-    set_control_accessibility(
+    _set_action_accessibility(
         stop_btn,
         name=tr_catalog(
             "page.connection.action.stop.accessible_name",
@@ -372,7 +376,7 @@ def apply_connection_language(
             default="Собрать архив логов и открыть готовое обращение в GitHub Discussions.",
         )
     )
-    set_control_accessibility(
+    _set_action_accessibility(
         send_log_btn,
         name=tr_catalog(
             "page.connection.action.support.accessible_name",

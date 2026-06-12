@@ -96,6 +96,10 @@ def build_connection_controls(
     on_stop,
     on_support,
 ) -> ConnectionControlsWidgets:
+    def _set_action_accessibility(widget, *, name: str, description: str) -> None:
+        set_control_accessibility(widget, name=name, description=description)
+        set_state_text(widget, name)
+
     controls_card = SettingsCard(tr_fn("page.connection.card.testing", "Тестирование"))
 
     selector_row = QHBoxLayout()
@@ -143,7 +147,7 @@ def build_connection_controls(
             "Запустить выбранный сценарий диагностики для Discord и YouTube.",
         )
     )
-    set_control_accessibility(
+    _set_action_accessibility(
         start_btn,
         name=tr_fn("page.connection.action.start.accessible_name", "Запустить диагностический тест"),
         description=tr_fn(
@@ -165,7 +169,7 @@ def build_connection_controls(
             "Останавливает текущий тест, если он уже запущен.",
         )
     )
-    set_control_accessibility(
+    _set_action_accessibility(
         stop_btn,
         name=tr_fn("page.connection.action.stop.accessible_name", "Остановить диагностический тест"),
         description=tr_fn(
@@ -188,7 +192,7 @@ def build_connection_controls(
             "Собрать архив логов и открыть готовое обращение в GitHub Discussions.",
         )
     )
-    set_control_accessibility(
+    _set_action_accessibility(
         send_log_btn,
         name=tr_fn("page.connection.action.support.accessible_name", "Подготовить обращение с логами"),
         description=tr_fn(
