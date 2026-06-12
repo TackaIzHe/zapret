@@ -29,6 +29,7 @@ class ClickableCardAccessibilityTests(unittest.TestCase):
 
         self.assertEqual(item.focusPolicy(), Qt.FocusPolicy.StrongFocus)
         self.assertEqual(item.accessibleName(), "Текущий preset: Default")
+        self.assertEqual(item.property("screenReaderStateText"), "Текущий preset: Default")
 
         self._press_key(item, Qt.Key.Key_Return)
 

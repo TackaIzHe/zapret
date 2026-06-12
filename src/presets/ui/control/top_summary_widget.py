@@ -7,7 +7,7 @@ from qfluentwidgets import CaptionLabel, FlowLayout, StrongBodyLabel, SubtitleLa
 
 from app.ui_texts import tr as tr_catalog
 from presets.ui.control.top_summary_plan import build_premium_summary, build_profiles_value
-from ui.accessibility import set_control_accessibility
+from ui.accessibility import set_control_accessibility, set_state_text
 
 
 def set_visible_if_changed(widget, visible: bool) -> bool:
@@ -108,7 +108,9 @@ class ControlTopSummaryItem(QWidget):
         if details_text.strip():
             accessible_parts.append(details_text)
         if accessible_parts:
-            set_control_accessibility(self, name=", ".join(accessible_parts))
+            accessible_text = ", ".join(accessible_parts)
+            set_control_accessibility(self, name=accessible_text)
+            set_state_text(self, accessible_text)
 
     def mousePressEvent(self, event):  # noqa: N802
         if self._clickable and event.button() == Qt.MouseButton.LeftButton:
