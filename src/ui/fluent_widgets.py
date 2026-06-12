@@ -15,7 +15,7 @@ import qtawesome as qta
 from ui.theme import get_cached_qta_pixmap, get_themed_qta_icon, get_theme_tokens
 from ui.theme_refresh import ThemeRefreshBinding
 from ui.pulsing_dot import PulsingDot
-from ui.accessibility import set_accessible_description, set_accessible_name
+from ui.accessibility import set_accessible_description, set_accessible_name, set_state_text
 from qfluentwidgets import (
     BodyLabel, CaptionLabel, CardWidget, CheckBox, ComboBox, FlowLayout,
     FluentIcon, HeaderCardWidget, IndeterminateProgressBar, InfoBar,
@@ -110,6 +110,7 @@ class SettingsCard(QWidget):
 
         self._card_root = card_root
         outer_layout.addWidget(card_root)
+        self._sync_title_accessibility(title)
 
     def add_widget(self, widget: QWidget):
         self.main_layout.addWidget(widget)
@@ -125,8 +126,20 @@ class SettingsCard(QWidget):
                 self.main_layout.insertWidget(0, title_lbl)
             else:
                 self._title_label.setText(text)
+            self._sync_title_accessibility(text)
         except Exception:
             pass
+
+    def _sync_title_accessibility(self, text: str) -> None:
+        value = str(text or "").strip()
+        if not value:
+            return
+        state_text = f"Раздел настроек: {value}"
+        set_state_text(self, state_text)
+        if self._card_root is not None:
+            set_state_text(self._card_root, state_text)
+        if self._title_label is not None:
+            set_state_text(self._title_label, state_text)
 
     def setStyleSheet(self, style: str) -> None:  # noqa: N802
         if self._card_root is not None:
