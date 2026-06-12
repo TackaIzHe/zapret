@@ -183,7 +183,6 @@ class ProfileListDelegate(QStyledItemDelegate):
             selected_rows=self._selected_rows,
         )
         active = str(index.data(ProfileListModel.StrategyIdRole) or "") not in {"", "none"}
-        accent_active = _profile_row_uses_accent(active)
         paint_profile_hover_row(
             painter,
             rect,
@@ -261,7 +260,6 @@ class ProfileListDelegate(QStyledItemDelegate):
             active,
             active_color=tokens.accent_hex,
             fallback=str(tokens.fg_faint),
-            tinted_background=accent_active,
         )
         painter.setFont(meta_font)
         painter.setPen(to_qcolor(dot_color, "#888888"))
@@ -421,7 +419,8 @@ def _status_dot_color(
     fallback: str = "#8f9aa6",
     tinted_background: bool | None = None,
 ) -> str:
-    if _profile_row_uses_accent(active, tinted_background=tinted_background):
+    _ = tinted_background
+    if bool(active):
         return str(active_color or "#5caee8")
     return str(fallback or "#8f9aa6")
 

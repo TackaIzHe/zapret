@@ -998,11 +998,15 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         self.assertTrue(_profile_row_uses_accent(True, tinted_background=True))
         self.assertEqual(
             _status_dot_color(True, active_color="#00c2b5", fallback="#8f9aa6", tinted_background=False),
-            "#8f9aa6",
+            "#00c2b5",
         )
         self.assertEqual(
             _status_dot_color(True, active_color="#00c2b5", fallback="#8f9aa6", tinted_background=True),
             "#00c2b5",
+        )
+        self.assertEqual(
+            _status_dot_color(False, active_color="#00c2b5", fallback="#8f9aa6", tinted_background=True),
+            "#8f9aa6",
         )
 
         source = inspect.getsource(_badge_palette)
