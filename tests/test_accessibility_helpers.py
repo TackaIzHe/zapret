@@ -140,6 +140,27 @@ class AccessibilityHelpersTests(unittest.TestCase):
         self.assertTrue(buttons)
         self.assertTrue(all(button.focusPolicy() == Qt.FocusPolicy.NoFocus for button in buttons))
 
+    def test_set_control_accessibility_skips_plain_text_edit_scrollbar_arrows(self) -> None:
+        from PyQt6.QtCore import Qt
+        from qfluentwidgets import PlainTextEdit
+
+        from ui.accessibility import set_control_accessibility
+
+        text_edit = PlainTextEdit()
+        self.addCleanup(text_edit.deleteLater)
+
+        set_control_accessibility(text_edit, name="История рейтингов стратегий")
+
+        buttons = [
+            child
+            for child in text_edit.findChildren(object)
+            if type(child).__name__ == "ArrowButton"
+            and hasattr(child, "setFocusPolicy")
+        ]
+
+        self.assertTrue(buttons)
+        self.assertTrue(all(button.focusPolicy() == Qt.FocusPolicy.NoFocus for button in buttons))
+
     def test_set_state_text_marks_text_status_for_screen_reader(self) -> None:
         from ui.accessibility import set_state_text
 
