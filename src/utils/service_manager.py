@@ -4,6 +4,7 @@
 """
 
 import ctypes
+import subprocess
 from ctypes import wintypes
 from typing import Optional, List
 import time
@@ -263,10 +264,46 @@ def stop_and_delete_service(service_name: str, retry_count: int = 3) -> bool:
 
         if service_exists(service_name):
             log(f"Служба {service_name} всё ещё видна после удаления через Win API", "DEBUG")
+            if stop_and_delete_service_sc_fallback(service_name):
+                return True
         return False
         
     except Exception as e:
         log(f"Ошибка при остановке и удалении {service_name}: {e}", "DEBUG")
+        return False
+
+
+def stop_and_delete_service_sc_fallback(service_name: str) -> bool:
+    """Резервно удаляет службу через sc.exe, если WinAPI оставил запись видимой."""
+    try:
+        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        for action in ("stop", "delete"):
+            try:
+                result = subprocess.run(
+                    ["sc.exe", action, service_name],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    creationflags=creationflags,
+                )
+                output = ((result.stdout or "") + (result.stderr or "")).strip()
+                log(
+                    f"sc.exe {action} {service_name}: code={result.returncode}"
+                    + (f", output={output[:200]}" if output else ""),
+                    "DEBUG",
+                )
+            except Exception as e:
+                log(f"Ошибка sc.exe {action} {service_name}: {e}", "DEBUG")
+
+            deadline = time.time() + 2.0
+            while time.time() < deadline:
+                if not service_exists(service_name):
+                    return True
+                time.sleep(0.2)
+
+        return not service_exists(service_name)
+    except Exception as e:
+        log(f"Ошибка fallback-удаления службы {service_name}: {e}", "DEBUG")
         return False
 
 

@@ -697,6 +697,12 @@ def diagnose_winws_exit(exit_code: int, stderr: str = "") -> Optional[WinDivertD
             win32_error = code
             break
 
+    # Winws2 can return the raw Win32 error truncated to one byte.
+    # ERROR_SERVICE_DISABLED 1058 becomes process exit code 34, often without
+    # stderr in GUI launch mode. Treat that as the same driver-service failure.
+    if win32_error == 34 and not stderr_lower.strip():
+        win32_error = _ERROR_SERVICE_DISABLED
+
     # 2. Dispatch to specific handlers
     handler = _EXIT_CODE_HANDLERS.get(win32_error)
     if handler:

@@ -41,6 +41,21 @@ class WinDivertServiceRecoveryTests(unittest.TestCase):
         self.assertFalse(removed)
         service_exists.assert_called_with("Monkey")
 
+    def test_stop_and_delete_uses_sc_fallback_when_winapi_leaves_service_visible(self) -> None:
+        from utils import service_manager
+
+        with (
+            patch.object(service_manager, "stop_service", return_value=True),
+            patch.object(service_manager, "delete_service", return_value=True),
+            patch.object(service_manager, "service_exists", return_value=True),
+            patch.object(service_manager, "stop_and_delete_service_sc_fallback", return_value=True) as fallback,
+            patch.object(service_manager.time, "sleep"),
+        ):
+            removed = service_manager.stop_and_delete_service("Monkey", retry_count=1)
+
+        self.assertTrue(removed)
+        fallback.assert_called_once_with("Monkey")
+
     def test_service_state_query_uses_minimal_sc_manager_access(self) -> None:
         from utils import service_manager
 
@@ -131,6 +146,37 @@ class WinDivertServiceRecoveryTests(unittest.TestCase):
             fake_winreg.REG_DWORD,
             service_manager.SERVICE_DEMAND_START,
         )
+
+    def test_empty_exit_34_is_treated_as_transient_windivert_1058(self) -> None:
+        from winws_runtime.runners import runner_base
+
+        class DummyRunner(runner_base.StrategyRunnerBase):
+            def start_from_preset_file(self, preset_path: str, strategy_name: str = "Preset") -> bool:
+                return True
+
+            def switch_preset_file_fast(self, preset_path: str, strategy_name: str = "Preset", *, is_current=None) -> bool:
+                return True
+
+        with (
+            patch.object(runner_base.os.path, "exists", return_value=True),
+            patch(
+                "winws_runtime.health.process_health_check._probe_service_disabled_cause",
+                return_value=(
+                    "WinDivert ещё не готов после предыдущего запуска или очистки",
+                    "Повторите запуск после очистки",
+                    None,
+                ),
+            ),
+        ):
+            runner = DummyRunner(r"C:\Zapret\Dev\exe\winws2.exe")
+            retry = runner._should_retry_transient_windivert_service_error(
+                "",
+                34,
+                retry_count=0,
+                max_retry_count=1,
+            )
+
+        self.assertTrue(retry)
 
     def test_monkey_disabled_service_is_reported_as_windivert_driver_problem(self) -> None:
         from winws_runtime.health import process_health_check
