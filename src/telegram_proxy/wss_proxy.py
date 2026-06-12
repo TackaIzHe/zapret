@@ -85,6 +85,10 @@ DC_FAIL_COOLDOWN = 10.0
 # How long to wait for first server response before declaring DC blocked
 _RECV_ZERO_TIMEOUT = 8.0
 
+# How many empty upstream relays are enough to try the next bundled proxy first
+_UPSTREAM_ZERO_RECV_FAILS = 2
+_UPSTREAM_PENALTY_SECONDS = 60.0
+
 # ---- Main proxy class ----
 
 
@@ -127,6 +131,8 @@ class TelegramWSProxy:
         self._fake_tls_domain = normalize_fake_tls_domain(fake_tls_domain)
         self._proxy_protocol = bool(proxy_protocol)
         self._upstream_connect_semaphore: asyncio.Semaphore | None = None
+        self._upstream_zero_recv_counts: dict[tuple[str, int, str, str, bool, str, bool], int] = {}
+        self._upstream_penalty_until: dict[tuple[str, int, str, str, bool, str, bool], float] = {}
         self._servers: list[asyncio.Server] = []
         self._tasks: set[asyncio.Task] = set()
         self._running = False
@@ -253,6 +259,46 @@ class TelegramWSProxy:
             self._upstream_connect_semaphore = semaphore
         return semaphore
 
+    @staticmethod
+    def _upstream_endpoint_key(endpoint: UpstreamProxyEndpoint) -> tuple[str, int, str, str, bool, str, bool]:
+        return (
+            str(endpoint.host or "").strip().lower(),
+            int(endpoint.port or 0),
+            str(endpoint.username or ""),
+            str(endpoint.password or ""),
+            bool(endpoint.tls),
+            str(endpoint.tls_server_name or "").strip().lower(),
+            bool(endpoint.tls_verify),
+        )
+
+    def _upstream_penalty_active(self, endpoint: UpstreamProxyEndpoint, now: float | None = None) -> bool:
+        key = self._upstream_endpoint_key(endpoint)
+        until = self._upstream_penalty_until.get(key, 0.0)
+        if until <= 0:
+            return False
+        if until <= (time.monotonic() if now is None else now):
+            self._upstream_penalty_until.pop(key, None)
+            self._upstream_zero_recv_counts.pop(key, None)
+            return False
+        return True
+
+    def _mark_upstream_zero_recv(self, endpoint: UpstreamProxyEndpoint, label: str) -> None:
+        key = self._upstream_endpoint_key(endpoint)
+        count = self._upstream_zero_recv_counts.get(key, 0) + 1
+        self._upstream_zero_recv_counts[key] = count
+        if count < _UPSTREAM_ZERO_RECV_FAILS:
+            return
+        self._upstream_penalty_until[key] = time.monotonic() + _UPSTREAM_PENALTY_SECONDS
+        self._log(
+            f"[{label}] upstream {endpoint.host}:{endpoint.port} temporarily deprioritized "
+            f"after recv=0 ({count}/{_UPSTREAM_ZERO_RECV_FAILS})"
+        )
+
+    def _mark_upstream_recv_ok(self, endpoint: UpstreamProxyEndpoint) -> None:
+        key = self._upstream_endpoint_key(endpoint)
+        self._upstream_zero_recv_counts.pop(key, None)
+        self._upstream_penalty_until.pop(key, None)
+
     def _upstream_proxy_candidates(self) -> tuple[UpstreamProxyEndpoint, ...]:
         primary = UpstreamProxyEndpoint(
             host=self._upstream.host,
@@ -297,7 +343,15 @@ class TelegramWSProxy:
                     tls_verify=bool(endpoint.tls_verify),
                 )
             )
-        return tuple(result)
+        if len(result) <= 1:
+            return tuple(result)
+        now = time.monotonic()
+        return tuple(
+            endpoint for _, endpoint in sorted(
+                enumerate(result),
+                key=lambda item: (self._upstream_penalty_active(item[1], now), item[0]),
+            )
+        )
 
     async def _open_upstream_proxy(
         self,
@@ -308,7 +362,7 @@ class TelegramWSProxy:
         dc: int,
         is_media: bool,
         mtproxy: bool = False,
-    ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter] | None:
+    ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter, UpstreamProxyEndpoint] | None:
         media_tag = " media" if is_media else ""
         prefix = "MTProxy " if mtproxy else ""
         candidates = self._upstream_proxy_candidates()
@@ -375,7 +429,7 @@ class TelegramWSProxy:
             )
             self.stats.upstream_connections += 1
             self._record_route(dc=dc, is_media=is_media, route="внешний SOCKS5", status="OK")
-            return rr, rw
+            return rr, rw, endpoint
         return None
 
     @property
@@ -399,6 +453,8 @@ class TelegramWSProxy:
         self._http_upstream_required = False
         self._ws_blacklist = set()
         self._dc_cooldown = {}
+        self._upstream_zero_recv_counts = {}
+        self._upstream_penalty_until = {}
         self._cloudflare_domain_balancer.reset()
         # Reset semaphore for fresh event loop
         reset_wss_semaphore()
@@ -1524,7 +1580,7 @@ class TelegramWSProxy:
             )
             if opened is None:
                 return False
-            rr, rw = opened
+            rr, rw, _endpoint = opened
             rw.write(relay_init)
             await rw.drain()
             await relay_mtproxy_tcp(
@@ -1695,11 +1751,15 @@ class TelegramWSProxy:
             )
             if opened is None:
                 return False
-            rr, rw = opened
+            rr, rw, endpoint = opened
             # Forward the buffered init packet
             rw.write(init)
             await rw.drain()
-            await self._relay_tcp(client_reader, client_writer, rr, rw, label, dc=dc)
+            recv_total, _watchdog_fired = await self._relay_tcp(client_reader, client_writer, rr, rw, label, dc=dc)
+            if recv_total > 0:
+                self._mark_upstream_recv_ok(endpoint)
+            else:
+                self._mark_upstream_zero_recv(endpoint, label)
         return True
 
     def _upstream_target(
