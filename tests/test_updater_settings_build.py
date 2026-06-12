@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import unittest
 
+from PyQt6.QtCore import QEvent, Qt
+from PyQt6.QtGui import QKeyEvent
+
 from updater.ui import settings_build
 from updater.ui.settings_build import build_servers_settings_section
 
@@ -9,6 +12,11 @@ from updater.ui.settings_build import build_servers_settings_section
 class _FakeSignal:
     def connect(self, callback):
         self.callback = callback
+
+    def emit(self):
+        callback = getattr(self, "callback", None)
+        if callback is not None:
+            callback()
 
 
 class _FakeToggleRow:
@@ -97,6 +105,7 @@ class _FakePushSettingCard:
         self._accessible_name = ""
         self._accessible_description = ""
         self.properties = {}
+        self._focus_policy = Qt.FocusPolicy.NoFocus
 
     def setAccessibleName(self, value):  # noqa: N802
         self._accessible_name = value
@@ -115,6 +124,15 @@ class _FakePushSettingCard:
 
     def property(self, name):
         return self.properties.get(name)
+
+    def focusPolicy(self):  # noqa: N802
+        return self._focus_policy
+
+    def setFocusPolicy(self, value):  # noqa: N802
+        self._focus_policy = value
+
+    def keyPressEvent(self, _event):  # noqa: N802
+        pass
 
 
 class _FakeLabel:
@@ -261,6 +279,30 @@ class UpdaterSettingsBuildTests(unittest.TestCase):
         self.assertEqual(widgets.button.accessibleName(), expected_name)
         self.assertEqual(widgets.button.property("screenReaderStateText"), expected_name)
         self.assertIn("версии программы", widgets.button.accessibleDescription())
+
+    def test_telegram_card_opens_from_keyboard(self) -> None:
+        old_icon_factory = settings_build.get_themed_qta_icon
+        settings_build.get_themed_qta_icon = lambda *_args, **_kwargs: object()
+        self.addCleanup(setattr, settings_build, "get_themed_qta_icon", old_icon_factory)
+        opened: list[bool] = []
+
+        widgets = settings_build.build_servers_telegram_section(
+            tr_fn=lambda _key, default: default,
+            accent_hex="#22dddd",
+            push_setting_card_cls=_FakePushSettingCard,
+            on_open_channel=lambda: opened.append(True),
+        )
+
+        self.assertEqual(widgets.card.focusPolicy(), Qt.FocusPolicy.StrongFocus)
+        widgets.card.keyPressEvent(
+            QKeyEvent(
+                QEvent.Type.KeyPress,
+                Qt.Key.Key_Return,
+                Qt.KeyboardModifier.NoModifier,
+            )
+        )
+
+        self.assertEqual(opened, [True])
 
 
 if __name__ == "__main__":

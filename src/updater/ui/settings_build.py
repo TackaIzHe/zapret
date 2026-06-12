@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ui.accessibility import set_control_accessibility, set_state_text
+from ui.accessibility import enable_keyboard_click, set_control_accessibility, set_state_text
 from ui.theme import get_themed_qta_icon
 
 
@@ -141,6 +141,7 @@ def build_servers_telegram_section(
     )
     set_control_accessibility(tg_card, name=telegram_action_name, description=telegram_action_description)
     set_state_text(tg_card, telegram_action_name)
+    enable_keyboard_click(tg_card)
     set_control_accessibility(tg_btn, name=telegram_action_name, description=telegram_action_description)
     set_state_text(tg_btn, telegram_action_name)
 
