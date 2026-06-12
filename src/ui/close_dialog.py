@@ -109,6 +109,13 @@ class CloseDialog(MessageBoxBase):
             stop_name = "Закрыть ZapretGUI и остановить DPI, недоступно"
             stop_description = "DPI сейчас не запущен, поэтому останавливать нечего."
 
+        title_name = "Диалог: Закрыть приложение"
+        set_state_text(self.titleLabel, title_name)
+        set_control_accessibility(
+            self.titleLabel,
+            name=title_name,
+            description="Окно выбора действия при закрытии ZapretGUI.",
+        )
         set_control_accessibility(
             self.bodyLabel,
             name=body_name,

@@ -24,6 +24,8 @@ class CloseDialogAccessibilityTests(unittest.TestCase):
         dialog = CloseDialog(self._parent(), launch_running=True)
         self.addCleanup(dialog.deleteLater)
 
+        self.assertEqual(dialog.titleLabel.accessibleName(), "Диалог: Закрыть приложение")
+        self.assertEqual(dialog.titleLabel.property("screenReaderStateText"), "Диалог: Закрыть приложение")
         self.assertEqual(dialog.bodyLabel.accessibleName(), "Описание закрытия: DPI запущен")
         self.assertEqual(dialog.bodyLabel.property("screenReaderStateText"), "Описание закрытия: DPI запущен")
         self.assertIn("продолжит работать", dialog.bodyLabel.accessibleDescription())
