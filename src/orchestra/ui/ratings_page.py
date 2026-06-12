@@ -409,6 +409,7 @@ class OrchestraRatingsPage(BasePage):
             name="Обновить рейтинги стратегий",
             description="Загружает свежую историю обучения оркестратора.",
         )
+        set_state_text(self.refresh_btn, "Обновить рейтинги стратегий")
         set_control_accessibility(
             self.history_text,
             name="История рейтингов стратегий",
