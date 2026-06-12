@@ -95,6 +95,35 @@ class ProfileIconTests(unittest.TestCase):
 
         self.assertEqual(icon.icon_name, "fa5s.microphone")
 
+    def test_tiktok_profile_uses_brand_icon_from_list_file(self) -> None:
+        icon = resolve_profile_icon(
+            "TikTok",
+            ("--filter-tcp=80,443", "--hostlist=lists/tiktok.txt"),
+        )
+
+        self.assertEqual(icon.icon_name, "simple:tiktok:TT")
+
+    def test_anydesk_profiles_use_brand_icon_from_ipset_file(self) -> None:
+        tcp_icon = resolve_profile_icon(
+            "AnyDesk TCP",
+            ("--filter-tcp=80,443,6568", "--ipset=lists/ipset-anydesk.txt"),
+        )
+        udp_icon = resolve_profile_icon(
+            "AnyDesk UDP",
+            ("--filter-udp=443,6568,50000-51000", "--ipset=lists/ipset-anydesk.txt"),
+        )
+
+        self.assertEqual(tcp_icon.icon_name, "simple:anydesk:AD")
+        self.assertEqual(udp_icon.icon_name, "simple:anydesk:AD")
+
+    def test_speedtest_profile_uses_brand_icon_from_list_file(self) -> None:
+        icon = resolve_profile_icon(
+            "Speedtest",
+            ("--filter-tcp=443,8080", "--hostlist=lists/speedtest.txt"),
+        )
+
+        self.assertEqual(icon.icon_name, "simple:speedtest:ST")
+
 
 if __name__ == "__main__":
     unittest.main()
