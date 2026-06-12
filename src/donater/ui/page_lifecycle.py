@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from donater.ui.accessibility import apply_premium_button_accessibility, apply_premium_pair_code_accessibility
+from donater.ui.accessibility import (
+    apply_premium_button_accessibility,
+    apply_premium_instructions_accessibility,
+    apply_premium_pair_code_accessibility,
+)
 from ui.accessibility import set_state_text
 from ui.fluent_widgets import set_tooltip
 
@@ -189,6 +193,7 @@ def apply_premium_language(
             "1. Нажмите «Создать код»\n2. Отправьте код боту @zapretvpns_bot в Telegram (сообщением)\n3. Вернитесь сюда и нажмите «Проверить статус»",
         )
     )
+    apply_premium_instructions_accessibility(tr_fn=tr_fn, instructions_label=instructions_label)
     key_input.setPlaceholderText(tr_fn("page.premium.placeholder.pair_code", "ABCD12EF"))
     apply_premium_pair_code_accessibility(tr_fn=tr_fn, key_input=key_input)
 

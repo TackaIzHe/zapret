@@ -5,6 +5,27 @@ from __future__ import annotations
 from ui.accessibility import set_accessible_description, set_control_accessibility, set_state_text
 
 
+def apply_premium_instructions_accessibility(*, tr_fn, instructions_label) -> None:
+    """Задаёт понятный текст инструкции Premium для экранного диктора."""
+
+    if instructions_label is None:
+        return
+    try:
+        text = str(instructions_label.text() or "").strip()
+    except Exception:
+        text = ""
+    if not text:
+        return
+    set_state_text(instructions_label, f"Инструкция Premium: {text}")
+    set_accessible_description(
+        instructions_label,
+        tr_fn(
+            "page.premium.instructions.accessible_description",
+            "Короткая инструкция, как привязать Premium через Telegram-бота.",
+        ),
+    )
+
+
 def apply_premium_pair_code_accessibility(*, tr_fn, key_input) -> None:
     """Задаёт понятный текст поля с Premium-кодом для экранного диктора."""
 
@@ -116,4 +137,8 @@ def apply_premium_button_accessibility(
         )
 
 
-__all__ = ["apply_premium_button_accessibility", "apply_premium_pair_code_accessibility"]
+__all__ = [
+    "apply_premium_button_accessibility",
+    "apply_premium_instructions_accessibility",
+    "apply_premium_pair_code_accessibility",
+]

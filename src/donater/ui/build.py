@@ -9,7 +9,11 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
 from qfluentwidgets import BodyLabel, CaptionLabel, FluentIcon, LineEdit, PrimaryPushButton, PushButton
 
-from donater.ui.accessibility import apply_premium_button_accessibility, apply_premium_pair_code_accessibility
+from donater.ui.accessibility import (
+    apply_premium_button_accessibility,
+    apply_premium_instructions_accessibility,
+    apply_premium_pair_code_accessibility,
+)
 from ui.accessibility import set_state_text
 from ui.fluent_widgets import SettingsCard, RefreshButton, QuickActionsBar, set_tooltip
 
@@ -57,6 +61,7 @@ def build_premium_activation_section(
         )
     )
     instructions_label.setWordWrap(True)
+    apply_premium_instructions_accessibility(tr_fn=tr, instructions_label=instructions_label)
     card.add_widget(instructions_label)
 
     key_input_container = QWidget()

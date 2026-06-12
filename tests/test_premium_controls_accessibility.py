@@ -91,6 +91,15 @@ class PremiumControlsAccessibilityTests(unittest.TestCase):
         self.assertEqual(activation.activate_btn.accessibleName(), "Создать код привязки Premium")
         self.assertEqual(activation.activate_btn.property("screenReaderStateText"), "Создать код привязки Premium")
         self.assertIn("Telegram", activation.activate_btn.accessibleDescription())
+        self.assertEqual(
+            activation.instructions_label.property("screenReaderStateText"),
+            (
+                "Инструкция Premium: 1. Нажмите «Создать код» "
+                "2. Отправьте код боту @zapretvpns_bot в Telegram (сообщением) "
+                "3. Вернитесь сюда и нажмите «Проверить статус»"
+            ),
+        )
+        self.assertIn("как привязать Premium", activation.instructions_label.accessibleDescription())
         self.assertEqual(device.open_bot_btn.accessibleName(), "Открыть Premium-бота")
         self.assertIn("Telegram", device.open_bot_btn.accessibleDescription())
         self.assertEqual(actions.refresh_btn.accessibleName(), "Обновить Premium-статус")
@@ -194,6 +203,14 @@ class PremiumControlsAccessibilityTests(unittest.TestCase):
         self.assertEqual(actions.refresh_btn.accessibleName(), "Обновить Premium-статус")
         self.assertEqual(actions.extend_btn.accessibleName(), "Продлить Premium-подписку")
         self.assertEqual(activation.key_input.accessibleName(), "Код привязки Premium: пока не создан")
+        self.assertEqual(
+            activation.instructions_label.property("screenReaderStateText"),
+            (
+                "Инструкция Premium: 1. Нажмите «Создать код» "
+                "2. Отправьте код боту @zapretvpns_bot в Telegram (сообщением) "
+                "3. Вернитесь сюда и нажмите «Проверить статус»"
+            ),
+        )
 
     def test_premium_runtime_actions_update_screen_reader_names(self) -> None:
         parent = QWidget()
