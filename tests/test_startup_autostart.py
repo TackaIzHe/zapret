@@ -101,9 +101,12 @@ class StartupAutostartTests(unittest.TestCase):
             runtime_api=SimpleNamespace(has_residual_processes=Mock(return_value=False)),
             startup_autostart=True,
         )
-        worker._start_presets_with_runner = Mock(return_value=True)
+        runner = SimpleNamespace(start_from_preset_file=Mock(return_value=True))
 
-        with patch("winws_runtime.runtime.start_workers.ensure_required_files_fast", return_value=True):
+        with (
+            patch("winws_runtime.runtime.preset_launch_service.ensure_required_files_fast", return_value=True),
+            patch("winws_runtime.runners.runner_factory.get_strategy_runner", return_value=runner),
+        ):
             worker.run()
 
         presets_feature.get_launch_snapshot.assert_called_once_with(
@@ -111,7 +114,7 @@ class StartupAutostartTests(unittest.TestCase):
             require_filters=False,
         )
         self.assertEqual(worker.selected_mode, selected_mode)
-        worker._start_presets_with_runner.assert_called_once_with(__file__, "Startup preset")
+        runner.start_from_preset_file.assert_called_once()
 
     def test_preset_autostart_dispatches_without_gui_thread_filter_validation(self) -> None:
         from winws_runtime.runtime.autostart import start_dpi_autostart
@@ -345,30 +348,27 @@ class StartupAutostartTests(unittest.TestCase):
         self.assertNotIn("path_cache_signature(preset_path)", source)
 
     def test_startup_worker_rejects_preset_without_enabled_profiles_before_stop(self) -> None:
-        from winws_runtime.runtime.start_workers import PresetLaunchStartWorker
+        from winws_runtime.runtime.preset_launch_service import PresetLaunchService
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             preset_path = Path(tmp_dir) / "only-skipped.txt"
             preset_path.write_text("--new\n--skip\n--filter-tcp=80\n", encoding="utf-8")
 
-            worker = PresetLaunchStartWorker(
-                {"is_preset_file": True, "preset_path": str(preset_path), "name": "Пресет"},
-                "zapret2_mode",
+            service = PresetLaunchService(
+                selected_mode={"is_preset_file": True, "preset_path": str(preset_path), "name": "Пресет"},
+                launch_method="zapret2_mode",
                 runtime_feature=SimpleNamespace(),
-                runtime_api=SimpleNamespace(),
+                runtime_api=SimpleNamespace(has_residual_processes=Mock(return_value=True)),
             )
 
-            ok = worker._validate_preset_before_stop(
-                is_preset_file=True,
-                preset_path=str(preset_path),
-                skip_stop=False,
-            )
+            result = service.run()
 
-        self.assertFalse(ok)
-        self.assertIn("нет включённых profile", worker._last_error_message)
+        self.assertFalse(result.success)
+        self.assertIn("нет включённых profile", result.error_message)
 
     def test_startup_worker_skips_pre_stop_validation_when_no_previous_process(self) -> None:
         from winws_runtime.runtime.start_workers import PresetLaunchStartWorker
+        from winws_runtime.runtime.preset_launch_service import PresetLaunchService
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             preset_path = Path(tmp_dir) / "ready.txt"
@@ -381,14 +381,21 @@ class StartupAutostartTests(unittest.TestCase):
                 runtime_api=SimpleNamespace(has_residual_processes=Mock(return_value=False)),
                 startup_autostart=True,
             )
-            worker._validate_preset_before_stop = Mock(return_value=True)
-            worker._start_presets_with_runner = Mock(return_value=True)
+            runner = SimpleNamespace(start_from_preset_file=Mock(return_value=True))
 
-            with patch("winws_runtime.runtime.start_workers.ensure_required_files_fast", return_value=True):
+            with (
+                patch("winws_runtime.runtime.preset_launch_service.ensure_required_files_fast", return_value=True),
+                patch("winws_runtime.runners.runner_factory.get_strategy_runner", return_value=runner),
+                patch.object(PresetLaunchService, "_validate_preset_before_stop", return_value=True) as validate,
+            ):
                 worker.run()
 
-        worker._validate_preset_before_stop.assert_not_called()
-        worker._start_presets_with_runner.assert_called_once_with(str(preset_path), "Пресет")
+        validate.assert_not_called()
+        runner.start_from_preset_file.assert_called_once_with(
+            str(preset_path),
+            "Пресет",
+            _stable_start_window_seconds=0.35,
+        )
 
     def test_startup_worker_checks_required_lists_before_preset_launch(self) -> None:
         from winws_runtime.runtime.start_workers import PresetLaunchStartWorker
@@ -404,38 +411,48 @@ class StartupAutostartTests(unittest.TestCase):
                 runtime_api=SimpleNamespace(has_residual_processes=Mock(return_value=False)),
                 startup_autostart=True,
             )
-            worker._start_presets_with_runner = Mock(return_value=True)
+            runner = SimpleNamespace(start_from_preset_file=Mock(return_value=True))
             calls: list[str] = []
 
-            with patch(
-                "winws_runtime.runtime.start_workers.ensure_required_files_fast",
-                side_effect=lambda: calls.append("lists") or True,
-                create=True,
+            with (
+                patch(
+                    "winws_runtime.runtime.preset_launch_service.ensure_required_files_fast",
+                    side_effect=lambda: calls.append("lists") or True,
+                ),
+                patch("winws_runtime.runners.runner_factory.get_strategy_runner", return_value=runner),
             ):
                 worker.run()
 
         self.assertEqual(calls, ["lists"])
-        worker._start_presets_with_runner.assert_called_once_with(str(preset_path), "Пресет")
+        runner.start_from_preset_file.assert_called_once_with(
+            str(preset_path),
+            "Пресет",
+            _stable_start_window_seconds=0.35,
+        )
 
     def test_startup_worker_uses_short_stable_window_for_autostart(self) -> None:
-        from winws_runtime.runtime.start_workers import PresetLaunchStartWorker
+        from winws_runtime.runtime.preset_launch_service import PresetLaunchService
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             preset_path = Path(tmp_dir) / "ready.txt"
             preset_path.write_text("--new\n--filter-tcp=80\n", encoding="utf-8")
 
-            worker = PresetLaunchStartWorker(
-                {"is_preset_file": True, "preset_path": str(preset_path), "name": "Пресет"},
-                "zapret2_mode",
+            service = PresetLaunchService(
+                selected_mode={"is_preset_file": True, "preset_path": str(preset_path), "name": "Пресет"},
+                launch_method="zapret2_mode",
                 runtime_feature=SimpleNamespace(),
-                runtime_api=SimpleNamespace(),
+                runtime_api=SimpleNamespace(has_residual_processes=Mock(return_value=False)),
                 startup_autostart=True,
             )
             runner = SimpleNamespace(start_from_preset_file=Mock(return_value=True))
 
-            with patch("winws_runtime.runners.runner_factory.get_strategy_runner", return_value=runner):
-                self.assertTrue(worker._start_presets_with_runner(str(preset_path), "Пресет"))
+            with (
+                patch("winws_runtime.runtime.preset_launch_service.ensure_required_files_fast", return_value=True),
+                patch("winws_runtime.runners.runner_factory.get_strategy_runner", return_value=runner),
+            ):
+                result = service.run()
 
+        self.assertTrue(result.success)
         kwargs = runner.start_from_preset_file.call_args.kwargs
         self.assertLess(kwargs["_stable_start_window_seconds"], 1.0)
 
