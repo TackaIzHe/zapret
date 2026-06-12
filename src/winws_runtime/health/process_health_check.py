@@ -13,45 +13,10 @@ from settings.mode import EXE_NAME_WINWS1
 from winws_runtime.runtime.system_ops import (
     aggressive_windivert_cleanup_runtime,
     force_kill_all_winws_processes,
-    kill_process_by_pid_runtime,
 )
 
 from utils.windows_event_log import get_recent_application_error_messages
 from utils.windows_process_probe import iter_process_records_winapi, iter_process_names_winapi, iter_uninstall_display_names
-
-# Список конфликтующих программ
-CONFLICTING_PROCESSES = {
-    'ProcessHacker.exe': {
-        'name': 'Process Hacker',
-        'reason': 'Перехватывает системные вызовы и блокирует WinDivert драйвер',
-        'solution': 'Закройте Process Hacker перед запуском DPI'
-    },
-    'procexp.exe': {
-        'name': 'Process Explorer',
-        'reason': 'Может конфликтовать с WinDivert драйвером',
-        'solution': 'Закройте Process Explorer перед запуском DPI'
-    },
-    'procexp64.exe': {
-        'name': 'Process Explorer (64-bit)',
-        'reason': 'Может конфликтовать с WinDivert драйвером',
-        'solution': 'Закройте Process Explorer перед запуском DPI'
-    },
-    'GoodbyeDPI.exe': {
-        'name': 'GoodbyeDPI',
-        'reason': 'Конфликт с другим DPI bypass инструментом',
-        'solution': 'Используйте только один DPI bypass инструмент'
-    },
-    'SpoofDPI.exe': {
-        'name': 'SpoofDPI',
-        'reason': 'Конфликт с другим DPI bypass инструментом',
-        'solution': 'Используйте только один DPI bypass инструмент'
-    },
-}
-
-_CONFLICTING_PROCESS_BY_NAME = {
-    str(exe_name or "").strip().lower(): dict(info or {})
-    for exe_name, info in CONFLICTING_PROCESSES.items()
-}
 
 _ANTIVIRUS_PRODUCT_MARKERS = (
     ("dr.web", "Dr.Web"),
@@ -298,37 +263,6 @@ def get_last_crash_info(process_name: str = EXE_NAME_WINWS1, minutes_back: int =
             lines.append(first_line)
     return "\n".join(lines) if lines else None
 
-def check_conflicting_processes() -> List[Dict[str, str]]:
-    """
-    Проверяет наличие конфликтующих процессов
-    
-    Returns:
-        List[Dict]: Список найденных конфликтующих процессов с информацией
-    """
-    found_conflicts = []
-    try:
-        for pid, proc_name in iter_process_records_winapi():
-            normalized = str(proc_name or "").strip().lower()
-            info = _CONFLICTING_PROCESS_BY_NAME.get(normalized)
-            if not info:
-                continue
-
-            found_conflicts.append({
-                'exe': normalized,
-                'name': info.get('name', normalized),
-                'reason': info.get('reason', ''),
-                'solution': info.get('solution', ''),
-                'pid': int(pid),
-            })
-            log(
-                f"⚠ Обнаружен конфликтующий процесс: {info.get('name', normalized)} ({normalized}, PID: {pid})",
-                "WARNING",
-            )
-    except Exception as e:
-        log(f"Ошибка WinAPI-проверки конфликтующих процессов: {e}", "DEBUG")
-
-    return found_conflicts
-
 def check_common_crash_causes(process_name: str = EXE_NAME_WINWS1) -> Optional[str]:
     """
     Проверяет типичные причины падения winws.exe
@@ -338,16 +272,21 @@ def check_common_crash_causes(process_name: str = EXE_NAME_WINWS1) -> Optional[s
     """
     suggestions = []
     
-    # ✅ ПРОВЕРКА 0: Конфликтующие процессы (ПЕРВЫМ ДЕЛОМ!)
-    conflicting = check_conflicting_processes()
-    if conflicting:
-        suggestions.append("🔴 ОБНАРУЖЕНЫ КОНФЛИКТУЮЩИЕ ПРОГРАММЫ:")
-        for conflict in conflicting:
-            pid_info = f" (PID: {conflict['pid']})" if conflict.get('pid') else ""
-            suggestions.append(f"   • {conflict['name']} ({conflict['exe']}{pid_info})")
-            suggestions.append(f"     Причина: {conflict['reason']}")
-            suggestions.append(f"     Решение: {conflict['solution']}")
-        suggestions.append("")
+    # Проверяем конфликтующие программы только после падения запуска.
+    try:
+        from winws_runtime.health.launch_conflicts import check_conflicting_processes
+
+        conflicting = check_conflicting_processes()
+        if conflicting:
+            suggestions.append("ОБНАРУЖЕНЫ КОНФЛИКТУЮЩИЕ ПРОГРАММЫ:")
+            for conflict in conflicting:
+                pid_info = f" (PID: {conflict['pid']})" if conflict.get('pid') else ""
+                suggestions.append(f"   • {conflict['name']} ({conflict['exe']}{pid_info})")
+                suggestions.append(f"     Причина: {conflict['reason']}")
+                suggestions.append(f"     Решение: {conflict['solution']}")
+            suggestions.append("")
+    except Exception:
+        pass
     
     # ✅ ПРОВЕРКА 1: Права администратора
     try:
@@ -417,77 +356,6 @@ def check_common_crash_causes(process_name: str = EXE_NAME_WINWS1) -> Optional[s
         return "\n".join(suggestions)
     
     return None
-
-def try_kill_conflicting_processes(auto_kill: bool = False) -> bool:
-    """
-    Пытается закрыть конфликтующие процессы
-    
-    Args:
-        auto_kill: Если True, закрывает процессы автоматически. Если False, только проверяет
-        
-    Returns:
-        bool: True если конфликтующих процессов не обнаружено или они успешно закрыты
-    """
-    conflicting = check_conflicting_processes()
-    
-    if not conflicting:
-        return True
-    
-    if not auto_kill:
-        log(f"Обнаружено конфликтующих процессов: {len(conflicting)}", "WARNING")
-        return False
-    
-    log("Попытка закрыть конфликтующие процессы...", "INFO")
-
-    success_count = 0
-    for conflict in conflicting:
-        try:
-            pid = int(conflict.get('pid') or 0)
-            if pid <= 0:
-                log(f"❌ У конфликтующего процесса {conflict['name']} нет корректного PID", "ERROR")
-                continue
-
-            if kill_process_by_pid_runtime(pid, wait_timeout_ms=5000):
-                log(f"✅ Процесс {conflict['name']} (PID {pid}) успешно закрыт через WinAPI", "SUCCESS")
-                success_count += 1
-            else:
-                log(f"❌ Не удалось закрыть {conflict['name']} (PID {pid}) через WinAPI", "ERROR")
-        except Exception as e:
-            log(f"Ошибка при закрытии {conflict['name']}: {e}", "ERROR")
-    
-    if success_count == len(conflicting):
-        log(f"Все конфликтующие процессы ({success_count}) успешно закрыты", "SUCCESS")
-        time.sleep(1)  # Даем системе время на очистку
-        return True
-    else:
-        log(f"Закрыто {success_count}/{len(conflicting)} конфликтующих процессов", "WARNING")
-        return False
-
-def get_conflicting_processes_report() -> str:
-    """
-    Генерирует отчет о конфликтующих процессах для отображения в UI
-    
-    Returns:
-        str: Отформатированный отчет
-    """
-    conflicting = check_conflicting_processes()
-    
-    if not conflicting:
-        return ""
-    
-    lines = ["⚠️ ОБНАРУЖЕНЫ КОНФЛИКТУЮЩИЕ ПРОГРАММЫ:", ""]
-    
-    for i, conflict in enumerate(conflicting, 1):
-        pid_info = f" (PID: {conflict['pid']})" if conflict.get('pid') else ""
-        lines.append(f"{i}. {conflict['name']}{pid_info}")
-        lines.append(f"   Файл: {conflict['exe']}")
-        lines.append(f"   Проблема: {conflict['reason']}")
-        lines.append(f"   Решение: {conflict['solution']}")
-        lines.append("")
-    
-    lines.append("Рекомендуется закрыть эти программы перед запуском DPI.")
-    
-    return "\n".join(lines)
 
 # ✅ НОВАЯ ФУНКЦИЯ: Проверка длины командной строки
 def validate_command_line_length(args: str) -> Tuple[bool, Optional[str]]:
@@ -579,14 +447,27 @@ def diagnose_startup_error(error: Exception, exe_path: str = None) -> str:
         except:
             pass
 
-        # Проверка 2: Антивирус блокирует
+        # Проверка 2: конфликтующая программа помешала WinDivert
+        try:
+            from winws_runtime.health.launch_conflicts import build_launch_conflict_advice
+
+            conflict_advice = build_launch_conflict_advice()
+            if conflict_advice is not None:
+                cause, solution = conflict_advice
+                diagnostics.append(f"❌ Причина: {cause}")
+                diagnostics.append(f"   Решение: {solution}")
+                return "\n".join(diagnostics)
+        except Exception:
+            pass
+
+        # Проверка 3: Антивирус блокирует
         av_blocking = _check_antivirus_blocking(exe_path)
         if av_blocking:
             diagnostics.append(f"❌ Причина: {av_blocking}")
             diagnostics.append("   Решение: Добавьте папку программы в исключения антивируса")
             return "\n".join(diagnostics)
 
-        # Проверка 3: Файл заблокирован другим процессом
+        # Проверка 4: Файл заблокирован другим процессом
         if exe_path and os.path.exists(exe_path):
             locked_by = _check_file_locked(exe_path)
             if locked_by:
@@ -594,7 +475,7 @@ def diagnose_startup_error(error: Exception, exe_path: str = None) -> str:
                 diagnostics.append("   Решение: Закройте указанный процесс или перезагрузите компьютер")
                 return "\n".join(diagnostics)
 
-        # Проверка 4: Предыдущий winws ещё работает
+        # Проверка 5: Предыдущий winws ещё работает
         running_winws = _check_winws_already_running()
         if running_winws:
             diagnostics.append(f"❌ Причина: Уже запущен процесс winws (PID: {running_winws})")
@@ -891,6 +772,19 @@ def _handle_access_denied(exit_code: int, stderr: str) -> WinDivertDiagnosis:
     except Exception:
         pass
     try:
+        from winws_runtime.health.launch_conflicts import build_launch_conflict_advice
+
+        conflict_advice = build_launch_conflict_advice()
+        if conflict_advice is not None:
+            cause, solution = conflict_advice
+            return WinDivertDiagnosis(
+                cause=cause,
+                solution=solution,
+                severity="critical",
+            )
+    except Exception:
+        pass
+    try:
         from winws_runtime.health.kaspersky_launch_advice import build_kaspersky_launch_advice
 
         advice = build_kaspersky_launch_advice(exe_name=EXE_NAME_WINWS1)
@@ -1113,6 +1007,17 @@ def _probe_service_disabled_cause() -> Tuple[str, str, Optional[str]]:
 
     # Check 6: Kaspersky after a real WinDivert start failure.
     try:
+        from winws_runtime.health.launch_conflicts import build_launch_conflict_advice
+
+        conflict_advice = build_launch_conflict_advice()
+        if conflict_advice is not None:
+            cause, solution = conflict_advice
+            return cause, solution, None
+    except Exception:
+        pass
+
+    # Check 7: Kaspersky after a real WinDivert start failure.
+    try:
         from winws_runtime.health.kaspersky_launch_advice import build_kaspersky_launch_advice
 
         advice = build_kaspersky_launch_advice(exe_name=EXE_NAME_WINWS1)
@@ -1121,7 +1026,7 @@ def _probe_service_disabled_cause() -> Tuple[str, str, Optional[str]]:
     except Exception:
         pass
 
-    # Check 7: Antivirus
+    # Check 8: Antivirus
     av = _detect_active_antivirus()
     if av:
         return (
@@ -1130,7 +1035,7 @@ def _probe_service_disabled_cause() -> Tuple[str, str, Optional[str]]:
             None,
         )
 
-    # Check 8: Network adapters. This check must be late because Win32 1058
+    # Check 9: Network adapters. This check must be late because Win32 1058
     # is a generic service-disabled error and otherwise easily turns into a
     # ложный диагноз про адаптеры.
     if not _check_network_adapters():

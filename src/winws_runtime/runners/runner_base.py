@@ -14,8 +14,7 @@ from .constants import SW_HIDE, CREATE_NO_WINDOW, STARTF_USESHOWWINDOW
 from .preset_runner_support import launch_args_from_preset_text, wait_for_process_exit
 from winws_runtime.health.process_health_check import (
     check_process_health, get_last_crash_info, check_common_crash_causes,
-    check_conflicting_processes, get_conflicting_processes_report, diagnose_startup_error,
-    diagnose_winws_exit,
+    diagnose_startup_error, diagnose_winws_exit,
 )
 from winws_runtime.runtime.system_ops import (
     aggressive_windivert_cleanup_runtime,

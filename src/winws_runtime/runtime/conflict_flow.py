@@ -6,7 +6,7 @@ from log.log import log
 from winws_runtime.runtime.notifications import notify_conflict_kill_failed, notify_conflicting_processes
 from winws_runtime.runtime.status_feedback import set_runtime_owner_status
 
-from winws_runtime.health.process_health_check import (
+from winws_runtime.health.launch_conflicts import (
     check_conflicting_processes,
     get_conflicting_processes_report,
     try_kill_conflicting_processes,
@@ -40,16 +40,7 @@ def show_conflict_kill_failed_infobar(runtime_owner, request_id: int) -> None:
 
 
 def handle_conflicting_processes_before_start(runtime_owner, selected_mode=None, launch_method=None) -> bool:
-    conflicting = check_conflicting_processes()
-    if not conflicting:
-        return True
-
-    report = get_conflicting_processes_report()
-    log(report, "WARNING")
-    request_id = store_pending_conflict_request(runtime_owner, selected_mode, launch_method)
-    show_conflicting_processes_infobar(runtime_owner, conflicting, request_id)
-    set_runtime_owner_status(runtime_owner, "⚠️ Обнаружены конфликтующие программы. Решите, как продолжить запуск.")
-    return False
+    return True
 
 
 def resume_start_after_conflict_resolution(runtime_owner, request_id: int, *, close_conflicts: bool) -> None:
