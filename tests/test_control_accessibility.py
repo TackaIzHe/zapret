@@ -6,9 +6,10 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt6.QtGui import QIcon
+from PyQt6.QtCore import QEvent, Qt
+from PyQt6.QtGui import QIcon, QKeyEvent
 from PyQt6.QtWidgets import QApplication, QWidget
-from qfluentwidgets import CaptionLabel, IndeterminateProgressBar, PrimaryPushButton, PushButton
+from qfluentwidgets import CaptionLabel, IndeterminateProgressBar, PrimaryPushButton, PushButton, PushSettingCard
 
 
 class _ButtonTarget:
@@ -203,6 +204,34 @@ class ControlAccessibilityTests(unittest.TestCase):
         self.assertEqual(card.button.accessibleName(), "Открыть тест соединения")
         self.assertIn("Проверить доступность сети", card.button.accessibleDescription())
         self.assertEqual(card.button.property("screenReaderStateText"), "Открыть тест соединения")
+
+    def test_push_setting_card_itself_works_from_keyboard(self) -> None:
+        from presets.ui.control.shared_builders import build_push_setting_card_common
+
+        opened: list[bool] = []
+        card = build_push_setting_card_common(
+            push_setting_card_cls=PushSettingCard,
+            button_text="Открыть",
+            icon=QIcon(),
+            title_text="Тест соединения",
+            content_text="Проверить доступность сети и состояние обхода",
+            on_click=lambda: opened.append(True),
+        )
+
+        self.assertEqual(card.accessibleName(), "Открыть тест соединения")
+        self.assertEqual(card.property("screenReaderStateText"), "Открыть тест соединения")
+        self.assertIn("Проверить доступность сети", card.accessibleDescription())
+        self.assertEqual(card.focusPolicy(), Qt.FocusPolicy.StrongFocus)
+
+        card.keyPressEvent(
+            QKeyEvent(
+                QEvent.Type.KeyPress,
+                Qt.Key.Key_Return,
+                Qt.KeyboardModifier.NoModifier,
+            )
+        )
+
+        self.assertEqual(opened, [True])
 
     def test_winws1_language_refresh_updates_control_button_screen_reader_names(self) -> None:
         from presets.ui.control.zapret1.runtime_helpers import apply_winws1_pages_language

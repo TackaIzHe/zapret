@@ -10,7 +10,7 @@ from qfluentwidgets import CardWidget, FluentIcon
 
 from presets.ui.control.control_page_runtime_shared import set_button_text_accessibility
 from ui.pulsing_dot import PulsingDot
-from ui.accessibility import set_control_accessibility, set_state_text
+from ui.accessibility import enable_keyboard_click, set_control_accessibility, set_state_text
 from ui.theme import get_themed_qta_icon
 
 
@@ -258,6 +258,10 @@ def build_push_setting_card_common(
         parent,
     )
     card.setProperty("noDrag", True)
+    accessible_name = button_accessible_name or _push_setting_button_accessible_name(button_text, title_text)
+    set_state_text(card, accessible_name)
+    set_control_accessibility(card, name=accessible_name, description=content_text)
+    enable_keyboard_click(card)
     button = getattr(card, "button", None)
     if button is not None:
         if hasattr(button_icon_name, "icon"):
@@ -267,7 +271,7 @@ def build_push_setting_card_common(
         set_button_text_accessibility(
             button,
             button_text,
-            accessible_name=button_accessible_name or _push_setting_button_accessible_name(button_text, title_text),
+            accessible_name=accessible_name,
             description=content_text,
         )
     card.clicked.connect(on_click)
