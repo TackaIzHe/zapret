@@ -209,11 +209,6 @@ def build_user_presets_page_shell(
     presets_list.setDropIndicatorShown(False)
     presets_list.setDefaultDropAction(Qt.DropAction.MoveAction)
     presets_list.setDragDropMode(QListView.DragDropMode.DragDrop)
-    apply_user_presets_accessibility(
-        tr_fn=tr_fn,
-        tr_prefix=tr_prefix,
-        presets_list=presets_list,
-    )
 
     presets_model = PresetListModel(presets_list)
     presets_delegate = PresetListDelegate(
@@ -224,6 +219,11 @@ def build_user_presets_page_shell(
     presets_delegate.set_ui_language(ui_language)
     presets_delegate.action_triggered.connect(on_preset_list_action)
     presets_list.setModel(presets_model)
+    apply_user_presets_accessibility(
+        tr_fn=tr_fn,
+        tr_prefix=tr_prefix,
+        presets_list=presets_list,
+    )
     presets_list.setItemDelegate(presets_delegate)
     presets_list.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
     presets_list.setFrameShape(QFrame.Shape.NoFrame)

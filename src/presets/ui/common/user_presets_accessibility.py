@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ui.accessibility import set_control_accessibility
+from ui.accessibility import set_control_accessibility, set_state_text
 
 
 def apply_user_presets_accessibility(
@@ -89,6 +89,8 @@ def apply_user_presets_accessibility(
     )
     try:
         presets_list.set_screen_reader_list_name(list_name)
+        if not presets_list.currentIndex().isValid():
+            set_state_text(presets_list, f"{list_name}: список пока загружается")
     except Exception:
         pass
 

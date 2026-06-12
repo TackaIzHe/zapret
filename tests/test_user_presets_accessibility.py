@@ -362,7 +362,7 @@ class UserPresetsAccessibilityTests(unittest.TestCase):
             widgets.info_btn: ("Показать справку о пресетах", "Что это такое"),
             widgets.preset_search_input: ("Поиск пресетов", "Поиск пресетов по имени"),
             widgets.presets_list: (
-                "Список пользовательских пресетов",
+                "Список пользовательских пресетов: список пока загружается",
                 "Стрелки выбирают пресет или папку, Enter активирует пресет или сворачивает и разворачивает папку, PageUp и PageDown перемещают пресет, клавиша меню открывает действия",
             ),
         }
@@ -374,6 +374,10 @@ class UserPresetsAccessibilityTests(unittest.TestCase):
         search_description = widgets.preset_search_input.accessibleDescription()
         self.assertIn("После ввода перейдите в список клавишей Tab", search_description)
         self.assertIn("выберите пресет стрелками вверх и вниз", search_description)
+        self.assertEqual(
+            widgets.presets_list.property("screenReaderStateText"),
+            "Список пользовательских пресетов: список пока загружается",
+        )
 
 
 if __name__ == "__main__":
