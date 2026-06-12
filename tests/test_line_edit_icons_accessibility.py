@@ -35,6 +35,7 @@ class LineEditIconsAccessibilityTests(unittest.TestCase):
         )
         self.assertIsNotNone(clear_button)
         self.assertEqual(clear_button.accessibleName(), "Очистить поле ввода")
+        self.assertEqual(clear_button.property("screenReaderStateText"), "Очистить поле ввода")
         self.assertIn("удаляет введенный текст", clear_button.accessibleDescription().lower())
 
 

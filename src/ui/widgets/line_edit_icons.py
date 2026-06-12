@@ -11,7 +11,7 @@ from PyQt6.QtCore import QObject, QSize, Qt, QTimer, QEvent
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QLineEdit, QToolButton
 
-from ui.accessibility import set_control_accessibility
+from ui.accessibility import set_control_accessibility, set_state_text
 from ui.theme import get_theme_tokens, get_cached_qta_pixmap
 
 
@@ -83,6 +83,7 @@ class _ClearButtonUpdater(QObject):
                 name="Очистить поле ввода",
                 description="Удаляет введенный текст из этого поля.",
             )
+            set_state_text(btn, "Очистить поле ввода")
             btn.setStyleSheet(f"""
                 QToolButton#qt_clear_button {{
                     background: transparent;
