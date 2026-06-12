@@ -21,7 +21,7 @@
 - Возможность прописать кастомные DNS сервера (против атак провайдеров типа подмены ДНС)
 - Блокирует установку национального мессенджера `Max`
 
-<img width="1150" height="979" alt="изображение" src="https://github.com/user-attachments/assets/51ce8fb3-6c87-4e5d-951e-6bc18bb2606f" />
+<img width="313" height="183" alt="image" src="https://github.com/user-attachments/assets/c10ee0f7-071e-4c40-bce2-577d40c19691" />
 
 > [!IMPORTANT]  
 > Есть вопросы? Задай их здесь на нашем форуме https://t.me/bypassblock/1359 или же в группе https://t.me/youtubenotwork или https://discord.gg/kkcBDG2uws
