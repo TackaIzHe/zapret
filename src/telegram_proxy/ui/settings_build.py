@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
 from qfluentwidgets import FluentIcon
 
-from ui.accessibility import set_control_accessibility
+from ui.accessibility import remove_line_edit_buttons_from_tab_order, set_control_accessibility
 from ui.fluent_widgets import (
     SettingsCard,
     QuickActionsBar,
@@ -243,6 +243,7 @@ def build_telegram_proxy_settings_panel(
     host_edit.setText("127.0.0.1")
     host_edit.setPlaceholderText("127.0.0.1")
     host_edit.setClearButtonEnabled(True)
+    remove_line_edit_buttons_from_tab_order(host_edit)
     set_tooltip(
         host_edit,
         "IP-адрес для прослушивания. 127.0.0.1 — только локально, "
@@ -409,6 +410,7 @@ def build_telegram_proxy_advanced_settings_panel(
     mtproxy_secret_edit.setMinimumWidth(280)
     mtproxy_secret_edit.setPlaceholderText("32 символа: 0-9 и a-f")
     mtproxy_secret_edit.setClearButtonEnabled(True)
+    remove_line_edit_buttons_from_tab_order(mtproxy_secret_edit)
     set_tooltip(mtproxy_secret_edit, "Секрет MTProxy. Telegram использует его как ключ подключения.")
     set_control_accessibility(
         mtproxy_secret_edit,
@@ -440,6 +442,7 @@ def build_telegram_proxy_advanced_settings_panel(
     fake_tls_domain_edit.setMinimumWidth(280)
     fake_tls_domain_edit.setPlaceholderText("front.example.com")
     fake_tls_domain_edit.setClearButtonEnabled(True)
+    remove_line_edit_buttons_from_tab_order(fake_tls_domain_edit)
     set_tooltip(fake_tls_domain_edit, "Домен для MTProxy Fake TLS. Оставьте пустым, если Fake TLS не нужен.")
     set_control_accessibility(
         fake_tls_domain_edit,
@@ -511,6 +514,7 @@ def build_telegram_proxy_advanced_settings_panel(
     upstream_host_edit.setMinimumWidth(250)
     upstream_host_edit.setPlaceholderText("192.168.1.100 или proxy.example.com")
     upstream_host_edit.setClearButtonEnabled(True)
+    remove_line_edit_buttons_from_tab_order(upstream_host_edit)
     set_control_accessibility(
         upstream_host_edit,
         name="Хост upstream-прокси Telegram Proxy",
@@ -602,6 +606,7 @@ def build_telegram_proxy_advanced_settings_panel(
     cloudflare_domains_edit.setMinimumWidth(320)
     cloudflare_domains_edit.setPlaceholderText("Пусто = авто, или example.com, backup.example.com")
     cloudflare_domains_edit.setClearButtonEnabled(True)
+    remove_line_edit_buttons_from_tab_order(cloudflare_domains_edit)
     set_tooltip(cloudflare_domains_edit, "Cloudflare-домены для запасного WSS-пути. Оставьте пустым для авто-списка.")
     set_control_accessibility(
         cloudflare_domains_edit,
@@ -651,6 +656,7 @@ def build_telegram_proxy_advanced_settings_panel(
     cloudflare_worker_domains_edit.setMinimumWidth(320)
     cloudflare_worker_domains_edit.setPlaceholderText("worker-name.workers.dev")
     cloudflare_worker_domains_edit.setClearButtonEnabled(True)
+    remove_line_edit_buttons_from_tab_order(cloudflare_worker_domains_edit)
     set_tooltip(cloudflare_worker_domains_edit, "Домены Cloudflare Worker для отдельного запасного пути.")
     set_control_accessibility(
         cloudflare_worker_domains_edit,
@@ -692,6 +698,7 @@ def build_telegram_proxy_advanced_settings_panel(
     dc_ip_edit.setMinimumWidth(360)
     dc_ip_edit.setPlaceholderText("4:149.154.167.220, 5:91.108.56.100")
     dc_ip_edit.setClearButtonEnabled(True)
+    remove_line_edit_buttons_from_tab_order(dc_ip_edit)
     set_tooltip(dc_ip_edit, "Ручные адреса дата-центров Telegram. Формат: номер:IP, через запятую.")
     set_control_accessibility(
         dc_ip_edit,

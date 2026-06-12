@@ -25,6 +25,7 @@ from telegram_proxy.ui.build import (
     build_telegram_proxy_shell,
 )
 from telegram_proxy.ui.settings_build import build_telegram_proxy_advanced_settings_panel
+from telegram_proxy.ui.settings_build import build_telegram_proxy_settings_panel
 from telegram_proxy.ui.proxy_runtime_workflow import apply_status_changed
 from telegram_proxy.ui.proxy_runtime_workflow import restart_proxy_if_running
 from telegram_proxy.ui.runtime_helpers import refresh_status_texts
@@ -260,6 +261,81 @@ class TelegramProxyAccessibilityTests(unittest.TestCase):
         self.assertIn("номер дата-центра и IP", widgets.dc_ip_edit.accessibleDescription())
         self.assertEqual(widgets.pool_size_spin.accessibleName(), "Пул WSS Telegram Proxy")
         self.assertEqual(widgets.buffer_kb_spin.accessibleName(), "Размер буфера Telegram Proxy")
+
+    def test_settings_clear_buttons_do_not_take_tab_focus(self) -> None:
+        parent = QWidget()
+        self.addCleanup(parent.deleteLater)
+        layout = QVBoxLayout(parent)
+        main_widgets = build_telegram_proxy_settings_panel(
+            layout,
+            content_parent=parent,
+            status_dot_cls=QLabel,
+            strong_body_label_cls=StrongBodyLabel,
+            caption_label_cls=CaptionLabel,
+            body_label_cls=BodyLabel,
+            push_button_cls=PushButton,
+            primary_push_button_cls=PrimaryPushButton,
+            setting_card_group_cls=SettingCardGroup,
+            line_edit_cls=LineEdit,
+            spin_box_cls=SpinBox,
+            password_line_edit_cls=PasswordLineEdit,
+            win11_toggle_row_cls=Win11ToggleRow,
+            win11_combo_row_cls=Win11ComboRow,
+            on_toggle_proxy=lambda: None,
+            on_open_in_telegram=lambda: None,
+            on_copy_link=lambda: None,
+            on_open_mtproxy=lambda: None,
+            on_generate_mtproxy_secret=lambda: None,
+            on_copy_fake_tls_nginx_config=lambda: None,
+            on_test_cloudflare=lambda: None,
+            on_copy_cloudflare_dns=lambda: None,
+            on_test_cloudflare_worker=lambda: None,
+            on_copy_cloudflare_worker_code=lambda: None,
+            upstream_catalog={"manual": "Manual"},
+        )
+        advanced_widgets = build_telegram_proxy_advanced_settings_panel(
+            layout,
+            content_parent=parent,
+            strong_body_label_cls=StrongBodyLabel,
+            caption_label_cls=CaptionLabel,
+            body_label_cls=BodyLabel,
+            push_button_cls=PushButton,
+            setting_card_group_cls=SettingCardGroup,
+            line_edit_cls=LineEdit,
+            spin_box_cls=SpinBox,
+            password_line_edit_cls=PasswordLineEdit,
+            win11_toggle_row_cls=Win11ToggleRow,
+            win11_combo_row_cls=Win11ComboRow,
+            on_open_mtproxy=lambda: None,
+            on_generate_mtproxy_secret=lambda: None,
+            on_copy_fake_tls_nginx_config=lambda: None,
+            on_test_cloudflare=lambda: None,
+            on_copy_cloudflare_dns=lambda: None,
+            on_test_cloudflare_worker=lambda: None,
+            on_copy_cloudflare_worker_code=lambda: None,
+            upstream_catalog={"manual": "Manual"},
+        )
+        line_edits = (
+            main_widgets.host_edit,
+            advanced_widgets.mtproxy_secret_edit,
+            advanced_widgets.fake_tls_domain_edit,
+            advanced_widgets.upstream_host_edit,
+            advanced_widgets.cloudflare_domains_edit,
+            advanced_widgets.cloudflare_worker_domains_edit,
+            advanced_widgets.dc_ip_edit,
+        )
+
+        for line_edit in line_edits:
+            line_edit.setText("example")
+            buttons = [
+                child
+                for child in line_edit.findChildren(object)
+                if str(getattr(child, "objectName", lambda: "")() or "") == "lineEditButton"
+                and hasattr(child, "setFocusPolicy")
+            ]
+
+            self.assertTrue(buttons)
+            self.assertTrue(all(button.focusPolicy() == Qt.FocusPolicy.NoFocus for button in buttons))
 
     def test_upstream_catalog_refresh_updates_menu_item_accessibility(self) -> None:
         row = Win11ComboRow(
