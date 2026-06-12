@@ -121,11 +121,15 @@ def build_telegram_proxy_logs_panel(
     on_open_log_file,
     on_clear_logs,
 ) -> TelegramProxyLogsWidgets:
+    def _set_action_accessibility(widget, *, name: str, description: str) -> None:
+        set_control_accessibility(widget, name=name, description=description)
+        set_state_text(widget, name)
+
     toolbar = QHBoxLayout()
     toolbar.setSpacing(8)
 
     btn_copy_logs = push_button_cls("Копировать все", icon=FluentIcon.COPY)
-    set_control_accessibility(
+    _set_action_accessibility(
         btn_copy_logs,
         name="Копировать лог Telegram Proxy",
         description="Копирует весь лог Telegram Proxy в буфер обмена.",
@@ -134,7 +138,7 @@ def build_telegram_proxy_logs_panel(
     toolbar.addWidget(btn_copy_logs)
 
     btn_open_log_file = push_button_cls("Открыть файл лога", icon=FluentIcon.DOCUMENT)
-    set_control_accessibility(
+    _set_action_accessibility(
         btn_open_log_file,
         name="Открыть файл лога Telegram Proxy",
         description="Открывает файл с полным логом Telegram Proxy.",
@@ -143,7 +147,7 @@ def build_telegram_proxy_logs_panel(
     toolbar.addWidget(btn_open_log_file)
 
     btn_clear_logs = push_button_cls("Очистить", icon=FluentIcon.ERASE_TOOL)
-    set_control_accessibility(
+    _set_action_accessibility(
         btn_clear_logs,
         name="Очистить лог Telegram Proxy",
         description="Очищает видимый лог Telegram Proxy на этой странице.",
@@ -183,12 +187,16 @@ def build_telegram_proxy_diag_panel(
     on_run_diagnostics,
     on_copy_diag,
 ) -> TelegramProxyDiagWidgets:
+    def _set_action_accessibility(widget, *, name: str, description: str) -> None:
+        set_control_accessibility(widget, name=name, description=description)
+        set_state_text(widget, name)
+
     desc = caption_label_cls(
         "Проверка соединений к Telegram DC, WSS relay эндпоинтов (kws1-kws5), "
         "SOCKS5 прокси и определение типа блокировки."
     )
     desc.setWordWrap(True)
-    set_control_accessibility(
+    _set_action_accessibility(
         desc,
         name="Описание диагностики Telegram Proxy",
         description=desc.text(),
@@ -199,7 +207,7 @@ def build_telegram_proxy_diag_panel(
     toolbar.setSpacing(8)
 
     btn_run_diag = primary_push_button_cls("Запустить диагностику", icon=FluentIcon.DEVELOPER_TOOLS)
-    set_control_accessibility(
+    _set_action_accessibility(
         btn_run_diag,
         name="Запустить диагностику Telegram Proxy",
         description="Проверяет соединения к Telegram DC, WSS relay, SOCKS5 прокси и тип блокировки.",
@@ -208,7 +216,7 @@ def build_telegram_proxy_diag_panel(
     toolbar.addWidget(btn_run_diag)
 
     btn_copy_diag = push_button_cls("Копировать результат", icon=FluentIcon.COPY)
-    set_control_accessibility(
+    _set_action_accessibility(
         btn_copy_diag,
         name="Копировать результат диагностики Telegram Proxy",
         description="Копирует результат диагностики Telegram Proxy в буфер обмена.",

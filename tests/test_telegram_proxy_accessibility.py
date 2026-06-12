@@ -110,10 +110,16 @@ class TelegramProxyAccessibilityTests(unittest.TestCase):
         )
 
         self.assertEqual(widgets.btn_copy_logs.accessibleName(), "Копировать лог Telegram Proxy")
+        self.assertEqual(widgets.btn_copy_logs.property("screenReaderStateText"), "Копировать лог Telegram Proxy")
         self.assertIn("копирует весь лог", widgets.btn_copy_logs.accessibleDescription().lower())
         self.assertEqual(widgets.btn_open_log_file.accessibleName(), "Открыть файл лога Telegram Proxy")
+        self.assertEqual(
+            widgets.btn_open_log_file.property("screenReaderStateText"),
+            "Открыть файл лога Telegram Proxy",
+        )
         self.assertIn("открывает файл", widgets.btn_open_log_file.accessibleDescription().lower())
         self.assertEqual(widgets.btn_clear_logs.accessibleName(), "Очистить лог Telegram Proxy")
+        self.assertEqual(widgets.btn_clear_logs.property("screenReaderStateText"), "Очистить лог Telegram Proxy")
         self.assertIn("очищает видимый лог", widgets.btn_clear_logs.accessibleDescription().lower())
         self.assertEqual(widgets.log_edit.accessibleName(), "Лог Telegram Proxy: пока нет событий подключений")
         self.assertIn("события подключений", widgets.log_edit.accessibleDescription())
@@ -133,10 +139,22 @@ class TelegramProxyAccessibilityTests(unittest.TestCase):
         )
 
         self.assertEqual(widgets.diag_desc_label.accessibleName(), "Описание диагностики Telegram Proxy")
+        self.assertEqual(
+            widgets.diag_desc_label.property("screenReaderStateText"),
+            "Описание диагностики Telegram Proxy",
+        )
         self.assertIn("Telegram DC", widgets.diag_desc_label.accessibleDescription())
         self.assertEqual(widgets.btn_run_diag.accessibleName(), "Запустить диагностику Telegram Proxy")
+        self.assertEqual(
+            widgets.btn_run_diag.property("screenReaderStateText"),
+            "Запустить диагностику Telegram Proxy",
+        )
         self.assertIn("проверяет соединения", widgets.btn_run_diag.accessibleDescription().lower())
         self.assertEqual(widgets.btn_copy_diag.accessibleName(), "Копировать результат диагностики Telegram Proxy")
+        self.assertEqual(
+            widgets.btn_copy_diag.property("screenReaderStateText"),
+            "Копировать результат диагностики Telegram Proxy",
+        )
         self.assertIn("копирует результат", widgets.btn_copy_diag.accessibleDescription().lower())
         self.assertEqual(
             widgets.diag_edit.accessibleName(),
