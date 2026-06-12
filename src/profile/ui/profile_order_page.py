@@ -500,9 +500,6 @@ class ProfileOrderPageBase(BasePage):
             self._order_move_reload_required = False
             self._reload_order_profiles(force=True)
             return
-        if applied_locally:
-            self._order_payload_dirty = False
-            return
         if result_key:
             self._reload_order_profiles(force=True)
 

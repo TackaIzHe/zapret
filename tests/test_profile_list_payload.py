@@ -1030,6 +1030,43 @@ class ProfileListPayloadTests(unittest.TestCase):
         self.assertLess(store.text.index("--name=Telegram"), store.text.index("--name=YouTube"))
         self.assertLess(store.text.index("--name=YouTube"), store.text.index("--name=Discord"))
 
+    def test_preset_order_move_preserves_new_line_name_when_profile_becomes_first(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            templates_dir = root / "profile" / "templates"
+            templates_dir.mkdir(parents=True)
+            (templates_dir / "all_profiles.txt").write_text("", encoding="utf-8")
+            store = _PresetStore(
+                "\n".join(
+                    (
+                        "--name=YouTube",
+                        "--filter-tcp=80,443",
+                        "--hostlist=lists/youtube.txt",
+                        "--lua-desync=pass",
+                        "",
+                        "--new=Discord",
+                        "--filter-tcp=443",
+                        "--hostlist=lists/discord.txt",
+                        "--lua-desync=fake",
+                        "",
+                    )
+                )
+            )
+            feature = SimpleNamespace(
+                _presets_feature=store,
+                _app_paths=AppPaths(user_root=root, local_root=root),
+            )
+
+            with patch("settings.store.MAIN_DIRECTORY", str(root)):
+                service = ProfilePresetService(feature, "zapret2_mode")
+                youtube, discord = service.list_preset_order_profiles().items
+                service.move_preset_profile_before(discord.key, youtube.key)
+                moved_payload = service.list_preset_order_profiles()
+
+        self.assertEqual([item.profile_name for item in moved_payload.items], ["Discord", "YouTube"])
+        self.assertIn("--name=Discord", store.text)
+        self.assertLess(store.text.index("--name=Discord"), store.text.index("--hostlist=lists/discord.txt"))
+
     def test_preset_order_move_uses_exact_row_key_for_duplicate_profiles(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

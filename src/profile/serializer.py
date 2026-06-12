@@ -382,6 +382,7 @@ def _ensure_profile_boundaries(preset: Preset) -> None:
     for index, profile in enumerate(preset.profiles):
         if index == 0:
             _remove_leading_blank_segments(profile)
+            _ensure_profile_name_directive(profile)
             profile.new_line = ""
             continue
         if _profile_has_name_directive(profile):
@@ -389,6 +390,18 @@ def _ensure_profile_boundaries(preset: Preset) -> None:
             continue
         name = str(profile.name or profile.display_name or f"profile {index + 1}").strip() or f"profile {index + 1}"
         profile.new_line = f"--new={name}"
+
+
+def _ensure_profile_name_directive(profile: Profile) -> None:
+    if _profile_has_name_directive(profile):
+        return
+    name = str(profile.name or "").strip()
+    if not name:
+        return
+    profile.segments.insert(
+        _directive_insert_index(profile),
+        ProfileSegment(kind="directive", text=f"--name={name}", name="--name", value=name),
+    )
 
 
 def _profile_has_name_directive(profile: Profile) -> bool:
