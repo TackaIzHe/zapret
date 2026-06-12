@@ -31,8 +31,10 @@ class Zapret2PresetDialogAccessibilityTests(unittest.TestCase):
         self.assertEqual(dialog.name_edit.accessibleName(), "Название нового preset")
         self.assertIn("Введите название", dialog.name_edit.accessibleDescription())
         self.assertEqual(dialog.yesButton.accessibleName(), "Создать preset")
+        self.assertEqual(dialog.yesButton.property("screenReaderStateText"), "Создать preset")
         self.assertIn("Создаёт новый preset", dialog.yesButton.accessibleDescription())
         self.assertEqual(dialog.cancelButton.accessibleName(), "Отменить создание preset")
+        self.assertEqual(dialog.cancelButton.property("screenReaderStateText"), "Отменить создание preset")
 
         self.assertFalse(dialog.validate())
 
@@ -53,8 +55,10 @@ class Zapret2PresetDialogAccessibilityTests(unittest.TestCase):
         self.assertEqual(dialog.name_edit.accessibleName(), "Новое название preset")
         self.assertIn("Текущее имя: Дом", dialog.name_edit.accessibleDescription())
         self.assertEqual(dialog.yesButton.accessibleName(), "Переименовать preset")
+        self.assertEqual(dialog.yesButton.property("screenReaderStateText"), "Переименовать preset")
         self.assertIn("Меняет имя preset", dialog.yesButton.accessibleDescription())
         self.assertEqual(dialog.cancelButton.accessibleName(), "Отменить переименование preset")
+        self.assertEqual(dialog.cancelButton.property("screenReaderStateText"), "Отменить переименование preset")
 
 
 if __name__ == "__main__":

@@ -116,22 +116,26 @@ class PresetNameDialog(MessageBoxBase):
             _tr_dialog(self._ui_language, "page.winws2_profile_setup.preset_dialog.button.cancel", "Отмена")
         )
         if mode == "rename":
+            set_state_text(self.yesButton, "Переименовать preset")
             set_control_accessibility(
                 self.yesButton,
                 name="Переименовать preset",
                 description="Меняет имя preset.",
             )
+            set_state_text(self.cancelButton, "Отменить переименование preset")
             set_control_accessibility(
                 self.cancelButton,
                 name="Отменить переименование preset",
                 description="Закрывает диалог без переименования preset.",
             )
         else:
+            set_state_text(self.yesButton, "Создать preset")
             set_control_accessibility(
                 self.yesButton,
                 name="Создать preset",
                 description="Создаёт новый preset.",
             )
+            set_state_text(self.cancelButton, "Отменить создание preset")
             set_control_accessibility(
                 self.cancelButton,
                 name="Отменить создание preset",
