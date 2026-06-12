@@ -67,6 +67,7 @@ def set_control_accessibility(
     set_accessible_name(widget, name)
     if description is not None:
         set_accessible_description(widget, description)
+    _sync_spinbox_children_accessibility(widget, name=name, description=description)
 
 
 def set_state_text(widget, text: object) -> None:
@@ -76,6 +77,7 @@ def set_state_text(widget, text: object) -> None:
     if not value:
         return
     set_accessible_name(widget, value)
+    _sync_spinbox_children_accessibility(widget, name=value, description=None)
     try:
         if _clean_text(widget.property("screenReaderStateText")) == value:
             return
@@ -85,6 +87,38 @@ def set_state_text(widget, text: object) -> None:
         widget.setProperty("screenReaderStateText", value)
     except Exception:
         pass
+
+
+def _sync_spinbox_children_accessibility(
+    widget,
+    *,
+    name: object | None,
+    description: object | None,
+) -> None:
+    value = _clean_text(name)
+    if widget is None or not value:
+        return
+    try:
+        children = widget.findChildren(object)
+    except Exception:
+        return
+    for child in children:
+        try:
+            object_name = str(child.objectName() or "")
+        except Exception:
+            object_name = ""
+        child_type = type(child).__name__
+        if object_name == "qt_spinbox_lineedit":
+            set_accessible_name(child, value)
+            if description is not None:
+                set_accessible_description(child, description)
+            continue
+        if child_type != "SpinButton":
+            continue
+        try:
+            child.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        except Exception:
+            pass
 
 
 def set_item_accessible_text(item, text: object, *, description: object | None = None) -> None:

@@ -90,6 +90,35 @@ class AccessibilityHelpersTests(unittest.TestCase):
         self.assertEqual(widget.accessible_name, "Остановить Zapret")
         self.assertEqual(widget.accessible_description, "Останавливает запущенный процесс обхода блокировок.")
 
+    def test_set_control_accessibility_names_spinbox_inner_field_and_skips_buttons(self) -> None:
+        from PyQt6.QtCore import Qt
+        from qfluentwidgets import SpinBox
+
+        from ui.accessibility import set_control_accessibility
+
+        spinbox = SpinBox()
+        self.addCleanup(spinbox.deleteLater)
+
+        set_control_accessibility(
+            spinbox,
+            name="Номер стратегии, выбрано: 3",
+            description="Стрелками вверх и вниз можно изменить номер стратегии.",
+        )
+
+        line_edit = spinbox.findChild(object, "qt_spinbox_lineedit")
+        buttons = [
+            child
+            for child in spinbox.findChildren(object)
+            if type(child).__name__ == "SpinButton"
+            and hasattr(child, "setFocusPolicy")
+        ]
+
+        self.assertIsNotNone(line_edit)
+        self.assertEqual(line_edit.accessibleName(), "Номер стратегии, выбрано: 3")
+        self.assertIn("Стрелками вверх и вниз", line_edit.accessibleDescription())
+        self.assertTrue(buttons)
+        self.assertTrue(all(button.focusPolicy() == Qt.FocusPolicy.NoFocus for button in buttons))
+
     def test_set_state_text_marks_text_status_for_screen_reader(self) -> None:
         from ui.accessibility import set_state_text
 
