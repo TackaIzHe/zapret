@@ -15,6 +15,7 @@ from ui.pages.about_page_accessibility import apply_about_buttons_accessibility
 from ui.pages.about_page_about_build import (
     build_about_page_about_content,
     set_about_version_accessibility,
+    set_subscription_description_accessibility,
     set_subscription_status_accessibility,
 )
 from ui.pages.about_page_help_build import build_about_page_help_content
@@ -267,6 +268,7 @@ class AboutPage(BasePage):
                     default="Подписка Zapret Premium открывает доступ к дополнительным темам, приоритетной поддержке и VPN-сервису.",
                 )
             )
+            set_subscription_description_accessibility(self.sub_desc_label, self.sub_desc_label.text())
             self.premium_btn.setText(
                 tr_catalog("page.about.button.premium_vpn", language=self._ui_language, default="Premium и VPN")
             )

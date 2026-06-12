@@ -47,6 +47,13 @@ def set_subscription_status_accessibility(label, text: object) -> None:
     set_state_text(label, f"Статус подписки: {value}")
 
 
+def set_subscription_description_accessibility(label, text: object) -> None:
+    value = " ".join(str(text or "").strip().split())
+    if not value:
+        return
+    set_state_text(label, f"Описание подписки: {value}")
+
+
 def set_about_version_accessibility(app_name_label, version_label, *, app_name: object, app_version: object) -> None:
     app_name_value = " ".join(str(app_name or "").strip().split())
     app_version_value = " ".join(str(app_version or "").strip().split())
@@ -141,6 +148,7 @@ def build_about_page_about_content(
         )
     )
     sub_desc_label.setWordWrap(True)
+    set_subscription_description_accessibility(sub_desc_label, sub_desc_label.text())
     sub_layout.addWidget(sub_desc_label)
 
     sub_btns = QHBoxLayout()
