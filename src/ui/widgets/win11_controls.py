@@ -495,7 +495,38 @@ class Win11RadioOption(QWidget):
             self.clicked.emit()
             event.accept()
             return
+        if event.key() in (Qt.Key.Key_Up, Qt.Key.Key_Left, Qt.Key.Key_Down, Qt.Key.Key_Right):
+            direction = -1 if event.key() in (Qt.Key.Key_Up, Qt.Key.Key_Left) else 1
+            if self._activate_neighbor_option(direction):
+                event.accept()
+                return
         super().keyPressEvent(event)
+
+    def _activate_neighbor_option(self, direction: int) -> bool:
+        options = self._radio_options_in_layout()
+        if not options or self not in options:
+            return False
+        current_index = options.index(self)
+        next_index = current_index + int(direction)
+        if next_index < 0 or next_index >= len(options):
+            return False
+        option = options[next_index]
+        option.setFocus(Qt.FocusReason.TabFocusReason)
+        option.clicked.emit()
+        return True
+
+    def _radio_options_in_layout(self) -> list["Win11RadioOption"]:
+        parent = self.parentWidget()
+        layout = parent.layout() if parent is not None else None
+        if layout is None:
+            return []
+        options: list[Win11RadioOption] = []
+        for index in range(layout.count()):
+            item = layout.itemAt(index)
+            widget = item.widget() if item is not None else None
+            if isinstance(widget, Win11RadioOption) and widget.isEnabled():
+                options.append(widget)
+        return options
 
     def paintEvent(self, event):
         painter = QPainter(self)

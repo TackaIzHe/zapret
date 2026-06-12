@@ -9,7 +9,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtCore import QEvent, Qt
 from PyQt6.QtGui import QIcon, QKeyEvent, QPixmap
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QVBoxLayout, QWidget
 
 
 class _TextLabel:
@@ -359,6 +359,35 @@ class Win11ToggleRowTests(unittest.TestCase):
         QApplication.sendEvent(option, event)
 
         clicked.assert_called_once()
+
+    def test_radio_option_arrow_keys_activate_neighbor_option(self) -> None:
+        from ui.widgets.win11_controls import Win11RadioOption
+
+        parent = QWidget()
+        self.addCleanup(parent.deleteLater)
+        layout = QVBoxLayout(parent)
+        first = Win11RadioOption("Первый метод", "Описание первого")
+        second = Win11RadioOption("Второй метод", "Описание второго")
+        third = Win11RadioOption("Третий метод", "Описание третьего")
+        for option in (first, second, third):
+            layout.addWidget(option)
+
+        events: list[str] = []
+        first.clicked.connect(lambda: events.append("first"))
+        second.clicked.connect(lambda: events.append("second"))
+        third.clicked.connect(lambda: events.append("third"))
+
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Down, Qt.KeyboardModifier.NoModifier)
+        QApplication.sendEvent(first, event)
+
+        self.assertTrue(event.isAccepted())
+        self.assertEqual(events, ["second"])
+
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Up, Qt.KeyboardModifier.NoModifier)
+        QApplication.sendEvent(second, event)
+
+        self.assertTrue(event.isAccepted())
+        self.assertEqual(events, ["second", "first"])
 
     def test_radio_option_uses_styled_background_for_clean_repaint(self) -> None:
         from ui.widgets.win11_controls import Win11RadioOption
