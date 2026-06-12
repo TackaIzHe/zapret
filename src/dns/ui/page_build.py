@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QWidget, QVBoxLayout
 
+from dns.ui.adapter_list import AdapterChoiceListWidget
 from dns.ui.choice_list import DnsChoiceListWidget
 
 
@@ -88,10 +88,8 @@ def build_network_page_shell(
         indicator_off_qss=dns_provider_card_cls.indicator_off(),
     )
 
-    adapters_container = QWidget(content_parent)
-    adapters_layout = qvbox_layout_cls(adapters_container)
-    adapters_layout.setContentsMargins(0, 0, 0, 0)
-    adapters_layout.setSpacing(4)
+    adapters_container = AdapterChoiceListWidget(content_parent)
+    adapters_layout = adapters_container
     adapters_container.hide()
 
     tools_widgets = build_tools_card_ui_fn(

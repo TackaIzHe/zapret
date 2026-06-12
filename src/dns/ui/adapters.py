@@ -17,10 +17,13 @@ def build_adapter_cards(
         clean_name = normalize_alias_fn(name)
         adapter_dns = dns_info.get(clean_name, {"ipv4": [], "ipv6": []})
 
-        card = adapter_card_cls(name, adapter_dns)
+        if hasattr(adapters_layout, "add_adapter"):
+            card = adapters_layout.add_adapter(name, adapter_dns)
+        else:
+            card = adapter_card_cls(name, adapter_dns)
+            adapters_layout.addWidget(card)
         card.checkbox.stateChanged.connect(on_state_changed)
         cards.append(card)
-        adapters_layout.addWidget(card)
     return cards
 
 
