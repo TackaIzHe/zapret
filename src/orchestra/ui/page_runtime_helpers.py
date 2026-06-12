@@ -214,6 +214,7 @@ def append_log_line(*, text: str, full_log_lines: list[str], max_log_lines: int,
 
 
 def update_log_history_view(*, logs, tr_fn, log_history_list) -> None:
+    _ensure_log_history_accessibility_signal(log_history_list)
     log_history_list.clear()
 
     plan = orchestra_page_runtime.build_log_history_plan(
@@ -233,6 +234,43 @@ def update_log_history_view(*, logs, tr_fn, log_history_list) -> None:
             item.setForeground(Qt.GlobalColor.gray)
 
         log_history_list.addItem(item)
+
+    _update_log_history_current_accessibility(log_history_list, log_history_list.currentItem())
+
+
+def _ensure_log_history_accessibility_signal(log_history_list) -> None:
+    if log_history_list is None:
+        return
+    if bool(getattr(log_history_list, "_orchestra_log_history_accessibility_connected", False)):
+        return
+    try:
+        log_history_list.currentItemChanged.connect(
+            lambda item, _previous, current_list=log_history_list: (
+                _update_log_history_current_accessibility(current_list, item)
+            )
+        )
+        setattr(log_history_list, "_orchestra_log_history_accessibility_connected", True)
+    except Exception:
+        pass
+
+
+def _update_log_history_current_accessibility(log_history_list, item) -> None:
+    if log_history_list is None:
+        return
+    if item is None:
+        try:
+            item = log_history_list.item(0)
+        except Exception:
+            item = None
+    text = str(item.data(Qt.ItemDataRole.AccessibleTextRole) or "").strip() if item is not None else ""
+    if text:
+        prefix = "История логов Оркестратора"
+        if text.startswith(f"{prefix}:"):
+            set_state_text(log_history_list, text)
+        else:
+            set_state_text(log_history_list, f"{prefix}: {text}")
+    else:
+        set_state_text(log_history_list, "История логов Оркестратора: список пока не загружен")
 
 
 def _log_history_accessible_text(entry) -> str:

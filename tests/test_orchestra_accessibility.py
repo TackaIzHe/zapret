@@ -530,6 +530,38 @@ class OrchestraAccessibilityTests(unittest.TestCase):
             "Лог Оркестратора: 2026-06-08 12:30, размер 14 KB, текущий",
         )
 
+    def test_log_history_updates_screen_reader_text_when_current_log_changes(self) -> None:
+        from orchestra.ui.page_runtime_helpers import update_log_history_view
+
+        widget = QListWidget()
+        self.addCleanup(widget.deleteLater)
+
+        update_log_history_view(
+            logs=[
+                {
+                    "id": "log-1",
+                    "created": "2026-06-08 12:30",
+                    "size_str": "14 KB",
+                    "is_current": True,
+                },
+                {
+                    "id": "log-2",
+                    "created": "2026-06-08 13:00",
+                    "size_str": "18 KB",
+                    "is_current": False,
+                },
+            ],
+            tr_fn=lambda _key, default, **_kwargs: default,
+            log_history_list=widget,
+        )
+
+        widget.setCurrentRow(1)
+
+        self.assertEqual(
+            widget.property("screenReaderStateText"),
+            "История логов Оркестратора: Лог Оркестратора: 2026-06-08 13:00, размер 18 KB",
+        )
+
     def test_empty_log_history_item_exposes_screen_reader_text(self) -> None:
         from orchestra.ui.page_runtime_helpers import update_log_history_view
 
@@ -544,6 +576,23 @@ class OrchestraAccessibilityTests(unittest.TestCase):
 
         self.assertEqual(
             widget.item(0).data(Qt.ItemDataRole.AccessibleTextRole),
+            "История логов Оркестратора: Нет сохранённых логов",
+        )
+
+    def test_empty_log_history_updates_screen_reader_state_text(self) -> None:
+        from orchestra.ui.page_runtime_helpers import update_log_history_view
+
+        widget = QListWidget()
+        self.addCleanup(widget.deleteLater)
+
+        update_log_history_view(
+            logs=[],
+            tr_fn=lambda _key, default, **_kwargs: default,
+            log_history_list=widget,
+        )
+
+        self.assertEqual(
+            widget.property("screenReaderStateText"),
             "История логов Оркестратора: Нет сохранённых логов",
         )
 
