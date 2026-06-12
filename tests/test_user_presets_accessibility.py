@@ -256,6 +256,35 @@ class UserPresetsAccessibilityTests(unittest.TestCase):
         self.assertIs(self._app.focusWidget(), widgets.presets_list)
         self.assertEqual(requested, ["Default.txt"])
 
+    def test_preset_search_arrow_down_moves_focus_to_preset_list(self) -> None:
+        parent, widgets = self._build_widgets()
+        self.addCleanup(parent.deleteLater)
+        widgets.presets_model.set_rows(
+            [
+                {
+                    "kind": "preset",
+                    "name": "Default",
+                    "file_name": "Default.txt",
+                },
+                {
+                    "kind": "preset",
+                    "name": "Gaming",
+                    "file_name": "Gaming.txt",
+                },
+            ]
+        )
+        widgets.presets_list.setCurrentIndex(widgets.presets_model.index(0, 0))
+        parent.show()
+        self._app.processEvents()
+        widgets.preset_search_input.setFocus()
+        self._app.processEvents()
+
+        QTest.keyClick(widgets.preset_search_input, Qt.Key.Key_Down)
+        self._app.processEvents()
+
+        self.assertIs(self._app.focusWidget(), widgets.presets_list)
+        self.assertEqual(widgets.presets_list.currentIndex().row(), 1)
+
     def test_preset_list_toggles_selected_folder_with_space(self) -> None:
         from ui.presets_menu.model import PresetListModel
         from ui.presets_menu.view import LinkedWheelListView

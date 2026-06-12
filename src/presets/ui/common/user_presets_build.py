@@ -47,7 +47,16 @@ def wire_preset_search_keyboard_activation(preset_search_input, presets_list) ->
     original_key_press = getattr(preset_search_input, "keyPressEvent", None)
 
     def _search_key_press(self, event):
-        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+        if event.key() in (
+            Qt.Key.Key_Return,
+            Qt.Key.Key_Enter,
+            Qt.Key.Key_Down,
+            Qt.Key.Key_Up,
+            Qt.Key.Key_Home,
+            Qt.Key.Key_End,
+            Qt.Key.Key_PageDown,
+            Qt.Key.Key_PageUp,
+        ):
             presets_list.setFocus(Qt.FocusReason.OtherFocusReason)
             presets_list.keyPressEvent(event)
             return
