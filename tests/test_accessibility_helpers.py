@@ -150,6 +150,27 @@ class AccessibilityHelpersTests(unittest.TestCase):
         self.assertEqual(widget.accessible_name, "Запущено")
         self.assertEqual(widget.properties["screenReaderStateText"], "Запущено")
 
+    def test_set_state_text_skips_line_edit_clear_button_in_tab_order(self) -> None:
+        from PyQt6.QtCore import Qt
+        from qfluentwidgets import LineEdit
+
+        from ui.accessibility import set_state_text
+
+        line_edit = LineEdit()
+        self.addCleanup(line_edit.deleteLater)
+
+        set_state_text(line_edit, "Код привязки Premium: пока не создан")
+
+        buttons = [
+            child
+            for child in line_edit.findChildren(object)
+            if str(getattr(child, "objectName", lambda: "")() or "") == "lineEditButton"
+            and hasattr(child, "setFocusPolicy")
+        ]
+
+        self.assertTrue(buttons)
+        self.assertTrue(all(button.focusPolicy() == Qt.FocusPolicy.NoFocus for button in buttons))
+
     def test_set_state_text_skips_duplicate_property_write(self) -> None:
         from ui.accessibility import set_state_text
 
