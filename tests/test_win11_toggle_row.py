@@ -360,6 +360,17 @@ class Win11ToggleRowTests(unittest.TestCase):
 
         clicked.assert_called_once()
 
+    def test_radio_option_uses_styled_background_for_clean_repaint(self) -> None:
+        from ui.widgets.win11_controls import Win11RadioOption
+
+        option = Win11RadioOption(
+            "Профили Zapret 2",
+            "Запуск через готовые профили",
+        )
+
+        self.assertTrue(option.testAttribute(Qt.WidgetAttribute.WA_StyledBackground))
+        self.assertIn("background:", option.styleSheet())
+
     def test_radio_option_updates_screen_reader_state_after_selection_change(self) -> None:
         from ui.widgets.win11_controls import Win11RadioOption
 

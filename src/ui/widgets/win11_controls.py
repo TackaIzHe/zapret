@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt, QPropertyAnimation, QEasingCurve, pyqtProperty, QRectF, pyqtSignal, QTimer
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QStyle, QStyleOption
 from PyQt6.QtGui import QPainter, QColor, QPainterPath, QIcon
 import qtawesome as qta
 
@@ -280,6 +280,7 @@ class Win11RadioOption(QWidget):
         super().__init__(parent)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
         self._selected = False
         self._hover = False
@@ -497,9 +498,11 @@ class Win11RadioOption(QWidget):
         super().keyPressEvent(event)
 
     def paintEvent(self, event):
-        super().paintEvent(event)
-
         painter = QPainter(self)
+        option = QStyleOption()
+        option.initFrom(self)
+        self.style().drawPrimitive(QStyle.PrimitiveElement.PE_Widget, option, painter, self)
+
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         circle_x = 12 + 10
