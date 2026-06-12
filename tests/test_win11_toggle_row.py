@@ -416,6 +416,17 @@ class Win11ToggleRowTests(unittest.TestCase):
 
         clicked.assert_called_once()
 
+    def test_radio_option_child_radio_button_is_not_extra_tab_stop(self) -> None:
+        from ui.widgets.win11_controls import Win11RadioOption
+
+        option = Win11RadioOption(
+            "Профили Zapret 2",
+            "Запуск через готовые профили",
+        )
+
+        self.assertEqual(option.focusPolicy(), Qt.FocusPolicy.StrongFocus)
+        self.assertEqual(option._radio_button.focusPolicy(), Qt.FocusPolicy.NoFocus)
+
     def test_radio_option_updates_screen_reader_state_after_selection_change(self) -> None:
         from ui.widgets.win11_controls import Win11RadioOption
 

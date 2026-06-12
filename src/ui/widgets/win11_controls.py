@@ -294,6 +294,7 @@ class Win11RadioOption(FluentSettingCard):
         self._icon_color = icon_color
         self._icon_label = getattr(self, "iconLabel", None)
         self._radio_button = RadioButton(self)
+        self._radio_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._badge_label = None
         self._title_label = getattr(self, "titleLabel", None)
         self._desc_label = getattr(self, "contentLabel", None)
