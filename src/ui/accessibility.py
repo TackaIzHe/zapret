@@ -248,10 +248,7 @@ def enable_keyboard_click(widget) -> None:
         except Exception:
             key = None
         if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space):
-            clicked = getattr(self, "clicked", None)
-            emit = getattr(clicked, "emit", None)
-            if emit is not None:
-                emit()
+            if _activate_keyboard_click_target(self):
                 try:
                     event.accept()
                 except Exception:
@@ -265,6 +262,22 @@ def enable_keyboard_click(widget) -> None:
         widget.keyPressEvent = MethodType(_keyboard_click_key_press, widget)
     except Exception:
         pass
+
+
+def _activate_keyboard_click_target(widget) -> bool:
+    clicked = getattr(widget, "clicked", None)
+    emit = getattr(clicked, "emit", None)
+    if emit is not None:
+        emit()
+        return True
+    for child_name in ("button", "linkButton"):
+        child = getattr(widget, child_name, None)
+        click = getattr(child, "click", None)
+        if click is None:
+            continue
+        click()
+        return True
+    return False
 
 
 def enable_keyboard_toggle(widget) -> None:

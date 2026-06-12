@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import os
 import unittest
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PyQt6.QtCore import QEvent, Qt
+from PyQt6.QtGui import QKeyEvent
 from PyQt6.QtWidgets import QApplication, QVBoxLayout, QWidget
 from qfluentwidgets import FluentIcon, HyperlinkCard, PushSettingCard, SettingCardGroup
 
@@ -59,6 +62,37 @@ class AboutHelpAccessibilityTests(unittest.TestCase):
                     self.assertEqual(button.accessibleName(), name)
                     self.assertEqual(button.property("screenReaderStateText"), name)
                     self.assertIn(description, button.accessibleDescription())
+                link_button = getattr(card, "linkButton", None)
+                if link_button is not None:
+                    self.assertEqual(link_button.accessibleName(), name)
+                    self.assertEqual(link_button.property("screenReaderStateText"), name)
+                    self.assertIn(description, link_button.accessibleDescription())
+
+    def test_hyperlink_cards_can_be_opened_from_keyboard(self) -> None:
+        from ui.pages.about_page_help_accessibility import set_help_card_accessibility
+
+        card = HyperlinkCard(
+            "https://example.com/help",
+            "Открыть",
+            FluentIcon.LINK,
+            "Тестовая ссылка",
+            "Описание ссылки",
+        )
+        self.addCleanup(card.deleteLater)
+        set_help_card_accessibility(
+            card,
+            action_name="Открыть тестовую ссылку",
+            description="Открывает тестовую ссылку.",
+        )
+        opened: list[bool] = []
+        card.linkButton.clicked.connect(lambda: opened.append(True))
+
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Return, Qt.KeyboardModifier.NoModifier)
+        with patch("PyQt6.QtGui.QDesktopServices.openUrl", return_value=True):
+            card.keyPressEvent(event)
+
+        self.assertTrue(event.isAccepted())
+        self.assertEqual(opened, [True])
 
 
 if __name__ == "__main__":
