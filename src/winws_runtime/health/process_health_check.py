@@ -19,6 +19,8 @@ from utils.windows_event_log import get_recent_application_error_messages
 from utils.windows_process_probe import iter_process_records_winapi, iter_process_names_winapi, iter_uninstall_display_names
 
 _ANTIVIRUS_PRODUCT_MARKERS = (
+    ("kaspersky", "Kaspersky"),
+    ("каспер", "Kaspersky"),
     ("dr.web", "Dr.Web"),
     ("eset", "ESET"),
     ("norton", "Norton"),
@@ -33,6 +35,9 @@ _ANTIVIRUS_PRODUCT_MARKERS = (
 )
 
 _ANTIVIRUS_PROCESS_MARKERS = {
+    "avp.exe": "Kaspersky",
+    "ksde.exe": "Kaspersky",
+    "klnagent.exe": "Kaspersky",
     "drweb32.exe": "Dr.Web",
     "spideragent.exe": "Dr.Web",
     "egui.exe": "ESET",
@@ -72,14 +77,6 @@ def _find_process_pid_by_name_winapi(process_name: str) -> Optional[int]:
 
 def _find_known_antivirus_name() -> Optional[str]:
     """Возвращает имя обнаруженного антивируса по uninstall-реестру и WinAPI-процессам."""
-    try:
-        from winws_runtime.health.kaspersky_launch_advice import detect_kaspersky_antivirus
-
-        if detect_kaspersky_antivirus():
-            return "Kaspersky"
-    except Exception:
-        pass
-
     try:
         for display_name in iter_uninstall_display_names():
             normalized = str(display_name or "").strip().casefold()
@@ -587,12 +584,6 @@ def _check_antivirus_blocking(exe_path: str = None) -> Optional[str]:
     """Проверяет, не блокирует ли антивирус файл"""
     try:
         _ = exe_path
-        from winws_runtime.health.kaspersky_launch_advice import build_kaspersky_launch_advice
-
-        kaspersky_advice = build_kaspersky_launch_advice(exe_name=EXE_NAME_WINWS1)
-        if kaspersky_advice is not None:
-            return kaspersky_advice.cause
-
         antivirus_name = _detect_active_antivirus()
         if antivirus_name:
             normalized = str(antivirus_name or "").casefold()
@@ -780,18 +771,6 @@ def _handle_access_denied(exit_code: int, stderr: str) -> WinDivertDiagnosis:
             return WinDivertDiagnosis(
                 cause=cause,
                 solution=solution,
-                severity="critical",
-            )
-    except Exception:
-        pass
-    try:
-        from winws_runtime.health.kaspersky_launch_advice import build_kaspersky_launch_advice
-
-        advice = build_kaspersky_launch_advice(exe_name=EXE_NAME_WINWS1)
-        if advice is not None:
-            return WinDivertDiagnosis(
-                cause=advice.cause,
-                solution=advice.solution,
                 severity="critical",
             )
     except Exception:
@@ -1016,17 +995,7 @@ def _probe_service_disabled_cause() -> Tuple[str, str, Optional[str]]:
     except Exception:
         pass
 
-    # Check 7: Kaspersky after a real WinDivert start failure.
-    try:
-        from winws_runtime.health.kaspersky_launch_advice import build_kaspersky_launch_advice
-
-        advice = build_kaspersky_launch_advice(exe_name=EXE_NAME_WINWS1)
-        if advice is not None:
-            return advice.cause, advice.solution, None
-    except Exception:
-        pass
-
-    # Check 8: Antivirus
+    # Check 7: Antivirus
     av = _detect_active_antivirus()
     if av:
         return (
@@ -1035,7 +1004,7 @@ def _probe_service_disabled_cause() -> Tuple[str, str, Optional[str]]:
             None,
         )
 
-    # Check 9: Network adapters. This check must be late because Win32 1058
+    # Check 8: Network adapters. This check must be late because Win32 1058
     # is a generic service-disabled error and otherwise easily turns into a
     # ложный диагноз про адаптеры.
     if not _check_network_adapters():
