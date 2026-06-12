@@ -484,6 +484,7 @@ class UserPresetsAccessibilityTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertEqual(widget.accessibleName(), name)
                 self.assertIn(description, widget.accessibleDescription())
+                self.assertEqual(widget.property("screenReaderStateText"), name)
 
         search_description = widgets.preset_search_input.accessibleDescription()
         self.assertIn("После ввода перейдите в список клавишей Tab", search_description)

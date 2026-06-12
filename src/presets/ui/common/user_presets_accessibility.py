@@ -21,57 +21,73 @@ def apply_user_presets_accessibility(
 ) -> None:
     """Задаёт понятные имена элементам пользовательских пресетов для экранного диктора."""
 
-    set_control_accessibility(
+    def _set_named_control(widget, *, name_key: str, name_default: str, description_key: str, description_default: str) -> None:
+        name = tr_fn(name_key, name_default)
+        set_control_accessibility(
+            widget,
+            name=name,
+            description=tr_fn(description_key, description_default),
+        )
+        set_state_text(widget, name)
+
+    _set_named_control(
         get_configs_btn,
-        name=tr_fn(f"{tr_prefix}.configs.accessible_name", "Открыть GitHub Discussions с конфигами"),
-        description=tr_fn(
-            f"{tr_prefix}.configs.title",
-            "Обменивайтесь пресетами и профилями в разделе GitHub Discussions",
-        ),
+        name_key=f"{tr_prefix}.configs.accessible_name",
+        name_default="Открыть GitHub Discussions с конфигами",
+        description_key=f"{tr_prefix}.configs.title",
+        description_default="Обменивайтесь пресетами и профилями в разделе GitHub Discussions",
     )
-    set_control_accessibility(
+    _set_named_control(
         create_btn,
-        name=tr_fn(f"{tr_prefix}.create.accessible_name", "Создать новый пресет"),
-        description=tr_fn(f"{tr_prefix}.tooltip.create", "Создать новый пресет"),
+        name_key=f"{tr_prefix}.create.accessible_name",
+        name_default="Создать новый пресет",
+        description_key=f"{tr_prefix}.tooltip.create",
+        description_default="Создать новый пресет",
     )
-    set_control_accessibility(
+    _set_named_control(
         import_btn,
-        name=tr_fn(f"{tr_prefix}.import.accessible_name", "Импортировать пресет из файла"),
-        description=tr_fn(f"{tr_prefix}.tooltip.import", "Импорт пресета из файла"),
+        name_key=f"{tr_prefix}.import.accessible_name",
+        name_default="Импортировать пресет из файла",
+        description_key=f"{tr_prefix}.tooltip.import",
+        description_default="Импорт пресета из файла",
     )
-    set_control_accessibility(
+    _set_named_control(
         open_folder_btn,
-        name=tr_fn(f"{tr_prefix}.open_folder.accessible_name", "Открыть папку пресетов"),
-        description=tr_fn(f"{tr_prefix}.tooltip.open_folder", "Открыть папку, где лежат ваши пресеты"),
+        name_key=f"{tr_prefix}.open_folder.accessible_name",
+        name_default="Открыть папку пресетов",
+        description_key=f"{tr_prefix}.tooltip.open_folder",
+        description_default="Открыть папку, где лежат ваши пресеты",
     )
-    set_control_accessibility(
+    _set_named_control(
         reset_all_btn,
-        name=tr_fn(f"{tr_prefix}.reset_all.accessible_name", "Вернуть встроенные пресеты"),
-        description=tr_fn(
-            f"{tr_prefix}.tooltip.reset_all",
-            "Возвращает встроенные пресеты. Ваши изменения во встроенных пресетах будут потеряны.",
-        ),
+        name_key=f"{tr_prefix}.reset_all.accessible_name",
+        name_default="Вернуть встроенные пресеты",
+        description_key=f"{tr_prefix}.tooltip.reset_all",
+        description_default="Возвращает встроенные пресеты. Ваши изменения во встроенных пресетах будут потеряны.",
     )
-    set_control_accessibility(
+    _set_named_control(
         presets_info_btn,
-        name=tr_fn(f"{tr_prefix}.wiki.accessible_name", "Открыть вики по пресетам"),
-        description=tr_fn(f"{tr_prefix}.button.wiki", "Вики по пресетам"),
+        name_key=f"{tr_prefix}.wiki.accessible_name",
+        name_default="Открыть вики по пресетам",
+        description_key=f"{tr_prefix}.button.wiki",
+        description_default="Вики по пресетам",
     )
-    set_control_accessibility(
+    _set_named_control(
         info_btn,
-        name=tr_fn(f"{tr_prefix}.info.accessible_name", "Показать справку о пресетах"),
-        description=tr_fn(f"{tr_prefix}.button.what_is_this", "Что это такое?"),
+        name_key=f"{tr_prefix}.info.accessible_name",
+        name_default="Показать справку о пресетах",
+        description_key=f"{tr_prefix}.button.what_is_this",
+        description_default="Что это такое?",
     )
-    set_control_accessibility(
+    _set_named_control(
         preset_search_input,
-        name=tr_fn(f"{tr_prefix}.search.accessible_name", "Поиск пресетов"),
-        description=tr_fn(
-            f"{tr_prefix}.search.accessible_description",
-            (
-                "Поиск пресетов по имени. "
-                "После ввода перейдите в список клавишей Tab, "
-                "выберите пресет стрелками вверх и вниз, затем нажмите Enter или Пробел."
-            ),
+        name_key=f"{tr_prefix}.search.accessible_name",
+        name_default="Поиск пресетов",
+        description_key=f"{tr_prefix}.search.accessible_description",
+        description_default=(
+            "Поиск пресетов по имени. "
+            "После ввода перейдите в список клавишей Tab, "
+            "выберите пресет стрелками вверх и вниз, затем нажмите Enter или Пробел."
         ),
     )
     remove_line_edit_buttons_from_tab_order(preset_search_input)
