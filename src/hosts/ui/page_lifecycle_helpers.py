@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ui.accessibility import set_control_accessibility, set_state_text
+
 
 def apply_hosts_page_theme(
     *,
@@ -166,9 +168,23 @@ def apply_hosts_page_language(
 ) -> None:
     if clear_btn is not None:
         clear_btn.setText(tr_fn("page.hosts.button.clear", " Очистить"))
+        clear_name = tr_fn("page.hosts.button.clear.accessible_name", "Очистить hosts")
+        clear_description = tr_fn(
+            "page.hosts.button.clear.accessible_description",
+            "Удаляет активные домены из файла hosts.",
+        )
+        set_control_accessibility(clear_btn, name=clear_name, description=clear_description)
+        set_state_text(clear_btn, clear_name)
 
     if open_hosts_button is not None:
         open_hosts_button.setText(tr_fn("page.hosts.button.open", " Открыть"))
+        open_name = tr_fn("page.hosts.button.open.accessible_name", "Открыть файл hosts")
+        open_description = tr_fn(
+            "page.hosts.button.open.accessible_description",
+            "Открывает системный файл hosts для просмотра или ручной проверки.",
+        )
+        set_control_accessibility(open_hosts_button, name=open_name, description=open_description)
+        set_state_text(open_hosts_button, open_name)
 
     if info_text_label is not None:
         info_text_label.setText(

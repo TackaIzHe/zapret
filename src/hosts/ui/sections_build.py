@@ -137,14 +137,16 @@ def build_hosts_status_section(
         icon=FluentIcon.DELETE,
     )
     clear_btn.clicked.connect(on_clear_clicked)
+    clear_name = tr_fn("page.hosts.button.clear.accessible_name", "Очистить hosts")
     set_control_accessibility(
         clear_btn,
-        name=tr_fn("page.hosts.button.clear.accessible_name", "Очистить hosts"),
+        name=clear_name,
         description=tr_fn(
             "page.hosts.button.clear.accessible_description",
             "Удаляет активные домены из файла hosts.",
         ),
     )
+    set_state_text(clear_btn, clear_name)
     status_layout.addWidget(clear_btn)
 
     open_hosts_button = PushButton(
@@ -152,14 +154,16 @@ def build_hosts_status_section(
         icon=FluentIcon.LINK,
     )
     open_hosts_button.clicked.connect(on_open_hosts_file)
+    open_name = tr_fn("page.hosts.button.open.accessible_name", "Открыть файл hosts")
     set_control_accessibility(
         open_hosts_button,
-        name=tr_fn("page.hosts.button.open.accessible_name", "Открыть файл hosts"),
+        name=open_name,
         description=tr_fn(
             "page.hosts.button.open.accessible_description",
             "Открывает системный файл hosts для просмотра или ручной проверки.",
         ),
     )
+    set_state_text(open_hosts_button, open_name)
     status_layout.addWidget(open_hosts_button)
 
     status_card.add_layout(status_layout)

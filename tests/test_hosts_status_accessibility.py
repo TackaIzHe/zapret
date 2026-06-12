@@ -20,6 +20,7 @@ class _DialogButton:
         self._text = ""
         self._accessible_name = ""
         self._accessible_description = ""
+        self._properties = {}
 
     def setText(self, text: str) -> None:  # noqa: N802
         self._text = str(text)
@@ -38,6 +39,12 @@ class _DialogButton:
 
     def setAccessibleDescription(self, text: str) -> None:  # noqa: N802
         self._accessible_description = str(text)
+
+    def property(self, name: str) -> object:  # noqa: A003
+        return self._properties.get(name)
+
+    def setProperty(self, name: str, value: object) -> None:  # noqa: N802
+        self._properties[name] = value
 
 
 class _MessageBox:
@@ -71,9 +78,45 @@ class HostsStatusAccessibilityTests(unittest.TestCase):
         )
 
         self.assertEqual(widgets.clear_button.accessibleName(), "Очистить hosts")
+        self.assertEqual(
+            widgets.clear_button.property("screenReaderStateText"),
+            "Очистить hosts",
+        )
         self.assertIn("Удаляет активные домены", widgets.clear_button.accessibleDescription())
         self.assertEqual(widgets.open_hosts_button.accessibleName(), "Открыть файл hosts")
+        self.assertEqual(
+            widgets.open_hosts_button.property("screenReaderStateText"),
+            "Открыть файл hosts",
+        )
         self.assertIn("Открывает системный файл hosts", widgets.open_hosts_button.accessibleDescription())
+
+    def test_language_refresh_updates_status_button_screen_reader_state(self) -> None:
+        from hosts.ui.page_lifecycle_helpers import apply_hosts_page_language
+
+        clear_btn = _DialogButton()
+        open_btn = _DialogButton()
+
+        apply_hosts_page_language(
+            tr_fn=lambda _key, default, **kwargs: default.format(**kwargs) if kwargs else default,
+            clear_btn=clear_btn,
+            open_hosts_button=open_btn,
+            info_text_label=None,
+            browser_warning_label=None,
+            adobe_desc_label=None,
+            adobe_title_label=None,
+            startup_initialized=False,
+            applying=False,
+            rebuild_services_selectors_fn=lambda: None,
+            check_hosts_access_fn=lambda: None,
+            update_ui_fn=lambda: None,
+        )
+
+        self.assertEqual(clear_btn.accessibleName(), "Очистить hosts")
+        self.assertEqual(clear_btn.property("screenReaderStateText"), "Очистить hosts")
+        self.assertIn("Удаляет активные домены", clear_btn.accessibleDescription())
+        self.assertEqual(open_btn.accessibleName(), "Открыть файл hosts")
+        self.assertEqual(open_btn.property("screenReaderStateText"), "Открыть файл hosts")
+        self.assertIn("Открывает системный файл hosts", open_btn.accessibleDescription())
 
     def test_status_state_is_text_for_screen_reader(self) -> None:
         active_widgets = build_hosts_status_section(
