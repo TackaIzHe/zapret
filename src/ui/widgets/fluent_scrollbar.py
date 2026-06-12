@@ -35,15 +35,33 @@ def install_fluent_scrollbars(
     if vertical:
         vertical_bar = ScrollBar(Qt.Orientation.Vertical, widget)
         vertical_bar.setHandleDisplayMode(handle_mode)
+        _remove_scrollbar_arrow_buttons_from_tab_order(vertical_bar)
     if horizontal:
         horizontal_bar = ScrollBar(Qt.Orientation.Horizontal, widget)
         horizontal_bar.setHandleDisplayMode(handle_mode)
+        _remove_scrollbar_arrow_buttons_from_tab_order(horizontal_bar)
 
     bars = FluentScrollBars(vertical=vertical_bar, horizontal=horizontal_bar)
     setattr(widget, "_zapret_fluent_scrollbars", bars)
     if reserve_vertical_space and vertical_bar is not None:
         _install_vertical_viewport_reserve(widget, int(vertical_reserved_margin))
     return bars
+
+
+def _remove_scrollbar_arrow_buttons_from_tab_order(scrollbar: ScrollBar | None) -> None:
+    if scrollbar is None:
+        return
+    try:
+        children = scrollbar.findChildren(object)
+    except Exception:
+        return
+    for child in children:
+        if type(child).__name__ != "ArrowButton":
+            continue
+        try:
+            child.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        except Exception:
+            pass
 
 
 def _install_vertical_viewport_reserve(widget: QAbstractScrollArea, margin: int) -> None:

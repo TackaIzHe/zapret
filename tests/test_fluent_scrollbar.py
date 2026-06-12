@@ -36,6 +36,21 @@ class FluentScrollbarTests(unittest.TestCase):
 
         self.assertIs(first, second)
 
+    def test_scrollbar_arrow_buttons_do_not_take_tab_focus(self) -> None:
+        widget = QListWidget()
+
+        bars = install_fluent_scrollbars(widget, vertical=True, horizontal=False)
+
+        buttons = [
+            child
+            for child in bars.vertical.findChildren(object)
+            if type(child).__name__ == "ArrowButton"
+            and hasattr(child, "setFocusPolicy")
+        ]
+
+        self.assertTrue(buttons)
+        self.assertTrue(all(button.focusPolicy() == Qt.FocusPolicy.NoFocus for button in buttons))
+
     def test_reserved_vertical_space_keeps_rows_away_from_visible_scrollbar(self) -> None:
         widget = QListWidget()
         widget.resize(180, 120)
