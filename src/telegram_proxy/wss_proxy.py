@@ -79,6 +79,10 @@ log = logging.getLogger("tg_proxy")
 # WebSocket / TCP connect timeout
 CONNECT_TIMEOUT = 10.0
 
+# External SOCKS should fail over quickly. Healthy bundled servers answer in
+# hundreds of ms; waiting the full TCP timeout makes Telegram media stalls visible.
+UPSTREAM_CONNECT_TIMEOUT = 3.0
+
 # DC fail cooldown (seconds)
 DC_FAIL_COOLDOWN = 10.0
 
@@ -88,6 +92,7 @@ _RECV_ZERO_TIMEOUT = 8.0
 # How many empty upstream relays are enough to try the next bundled proxy first
 _UPSTREAM_ZERO_RECV_FAILS = 2
 _UPSTREAM_PENALTY_SECONDS = 60.0
+_UPSTREAM_CONNECT_FAILURE_PENALTIES = (60.0, 180.0, 300.0)
 
 # ---- Main proxy class ----
 
@@ -132,6 +137,7 @@ class TelegramWSProxy:
         self._proxy_protocol = bool(proxy_protocol)
         self._upstream_connect_semaphore: asyncio.Semaphore | None = None
         self._upstream_zero_recv_counts: dict[tuple[str, int, str, str, bool, str, bool], int] = {}
+        self._upstream_connect_failure_counts: dict[tuple[str, int, str, str, bool, str, bool], int] = {}
         self._upstream_penalty_until: dict[tuple[str, int, str, str, bool, str, bool], float] = {}
         self._upstream_active_counts: dict[tuple[str, int, str, str, bool, str, bool], int] = {}
         self._servers: list[asyncio.Server] = []
@@ -320,7 +326,10 @@ class TelegramWSProxy:
         exc: Exception,
     ) -> None:
         key = self._upstream_endpoint_key(endpoint)
-        self._upstream_penalty_until[key] = time.monotonic() + _UPSTREAM_PENALTY_SECONDS
+        count = self._upstream_connect_failure_counts.get(key, 0) + 1
+        self._upstream_connect_failure_counts[key] = count
+        penalty = _UPSTREAM_CONNECT_FAILURE_PENALTIES[min(count - 1, len(_UPSTREAM_CONNECT_FAILURE_PENALTIES) - 1)]
+        self._upstream_penalty_until[key] = time.monotonic() + penalty
         self._log(
             f"[{label}] upstream {endpoint.host}:{endpoint.port} temporarily deprioritized "
             f"after connect {type(exc).__name__}"
@@ -341,6 +350,7 @@ class TelegramWSProxy:
     def _mark_upstream_recv_ok(self, endpoint: UpstreamProxyEndpoint) -> None:
         key = self._upstream_endpoint_key(endpoint)
         self._upstream_zero_recv_counts.pop(key, None)
+        self._upstream_connect_failure_counts.pop(key, None)
         self._upstream_penalty_until.pop(key, None)
 
     def _upstream_proxy_candidates(self) -> tuple[UpstreamProxyEndpoint, ...]:
@@ -430,7 +440,7 @@ class TelegramWSProxy:
                     upstream_port,
                     username=endpoint.username,
                     password=endpoint.password,
-                    timeout=CONNECT_TIMEOUT,
+                    timeout=UPSTREAM_CONNECT_TIMEOUT,
                     tls=endpoint.tls,
                     tls_server_name=endpoint.tls_server_name,
                     tls_verify=endpoint.tls_verify,
@@ -503,6 +513,7 @@ class TelegramWSProxy:
         self._ws_blacklist = set()
         self._dc_cooldown = {}
         self._upstream_zero_recv_counts = {}
+        self._upstream_connect_failure_counts = {}
         self._upstream_penalty_until = {}
         self._upstream_active_counts = {}
         self._cloudflare_domain_balancer.reset()

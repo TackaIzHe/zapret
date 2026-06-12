@@ -912,6 +912,87 @@ class TelegramProxyCloudflareRuntimeTests(unittest.TestCase):
         self.assertEqual(seen_hosts, ["timeout.proxy", "fast.proxy", "fast.proxy"])
         self.assertIn("temporarily deprioritized after connect TimeoutError", "\n".join(logs))
 
+    def test_repeated_upstream_connect_failures_extend_penalty(self) -> None:
+        from telegram_proxy.proxy.routing import UpstreamProxyConfig, UpstreamProxyEndpoint
+        from telegram_proxy.wss_proxy import TelegramWSProxy
+
+        proxy = TelegramWSProxy(
+            upstream_config=UpstreamProxyConfig(
+                enabled=True,
+                host="timeout.tls",
+                port=443,
+                tls=True,
+                mode="always",
+                fallback_proxies=(
+                    UpstreamProxyEndpoint(host="fast.tls", port=443, tls=True),
+                ),
+            ),
+        )
+        timeout_endpoint = proxy._upstream_proxy_candidates()[0]
+
+        with patch("telegram_proxy.wss_proxy.time.monotonic", return_value=100.0):
+            proxy._mark_upstream_connect_failure(timeout_endpoint, "test-1", TimeoutError())
+        with patch("telegram_proxy.wss_proxy.time.monotonic", return_value=161.0):
+            proxy._mark_upstream_connect_failure(timeout_endpoint, "test-2", TimeoutError())
+        with patch("telegram_proxy.wss_proxy.time.monotonic", return_value=222.0):
+            hosts = [endpoint.host for endpoint in proxy._upstream_proxy_candidates()]
+
+        self.assertEqual(hosts, ["fast.tls", "timeout.tls"])
+
+    def test_upstream_connect_uses_short_failover_timeout(self) -> None:
+        from telegram_proxy.proxy.routing import UpstreamProxyConfig, UpstreamProxyEndpoint
+        from telegram_proxy.wss_proxy import TelegramWSProxy
+
+        class _RemoteWriter:
+            def __init__(self):
+                self.transport = None
+
+            def write(self, _data):
+                return None
+
+            async def drain(self):
+                return None
+
+        async def fake_connect(proxy_host, *_args, **kwargs):
+            timeouts.append(kwargs["timeout"])
+            if proxy_host == "timeout.tls":
+                raise TimeoutError()
+            return object(), _RemoteWriter()
+
+        async def fake_relay(*_args, **_kwargs):
+            return (1, False)
+
+        timeouts: list[float] = []
+        proxy = TelegramWSProxy(
+            upstream_config=UpstreamProxyConfig(
+                enabled=True,
+                host="timeout.tls",
+                port=443,
+                tls=True,
+                mode="always",
+                fallback_proxies=(
+                    UpstreamProxyEndpoint(host="fast.tls", port=443, tls=True),
+                ),
+            ),
+        )
+        proxy._relay_tcp = fake_relay
+
+        with patch("telegram_proxy.wss_proxy.socks5.connect_via_socks5", side_effect=fake_connect):
+            asyncio.run(
+                proxy._upstream_proxy_connect(
+                    object(),
+                    object(),
+                    "149.154.175.50",
+                    80,
+                    b"x" * 64,
+                    "test",
+                    0,
+                    False,
+                )
+            )
+
+        self.assertLessEqual(timeouts[0], 4.0)
+
     def test_upstream_active_relays_are_limited_by_pool_size(self) -> None:
         from telegram_proxy.proxy.routing import UpstreamProxyConfig
         from telegram_proxy.wss_proxy import TelegramWSProxy
