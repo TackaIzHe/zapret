@@ -485,6 +485,8 @@ class AppearanceAccessibilityTests(unittest.TestCase):
         self.assertIn("intensity_layout.addLayout(intensity_header_layout)", intensity_block)
         self.assertIn("intensity_layout.addWidget(self._tinted_intensity_container)", intensity_block)
         self.assertIn("self._tinted_intensity_value_label = CaptionLabel(\"15%\")", intensity_block)
+        self.assertIn("get_cached_qta_pixmap", intensity_block)
+        self.assertNotIn("self._get_icon_pixmap", intensity_block)
         self.assertNotIn("SettingsRow(", intensity_block)
         self.assertNotIn("set_control(self._tinted_intensity_container)", intensity_block)
 

@@ -652,7 +652,7 @@ class AppearancePage(BasePage):
         intensity_header_layout.setSpacing(12)
 
         intensity_icon = QLabel()
-        intensity_icon.setPixmap(self._get_icon_pixmap("fa5s.sliders-h", 20))
+        intensity_icon.setPixmap(get_cached_qta_pixmap("fa5s.sliders-h", color=get_theme_tokens().accent_hex, size=20))
         intensity_header_layout.addWidget(intensity_icon)
         intensity_label = BodyLabel(intensity_title_text)
         intensity_header_layout.addWidget(intensity_label)
