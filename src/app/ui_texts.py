@@ -645,6 +645,10 @@ TEXTS: dict[str, dict[str, str]] = {
         "ru": "Настройка обновлений",
         "en": "Update Settings",
     },
+    "page.about.button.open": {
+        "ru": "Открыть",
+        "en": "Open",
+    },
     "page.about.subscription.free": {
         "ru": "Free версия",
         "en": "Free version",
@@ -765,19 +769,23 @@ TEXTS: dict[str, dict[str, str]] = {
         "ru": "Новости и обновления",
         "en": "News and updates",
     },
-    "page.about.help.news.youtube.title": {
+    "page.about.course.group": {
+        "ru": "Обучение",
+        "en": "Learning",
+    },
+    "page.about.course.youtube.title": {
         "ru": "Курс и гайд по Zapret 2",
         "en": "Zapret 2 course and guide",
     },
-    "page.about.help.news.youtube.desc": {
+    "page.about.course.youtube.desc": {
         "ru": "Видео по настройке и пониманию Zapret 2",
         "en": "Videos about setting up and understanding Zapret 2",
     },
-    "page.about.help.news.youtube_playlist.title": {
+    "page.about.course.youtube_playlist.title": {
         "ru": "Плейлист курса по Zapret 2",
         "en": "Zapret 2 course playlist",
     },
-    "page.about.help.news.youtube_playlist.desc": {
+    "page.about.course.youtube_playlist.desc": {
         "ru": "Все видео курса одним списком",
         "en": "All course videos in one playlist",
     },

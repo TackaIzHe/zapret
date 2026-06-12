@@ -27,6 +27,7 @@ class AboutPageAccessibilityTests(unittest.TestCase):
             layout,
             tr_fn=lambda _key, default: default,
             tokens=get_theme_tokens(),
+            content_parent=parent,
             app_version="9.9.9",
             make_section_label=lambda text: QWidget(),
             on_open_updates=lambda: None,
@@ -57,6 +58,19 @@ class AboutPageAccessibilityTests(unittest.TestCase):
         self.assertEqual(widgets.premium_btn.accessibleName(), "Открыть Premium и VPN")
         self.assertEqual(widgets.premium_btn.property("screenReaderStateText"), "Открыть Premium и VPN")
         self.assertIn("Premium", widgets.premium_btn.accessibleDescription())
+
+        self.assertEqual(widgets.youtube_course_card.accessibleName(), "Открыть курс и гайд по Zapret 2")
+        self.assertIn("Видео по настройке", widgets.youtube_course_card.accessibleDescription())
+        self.assertEqual(
+            bytes(widgets.youtube_course_card.linkButton.getUrl().toEncoded()).decode("ascii"),
+            "https://www.youtube.com/@%D0%9F%D1%80%D0%B8%D0%B2%D0%B0%D1%82%D0%BD%D0%BE%D1%81%D1%82%D1%8C/videos",
+        )
+        self.assertEqual(widgets.youtube_playlist_card.accessibleName(), "Открыть плейлист курса по Zapret 2")
+        self.assertIn("Все видео курса", widgets.youtube_playlist_card.accessibleDescription())
+        self.assertEqual(
+            widgets.youtube_playlist_card.linkButton.getUrl().toString(),
+            "https://www.youtube.com/playlist?list=PLa6yzOvgEWW0F1PL0D8pOPI8lD_rfLL1s",
+        )
 
     def test_subscription_status_update_reads_state_for_screen_reader(self) -> None:
         page = AboutPage.__new__(AboutPage)

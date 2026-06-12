@@ -9,8 +9,18 @@ from PyQt6.QtWidgets import QLabel, QHBoxLayout, QVBoxLayout
 
 from ui.accessibility import set_state_text
 from ui.pages.about_page_accessibility import apply_about_buttons_accessibility
+from ui.pages.about_page_help_accessibility import set_help_card_accessibility as set_link_card_accessibility
 from ui.fluent_widgets import SettingsCard
-from qfluentwidgets import CaptionLabel, FluentIcon, PrimaryPushButton, PushButton, StrongBodyLabel, SubtitleLabel
+from qfluentwidgets import (
+    CaptionLabel,
+    FluentIcon,
+    HyperlinkCard,
+    PrimaryPushButton,
+    PushButton,
+    SettingCardGroup,
+    StrongBodyLabel,
+    SubtitleLabel,
+)
 from ui.theme import get_cached_qta_pixmap
 
 
@@ -25,6 +35,9 @@ class AboutPageAboutWidgets:
     sub_status_label: object
     sub_desc_label: object
     premium_btn: object
+    course_group: object
+    youtube_course_card: object
+    youtube_playlist_card: object
 
 
 def set_subscription_status_accessibility(label, text: object) -> None:
@@ -48,6 +61,7 @@ def build_about_page_about_content(
     *,
     tr_fn: Callable[[str, str], str],
     tokens,
+    content_parent,
     app_version: str,
     make_section_label: Callable[[str], object],
     on_open_updates,
@@ -143,6 +157,47 @@ def build_about_page_about_content(
 
     sub_card.add_layout(sub_layout)
     layout.addWidget(sub_card)
+    layout.addSpacing(16)
+
+    course_group = SettingCardGroup(
+        tr_fn("page.about.course.group", "Обучение"),
+        content_parent,
+    )
+
+    youtube_course_card = HyperlinkCard(
+        "https://www.youtube.com/@%D0%9F%D1%80%D0%B8%D0%B2%D0%B0%D1%82%D0%BD%D0%BE%D1%81%D1%82%D1%8C/videos",
+        tr_fn("page.about.button.open", "Открыть"),
+        FluentIcon.PLAY,
+        tr_fn("page.about.course.youtube.title", "Курс и гайд по Zapret 2"),
+        tr_fn("page.about.course.youtube.desc", "Видео по настройке и пониманию Zapret 2"),
+    )
+    set_link_card_accessibility(
+        youtube_course_card,
+        action_name=tr_fn(
+            "page.about.course.youtube.accessible_name",
+            "Открыть курс и гайд по Zapret 2",
+        ),
+        description=tr_fn("page.about.course.youtube.desc", "Видео по настройке и пониманию Zapret 2"),
+    )
+
+    youtube_playlist_card = HyperlinkCard(
+        "https://www.youtube.com/playlist?list=PLa6yzOvgEWW0F1PL0D8pOPI8lD_rfLL1s",
+        tr_fn("page.about.button.open", "Открыть"),
+        FluentIcon.PLAY,
+        tr_fn("page.about.course.youtube_playlist.title", "Плейлист курса по Zapret 2"),
+        tr_fn("page.about.course.youtube_playlist.desc", "Все видео курса одним списком"),
+    )
+    set_link_card_accessibility(
+        youtube_playlist_card,
+        action_name=tr_fn(
+            "page.about.course.youtube_playlist.accessible_name",
+            "Открыть плейлист курса по Zapret 2",
+        ),
+        description=tr_fn("page.about.course.youtube_playlist.desc", "Все видео курса одним списком"),
+    )
+
+    course_group.addSettingCards([youtube_course_card, youtube_playlist_card])
+    layout.addWidget(course_group)
 
     return AboutPageAboutWidgets(
         about_section_version_label=about_section_version_label,
@@ -154,4 +209,7 @@ def build_about_page_about_content(
         sub_status_label=sub_status_label,
         sub_desc_label=sub_desc_label,
         premium_btn=premium_btn,
+        course_group=course_group,
+        youtube_course_card=youtube_course_card,
+        youtube_playlist_card=youtube_playlist_card,
     )

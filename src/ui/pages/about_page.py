@@ -306,6 +306,7 @@ class AboutPage(BasePage):
             layout,
             tr_fn=lambda key, default: tr_catalog(key, language=self._ui_language, default=default),
             tokens=tokens,
+            content_parent=self.content,
             app_version=APP_VERSION,
             make_section_label=lambda text: _make_section_label(text),
             on_open_updates=self._open_updates_callback,
