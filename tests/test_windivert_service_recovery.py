@@ -114,6 +114,7 @@ class WinDivertServiceRecoveryTests(unittest.TestCase):
             patch.object(system_ops, "force_kill_all_winws_processes", return_value=True),
             patch.object(system_ops, "unload_known_windivert_drivers_runtime", return_value=True),
             patch.object(system_ops, "stop_and_delete_runtime_services", return_value=False),
+            patch.object(system_ops, "clear_stopped_windivert_delete_flags_runtime") as clear_delete_flag,
             patch.object(system_ops, "restore_known_windivert_services_demand_start_runtime") as restore_start,
             patch.object(system_ops, "wait_for_windivert_cleanup_settle_runtime", return_value=True),
             patch.object(system_ops.time, "sleep"),
@@ -121,7 +122,36 @@ class WinDivertServiceRecoveryTests(unittest.TestCase):
         ):
             system_ops.aggressive_windivert_cleanup_runtime()
 
+        clear_delete_flag.assert_called_once_with()
         restore_start.assert_called_once_with()
+
+    def test_clear_stopped_windivert_delete_flags_skips_running_services(self) -> None:
+        from utils import service_manager
+        from winws_runtime.runtime import system_ops
+
+        with (
+            patch.object(
+                system_ops,
+                "get_known_windivert_service_states_runtime",
+                return_value={
+                    "WinDivert": system_ops._SERVICE_RUNNING,
+                    "Monkey": system_ops._SERVICE_STOPPED,
+                },
+            ),
+            patch.object(
+                system_ops,
+                "get_known_windivert_service_registry_flags_runtime",
+                return_value={
+                    "WinDivert": {"start": system_ops._SERVICE_DISABLED, "delete_flag": 1},
+                    "Monkey": {"start": system_ops._SERVICE_DISABLED, "delete_flag": 1},
+                },
+            ),
+            patch.object(service_manager, "clear_service_delete_flag", return_value=True) as clear_flag,
+        ):
+            cleared = system_ops.clear_stopped_windivert_delete_flags_runtime()
+
+        self.assertTrue(cleared)
+        clear_flag.assert_called_once_with("Monkey")
 
     def test_spawn_readiness_restores_disabled_windivert_service_before_retry(self) -> None:
         from winws_runtime.runtime import system_ops

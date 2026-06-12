@@ -485,6 +485,31 @@ def get_service_registry_flags(service_name: str) -> dict[str, int | None]:
         return {"start": None, "delete_flag": None}
 
 
+def clear_service_delete_flag(service_name: str) -> bool:
+    """Удаляет зависший DeleteFlag у driver-service, если SCM не снял его сам."""
+    try:
+        import winreg
+
+        path = f"SYSTEM\\CurrentControlSet\\Services\\{service_name}"
+        with winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            path,
+            0,
+            winreg.KEY_SET_VALUE,
+        ) as key:
+            try:
+                winreg.DeleteValue(key, "DeleteFlag")
+                log(f"DeleteFlag очищен для службы {service_name}", "DEBUG")
+            except FileNotFoundError:
+                pass
+        return True
+    except FileNotFoundError:
+        return True
+    except Exception as e:
+        log(f"Ошибка очистки DeleteFlag службы {service_name}: {e}", "DEBUG")
+        return False
+
+
 def fast_cleanup_all() -> None:
     """
     Быстрая очистка всех служб и драйверов (не ждёт результата)

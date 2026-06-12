@@ -317,6 +317,31 @@ def restore_known_windivert_services_demand_start_runtime() -> bool:
     return ok
 
 
+def clear_stopped_windivert_delete_flags_runtime() -> bool:
+    """Снимает зависший DeleteFlag у уже остановленных WinDivert-служб."""
+    ok = True
+    states = get_known_windivert_service_states_runtime()
+    registry_flags = get_known_windivert_service_registry_flags_runtime()
+    try:
+        from utils.service_manager import clear_service_delete_flag
+
+        for service_name in _KNOWN_WINDIVERT_SERVICES:
+            flags = registry_flags.get(service_name) or {}
+            if int(flags.get("delete_flag") or 0) != 1:
+                continue
+            state = states.get(service_name)
+            if state in (_SERVICE_RUNNING, _SERVICE_STOP_PENDING):
+                continue
+            try:
+                ok = bool(clear_service_delete_flag(service_name)) and ok
+            except Exception:
+                ok = False
+    except Exception as e:
+        log(f"Ошибка очистки DeleteFlag WinDivert services: {e}", "DEBUG")
+        return False
+    return ok
+
+
 def stop_and_delete_named_service(service_name: str, *, retry_count: int = 3) -> bool:
     try:
         from utils.service_manager import stop_and_delete_service
@@ -359,6 +384,7 @@ def aggressive_windivert_cleanup_runtime() -> bool:
     if services_removed:
         ok = services_removed and ok
     else:
+        ok = clear_stopped_windivert_delete_flags_runtime() and ok
         ok = restore_known_windivert_services_demand_start_runtime() and ok
     time.sleep(0.3)
     ok = force_kill_all_winws_processes() and ok
