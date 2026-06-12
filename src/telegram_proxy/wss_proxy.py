@@ -662,14 +662,15 @@ class TelegramWSProxy:
                         init, label, dc=0, is_media=False,
                     )
                     return
-                if self._http_upstream_required and should_route_upstream(self._upstream, mode="fallback"):
-                    self._log(f"[{label}] HTTP transport learned-blocked -> upstream")
+                if should_route_upstream(self._upstream, mode="fallback"):
+                    self._http_upstream_required = True
+                    self._log(f"[{label}] HTTP transport -> upstream (fallback mode)")
                     self._record_route(
                         dc=0,
                         is_media=False,
-                        route="HTTP direct TCP",
+                        route="внешний SOCKS5",
                         status="пропуск",
-                        reason="раньше был TimeoutError",
+                        reason="HTTP transport, fallback SOCKS5",
                     )
                     await self._upstream_proxy_connect(
                         reader, writer, target_host, target_port,
