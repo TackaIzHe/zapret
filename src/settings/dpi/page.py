@@ -18,6 +18,7 @@ from settings.mode import (
 from ui.fluent_widgets import (
     SettingsCard,
 )
+from ui.accessibility import set_state_text
 from ui.one_shot_worker_runtime import OneShotWorkerRuntime
 from ui.queued_worker_state import QueuedWorkerState
 from app.ui_texts import tr as tr_catalog
@@ -61,6 +62,14 @@ METHOD_OPTION_TEXT = {
         ),
     },
 }
+
+
+def _set_method_description_accessibility(label, text: str) -> None:
+    set_state_text(label, f"Описание выбора метода запуска: {text}")
+
+
+def _set_method_section_accessibility(label, text: str) -> None:
+    set_state_text(label, f"Раздел метода запуска: {text}")
 
 
 class DpiSettingsPage(BasePage):
@@ -156,6 +165,7 @@ class DpiSettingsPage(BasePage):
             self._tr("page.dpi_settings.launch_method.desc", "Выберите способ запуска обхода блокировок")
         )
         self._method_desc_label = method_desc
+        _set_method_description_accessibility(method_desc, method_desc.text())
         method_layout.addWidget(method_desc)
 
         # ═══════════════════════════════════════
@@ -164,6 +174,7 @@ class DpiSettingsPage(BasePage):
         self.zapret2_header = StrongBodyLabel(
             self._tr("page.dpi_settings.section.zapret2", f"Zapret 2 ({EXE_NAME_WINWS2})")
         )
+        _set_method_section_accessibility(self.zapret2_header, self.zapret2_header.text())
         self.zapret2_header.setContentsMargins(0, 8, 0, 4)
         method_layout.addWidget(self.zapret2_header)
 
@@ -193,6 +204,7 @@ class DpiSettingsPage(BasePage):
             self._tr("page.dpi_settings.section.zapret1", f"Zapret 1 ({EXE_NAME_WINWS1})")
         )
         self._zapret1_header = zapret1_header
+        _set_method_section_accessibility(zapret1_header, zapret1_header.text())
         zapret1_header.setContentsMargins(0, 12, 0, 4)
         method_layout.addWidget(zapret1_header)
 
@@ -234,6 +246,7 @@ class DpiSettingsPage(BasePage):
         self._orchestra_label = StrongBodyLabel(
             self._tr("page.dpi_settings.section.orchestra_settings", "Настройки оркестратора")
         )
+        _set_method_section_accessibility(self._orchestra_label, self._orchestra_label.text())
         orchestra_settings_layout.addWidget(self._orchestra_label)
 
         self.strict_detection_toggle = Win11ToggleRow(
@@ -718,15 +731,19 @@ class DpiSettingsPage(BasePage):
             self._method_desc_label.setText(
                 self._tr("page.dpi_settings.launch_method.desc", "Выберите способ запуска обхода блокировок")
             )
+            _set_method_description_accessibility(self._method_desc_label, self._method_desc_label.text())
 
         if hasattr(self, "zapret2_header") and self.zapret2_header is not None:
             self.zapret2_header.setText(self._tr("page.dpi_settings.section.zapret2", f"Zapret 2 ({EXE_NAME_WINWS2})"))
+            _set_method_section_accessibility(self.zapret2_header, self.zapret2_header.text())
         if self._zapret1_header is not None:
             self._zapret1_header.setText(self._tr("page.dpi_settings.section.zapret1", f"Zapret 1 ({EXE_NAME_WINWS1})"))
+            _set_method_section_accessibility(self._zapret1_header, self._zapret1_header.text())
         if self._orchestra_label is not None:
             self._orchestra_label.setText(
                 self._tr("page.dpi_settings.section.orchestra_settings", "Настройки оркестратора")
             )
+            _set_method_section_accessibility(self._orchestra_label, self._orchestra_label.text())
 
         self.method_zapret2_mode.set_texts(
             *self._method_option_text(ZAPRET2_MODE),
