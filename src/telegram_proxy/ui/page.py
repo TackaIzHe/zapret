@@ -857,21 +857,13 @@ class TelegramProxyPage(BasePage):
         self._apply_cloudflare_ui()
 
     def _advanced_settings_should_open(self, state: telegram_proxy_settings.TelegramProxySettingsState) -> bool:
+        mtproxy_mode = state.mode == "mtproxy"
         return bool(
-            state.mode == "mtproxy"
-            or state.upstream_enabled
-            or state.upstream_host
-            or state.upstream_user
+            mtproxy_mode
             or state.cloudflare_enabled
             or state.cloudflare_domains
             or state.cloudflare_worker_enabled
             or state.cloudflare_worker_domains
-            or state.mtproxy_secret
-            or state.dc_ip
-            or state.pool_size != 4
-            or state.buffer_kb != 256
-            or state.fake_tls_domain
-            or state.proxy_protocol
         )
 
     def _try_auto_deeplink(self):
