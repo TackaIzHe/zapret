@@ -110,11 +110,13 @@ class CreateUserProfileDialog(MessageBoxBase):
             yes_description = "Создаёт profile и два пустых файла списка: hostlist и ipset."
             cancel_name = "Отменить создание пользовательского profile"
         set_control_accessibility(self.yesButton, name=yes_name, description=yes_description)
+        set_state_text(self.yesButton, yes_name)
         set_control_accessibility(
             self.cancelButton,
             name=cancel_name,
             description="Закрывает окно без изменений.",
         )
+        set_state_text(self.cancelButton, cancel_name)
 
     def _update_protocol_accessibility(self) -> None:
         selected = str(self.protocolCombo.currentText() or "").strip() or "не выбрано"

@@ -34,8 +34,36 @@ class UserProfileDialogAccessibilityTests(unittest.TestCase):
         self.assertEqual(dialog.portsEdit.accessibleName(), "Порты или L7 для пользовательского profile")
         self.assertIn("Например 80,443 или stun,discord", dialog.portsEdit.accessibleDescription())
         self.assertEqual(dialog.yesButton.accessibleName(), "Добавить пользовательский profile")
+        self.assertEqual(
+            dialog.yesButton.property("screenReaderStateText"),
+            "Добавить пользовательский profile",
+        )
         self.assertIn("Создаёт profile", dialog.yesButton.accessibleDescription())
         self.assertEqual(dialog.cancelButton.accessibleName(), "Отменить создание пользовательского profile")
+        self.assertEqual(
+            dialog.cancelButton.property("screenReaderStateText"),
+            "Отменить создание пользовательского profile",
+        )
+
+    def test_save_mode_buttons_have_screen_reader_state_text(self) -> None:
+        parent = QWidget()
+        self.addCleanup(parent.deleteLater)
+        parent.resize(640, 480)
+        parent.show()
+
+        dialog = CreateUserProfileDialog(parent, button_text="Сохранить")
+        self.addCleanup(dialog.deleteLater)
+
+        self.assertEqual(dialog.yesButton.accessibleName(), "Сохранить пользовательский profile")
+        self.assertEqual(
+            dialog.yesButton.property("screenReaderStateText"),
+            "Сохранить пользовательский profile",
+        )
+        self.assertEqual(dialog.cancelButton.accessibleName(), "Отменить изменение пользовательского profile")
+        self.assertEqual(
+            dialog.cancelButton.property("screenReaderStateText"),
+            "Отменить изменение пользовательского profile",
+        )
 
     def test_input_clear_buttons_do_not_take_tab_focus(self) -> None:
         parent = QWidget()
