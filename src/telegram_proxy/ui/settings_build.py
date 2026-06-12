@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
 from qfluentwidgets import FluentIcon
 
-from ui.accessibility import remove_line_edit_buttons_from_tab_order, set_control_accessibility
+from ui.accessibility import remove_line_edit_buttons_from_tab_order, set_control_accessibility, set_state_text
 from ui.fluent_widgets import (
     SettingsCard,
     QuickActionsBar,
@@ -217,12 +217,24 @@ def build_telegram_proxy_settings_panel(
     setup_open_btn = primary_push_button_cls("Открыть", icon=FluentIcon.SEND)
     setup_open_btn.setMinimumWidth(132)
     set_tooltip(setup_open_btn, "Открыть ссылку для автоматической настройки прокси внутри Telegram.")
+    set_control_accessibility(
+        setup_open_btn,
+        name="Открыть Telegram Proxy в Telegram",
+        description="Открывает ссылку для автоматической настройки прокси внутри Telegram.",
+    )
+    set_state_text(setup_open_btn, "Открыть Telegram Proxy в Telegram")
     setup_open_btn.clicked.connect(on_open_in_telegram)
     setup_card.add_button(setup_open_btn)
 
     setup_copy_btn = push_button_cls("Копировать", icon=FluentIcon.COPY)
     setup_copy_btn.setMinimumWidth(132)
     set_tooltip(setup_copy_btn, "Сохранить ссылку в буфер обмена, если Telegram не открылся автоматически.")
+    set_control_accessibility(
+        setup_copy_btn,
+        name="Копировать ссылку Telegram Proxy",
+        description="Сохраняет ссылку Telegram Proxy в буфер обмена, если Telegram не открылся автоматически.",
+    )
+    set_state_text(setup_copy_btn, "Копировать ссылку Telegram Proxy")
     setup_copy_btn.clicked.connect(on_copy_link)
     setup_card.add_button(setup_copy_btn)
 
@@ -244,6 +256,14 @@ def build_telegram_proxy_settings_panel(
     host_edit.setPlaceholderText("127.0.0.1")
     host_edit.setClearButtonEnabled(True)
     remove_line_edit_buttons_from_tab_order(host_edit)
+    set_control_accessibility(
+        host_edit,
+        name="Адрес Telegram Proxy",
+        description=(
+            "IP-адрес для прослушивания Telegram Proxy. 127.0.0.1 — только локально, "
+            "0.0.0.0 или IP вашей сети — доступ с других устройств."
+        ),
+    )
     set_tooltip(
         host_edit,
         "IP-адрес для прослушивания. 127.0.0.1 — только локально, "
@@ -259,6 +279,11 @@ def build_telegram_proxy_settings_panel(
     port_spin.setRange(1024, 65535)
     port_spin.setValue(1353)
     port_spin.setFixedWidth(140)
+    set_control_accessibility(
+        port_spin,
+        name="Порт Telegram Proxy",
+        description="Порт, на котором Telegram Proxy принимает подключения.",
+    )
     host_port_row.addWidget(port_spin)
     host_port_row.addStretch()
     insert_widget_into_setting_card_group(settings_card, 1, settings_host_row)

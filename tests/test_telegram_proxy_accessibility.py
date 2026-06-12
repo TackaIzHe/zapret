@@ -262,6 +262,56 @@ class TelegramProxyAccessibilityTests(unittest.TestCase):
         self.assertEqual(widgets.pool_size_spin.accessibleName(), "Пул WSS Telegram Proxy")
         self.assertEqual(widgets.buffer_kb_spin.accessibleName(), "Размер буфера Telegram Proxy")
 
+    def test_settings_panel_main_controls_are_named_for_screen_reader(self) -> None:
+        parent = QWidget()
+        self.addCleanup(parent.deleteLater)
+        layout = QVBoxLayout(parent)
+
+        widgets = build_telegram_proxy_settings_panel(
+            layout,
+            content_parent=parent,
+            status_dot_cls=QLabel,
+            strong_body_label_cls=StrongBodyLabel,
+            caption_label_cls=CaptionLabel,
+            body_label_cls=BodyLabel,
+            push_button_cls=PushButton,
+            primary_push_button_cls=PrimaryPushButton,
+            setting_card_group_cls=SettingCardGroup,
+            line_edit_cls=LineEdit,
+            spin_box_cls=SpinBox,
+            password_line_edit_cls=PasswordLineEdit,
+            win11_toggle_row_cls=Win11ToggleRow,
+            win11_combo_row_cls=Win11ComboRow,
+            on_toggle_proxy=lambda: None,
+            on_open_in_telegram=lambda: None,
+            on_copy_link=lambda: None,
+            on_open_mtproxy=lambda: None,
+            on_generate_mtproxy_secret=lambda: None,
+            on_copy_fake_tls_nginx_config=lambda: None,
+            on_test_cloudflare=lambda: None,
+            on_copy_cloudflare_dns=lambda: None,
+            on_test_cloudflare_worker=lambda: None,
+            on_copy_cloudflare_worker_code=lambda: None,
+            upstream_catalog={"manual": "Manual"},
+        )
+
+        self.assertEqual(widgets.setup_open_btn.accessibleName(), "Открыть Telegram Proxy в Telegram")
+        self.assertEqual(
+            widgets.setup_open_btn.property("screenReaderStateText"),
+            "Открыть Telegram Proxy в Telegram",
+        )
+        self.assertIn("автоматической настройки", widgets.setup_open_btn.accessibleDescription())
+        self.assertEqual(widgets.setup_copy_btn.accessibleName(), "Копировать ссылку Telegram Proxy")
+        self.assertEqual(
+            widgets.setup_copy_btn.property("screenReaderStateText"),
+            "Копировать ссылку Telegram Proxy",
+        )
+        self.assertIn("буфер обмена", widgets.setup_copy_btn.accessibleDescription())
+        self.assertEqual(widgets.host_edit.accessibleName(), "Адрес Telegram Proxy")
+        self.assertIn("IP-адрес", widgets.host_edit.accessibleDescription())
+        self.assertEqual(widgets.port_spin.accessibleName(), "Порт Telegram Proxy")
+        self.assertIn("порт", widgets.port_spin.accessibleDescription().lower())
+
     def test_settings_clear_buttons_do_not_take_tab_focus(self) -> None:
         parent = QWidget()
         self.addCleanup(parent.deleteLater)
