@@ -408,8 +408,6 @@ class NetworkPage(BasePage):
 
         self.add_widget(self.loading_card)
         self.add_widget(self.dns_cards_container)
-        self.add_spacing(6)
-        self.add_widget(self.custom_card)
         self._build_dns_choices_ui()
 
         self.add_spacing(12)

@@ -77,6 +77,7 @@ class ClickableCardAccessibilityTests(unittest.TestCase):
             show_ipv6=True,
         )
 
+        self.assertTrue(card.testAttribute(Qt.WidgetAttribute.WA_StyledBackground))
         self.assertFalse(hasattr(card, "indicator"))
         self.assertLessEqual(len(card.findChildren(QWidget)), 5)
 
@@ -86,7 +87,7 @@ class ClickableCardAccessibilityTests(unittest.TestCase):
         self.assertTrue(card.property("selected"))
         self.assertNotEqual(card.styleSheet(), off_style)
         self.assertIn("background-color", card.styleSheet())
-        self.assertIn("border", card.styleSheet())
+        self.assertIn("border-left", card.styleSheet())
         self.assertIn("rgba", card.styleSheet())
 
     def test_adapter_card_checkbox_works_from_keyboard(self) -> None:

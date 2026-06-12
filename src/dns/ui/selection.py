@@ -35,6 +35,14 @@ def sync_selectable_dns_card_accessibility(card) -> None:
 def set_dns_card_selected(card, selected: bool) -> None:
     if card is None:
         return
+    set_selected = getattr(card, "set_selected", None)
+    if callable(set_selected):
+        try:
+            set_selected(bool(selected))
+        except Exception:
+            pass
+        sync_selectable_dns_card_accessibility(card)
+        return
     try:
         card.setProperty("selected", bool(selected))
         style = card.style()

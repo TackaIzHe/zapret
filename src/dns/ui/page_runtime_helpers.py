@@ -136,6 +136,7 @@ def build_dns_choices_ui(
         on_select=lambda _event: on_auto_selected(),
     )
     dns_cards_layout.addWidget(auto_widgets.card)
+    dns_cards_layout.addWidget(custom_card)
 
     provider_cards = build_provider_cards_fn(
         providers_by_category=providers,

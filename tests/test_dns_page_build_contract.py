@@ -62,6 +62,23 @@ class DnsPageBuildContractTests(unittest.TestCase):
         self.assertIs(shell.dns_cards_container.parent(), content_parent)
         self.assertIs(shell.adapters_container.parent(), content_parent)
 
+    def test_network_page_places_custom_dns_inside_dns_choices_list(self) -> None:
+        from dns.ui.page import NetworkPage
+
+        dns_feature = SimpleNamespace(
+            normalize_adapter_alias=lambda value: str(value),
+            consume_warmed_page_data=lambda: None,
+            create_page_load_worker=lambda request_id, parent=None: None,
+        )
+
+        page = NetworkPage(deps=SimpleNamespace(dns_feature=dns_feature))
+
+        self.assertIs(page.custom_card.parent(), page.dns_cards_container)
+        self.assertLess(
+            page.dns_cards_layout.indexOf(page.custom_card),
+            page.dns_cards_layout.count(),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

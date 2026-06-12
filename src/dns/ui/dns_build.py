@@ -12,6 +12,7 @@ from dns.ui.selection import (
     ACCESSIBLE_DESCRIPTION_PROPERTY,
     sync_selectable_dns_card_accessibility,
 )
+from dns.ui.cards import DNSChoiceCard
 from ui.accessibility import set_control_accessibility, set_state_text
 from ui.theme import get_cached_qta_pixmap
 
@@ -72,17 +73,11 @@ def build_custom_dns_ui(
     on_apply,
     indicator_off_qss: str,
 ) -> CustomDnsWidgets:
-    custom_card = settings_card_cls()
-    custom_card.setObjectName("dnsCard")
-    custom_card.setProperty("selected", False)
-    custom_layout = qhbox_layout_cls()
-    custom_layout.setContentsMargins(10, 6, 12, 6)
+    _ = settings_card_cls, qframe_cls, indicator_off_qss
+    custom_card = DNSChoiceCard()
+    custom_layout = qhbox_layout_cls(custom_card)
+    custom_layout.setContentsMargins(8, 3, 12, 3)
     custom_layout.setSpacing(8)
-
-    custom_indicator = qframe_cls()
-    custom_indicator.setFixedSize(16, 16)
-    custom_indicator.setStyleSheet(indicator_off_qss)
-    custom_layout.addWidget(custom_indicator)
 
     custom_label = body_label_cls(tr_fn("page.network.custom.label", "Свой:"))
     custom_layout.addWidget(custom_label)
@@ -119,7 +114,7 @@ def build_custom_dns_ui(
         tr_fn("page.network.custom.apply", "OK"),
         icon=FluentIcon.ACCEPT,
     )
-    custom_apply_btn.setFixedSize(70, 26)
+    custom_apply_btn.setFixedSize(68, 24)
     custom_apply_btn.clicked.connect(on_apply)
     apply_accessible_name = tr_fn("page.network.custom.apply.accessible_name", "Применить свой DNS")
     set_control_accessibility(
@@ -135,12 +130,21 @@ def build_custom_dns_ui(
 
     custom_layout.addStretch()
 
-    custom_card.add_layout(custom_layout)
+    custom_accessible_name = tr_fn("page.network.custom.accessible_name", "Свой DNS")
+    custom_card.setProperty(ACCESSIBLE_BASE_PROPERTY, custom_accessible_name)
+    custom_card.setProperty(
+        ACCESSIBLE_DESCRIPTION_PROPERTY,
+        tr_fn(
+            "page.network.custom.accessible_description",
+            "Введите DNS серверы и нажмите OK, чтобы применить их к выбранным сетевым адаптерам.",
+        ),
+    )
+    sync_selectable_dns_card_accessibility(custom_card)
     custom_card.hide()
 
     return CustomDnsWidgets(
         card=custom_card,
-        indicator=custom_indicator,
+        indicator=None,
         title_label=custom_label,
         primary_input=custom_primary,
         secondary_input=custom_secondary,
@@ -161,19 +165,11 @@ def build_auto_dns_ui(
     indicator_off_qss: str,
     on_select,
 ) -> AutoDnsWidgets:
-    auto_card = settings_card_cls()
-    auto_card.setObjectName("dnsCard")
-    auto_card.setCursor(Qt.CursorShape.PointingHandCursor)
-    auto_card.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-    auto_card.setProperty("selected", False)
-    auto_layout = qhbox_layout_cls()
-    auto_layout.setContentsMargins(10, 6, 12, 6)
+    _ = settings_card_cls, qframe_cls, indicator_off_qss
+    auto_card = DNSChoiceCard()
+    auto_layout = qhbox_layout_cls(auto_card)
+    auto_layout.setContentsMargins(8, 3, 12, 3)
     auto_layout.setSpacing(10)
-
-    auto_indicator = qframe_cls()
-    auto_indicator.setFixedSize(16, 16)
-    auto_indicator.setStyleSheet(indicator_off_qss)
-    auto_layout.addWidget(auto_indicator)
 
     auto_icon = qlabel_cls()
     auto_icon.setPixmap(get_cached_qta_pixmap("fa5s.sync", color=icon_color, size=16))
@@ -183,7 +179,6 @@ def build_auto_dns_ui(
     auto_layout.addWidget(auto_label)
 
     auto_layout.addStretch()
-    auto_card.add_layout(auto_layout)
     auto_card.mousePressEvent = on_select
     auto_accessible_name = tr_fn("page.network.dns.auto.accessible_name", "DNS автоматически (DHCP)")
     auto_card.setProperty(ACCESSIBLE_BASE_PROPERTY, auto_accessible_name)
@@ -202,7 +197,7 @@ def build_auto_dns_ui(
 
     return AutoDnsWidgets(
         card=auto_card,
-        indicator=auto_indicator,
+        indicator=None,
         icon_label=auto_icon,
         title_label=auto_label,
     )

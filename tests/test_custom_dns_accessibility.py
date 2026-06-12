@@ -42,6 +42,14 @@ class CustomDnsAccessibilityTests(unittest.TestCase):
             "Применить свой DNS",
         )
         self.assertIn("указанные DNS серверы", widgets.apply_button.accessibleDescription())
+        self.assertIsNone(widgets.indicator)
+        self.assertTrue(hasattr(widgets.card, "set_selected"))
+
+        set_dns_card_selected(widgets.card, True)
+
+        self.assertTrue(widgets.card.property("selected"))
+        self.assertIn("border-left", widgets.card.styleSheet())
+        self.assertIn("background-color", widgets.card.styleSheet())
 
     def test_auto_dns_card_has_keyboard_selection_and_screen_reader_state(self) -> None:
         selected: list[str] = []
@@ -59,6 +67,9 @@ class CustomDnsAccessibilityTests(unittest.TestCase):
             on_select=lambda _event=None: selected.append("auto"),
         )
 
+        self.assertIsNone(widgets.indicator)
+        self.assertTrue(hasattr(widgets.card, "set_selected"))
+        self.assertTrue(widgets.card.testAttribute(Qt.WidgetAttribute.WA_StyledBackground))
         self.assertEqual(widgets.card.focusPolicy(), Qt.FocusPolicy.StrongFocus)
         self.assertEqual(widgets.card.accessibleName(), "DNS автоматически (DHCP), не выбран")
         self.assertEqual(

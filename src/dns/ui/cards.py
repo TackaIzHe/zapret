@@ -27,7 +27,75 @@ from ui.theme_refresh import ThemeRefreshBinding
 from app.ui_texts import tr as tr_catalog
 
 
-class DNSProviderCard(QWidget):
+class DNSChoiceCard(QWidget):
+    """Единая лёгкая строка выбора DNS."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._is_selected = False
+        self.setObjectName("dnsCard")
+        self.setProperty("selected", False)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setMinimumHeight(34)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self._apply_card_style()
+
+    def _apply_card_style(self, tokens=None) -> None:
+        theme_tokens = tokens or get_theme_tokens()
+        r, g, b = theme_tokens.accent_rgb
+        accent = theme_tokens.accent_hex
+        transparent_left = "rgba(0, 0, 0, 0)"
+        if self._is_selected:
+            bg = f"rgba({r}, {g}, {b}, 0.24)"
+            bg_hover = f"rgba({r}, {g}, {b}, 0.31)"
+            border = f"rgba({r}, {g}, {b}, 0.40)"
+            left = accent
+        else:
+            bg = theme_tokens.surface_bg
+            bg_hover = theme_tokens.surface_bg_hover
+            border = theme_tokens.surface_border
+            left = transparent_left
+        hover_border = border if self._is_selected else theme_tokens.surface_border_hover
+        self.setStyleSheet(
+            f"""
+            QWidget#dnsCard {{
+                background-color: {bg};
+                border-top: 1px solid {border};
+                border-right: 1px solid {border};
+                border-bottom: 1px solid {border};
+                border-left: 4px solid {left};
+                border-radius: 8px;
+            }}
+            QWidget#dnsCard:hover {{
+                background-color: {bg_hover};
+                border-top: 1px solid {hover_border};
+                border-right: 1px solid {hover_border};
+                border-bottom: 1px solid {hover_border};
+                border-left: 4px solid {accent};
+            }}
+            """
+        )
+
+    def set_selected(self, selected: bool):
+        self._is_selected = bool(selected)
+        self.setProperty("selected", self._is_selected)
+        self._on_selected_changed()
+        self._apply_card_style()
+        style = self.style()
+        if style is not None:
+            try:
+                style.unpolish(self)
+                style.polish(self)
+            except Exception:
+                pass
+        self.update()
+
+    def _on_selected_changed(self) -> None:
+        pass
+
+
+class DNSProviderCard(DNSChoiceCard):
     """Лёгкая карточка DNS-провайдера."""
 
     selected = pyqtSignal(str, dict)
@@ -63,17 +131,11 @@ class DNSProviderCard(QWidget):
         self.data = data
         self.is_current = is_current
         self.show_ipv6 = bool(show_ipv6)
-        self._is_selected = False
         self._icon_label = None
         self._name_label = None
         self._desc_label = None
         self._doh_label = None
         self._ip_label = None
-        self.setObjectName("dnsCard")
-        self.setProperty("selected", False)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.setMinimumHeight(40)
         self._setup_ui()
         self._refresh_accessibility()
         self._theme_refresh = ThemeRefreshBinding(self, self._apply_theme_refresh)
@@ -112,7 +174,7 @@ class DNSProviderCard(QWidget):
     def _setup_ui(self):
         tokens = get_theme_tokens()
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 4, 12, 4)
+        layout.setContentsMargins(8, 3, 12, 3)
         layout.setSpacing(10)
 
         icon_color = self.data.get('color') or tokens.accent_hex
@@ -195,44 +257,8 @@ class DNSProviderCard(QWidget):
         except Exception:
             pass
 
-    def _apply_card_style(self, tokens=None) -> None:
-        theme_tokens = tokens or get_theme_tokens()
-        r, g, b = theme_tokens.accent_rgb
-        if self._is_selected:
-            bg = f"rgba({r}, {g}, {b}, 0.28)"
-            bg_hover = f"rgba({r}, {g}, {b}, 0.34)"
-            border = f"rgba({r}, {g}, {b}, 0.40)"
-        else:
-            bg = theme_tokens.surface_bg
-            bg_hover = theme_tokens.surface_bg_hover
-            border = theme_tokens.surface_border
-        self.setStyleSheet(
-            f"""
-            QWidget#dnsCard {{
-                background-color: {bg};
-                border: 1px solid {border};
-                border-radius: 8px;
-            }}
-            QWidget#dnsCard:hover {{
-                background-color: {bg_hover};
-                border: 1px solid {theme_tokens.surface_border_hover if not self._is_selected else border};
-            }}
-            """
-        )
-
-    def set_selected(self, selected: bool):
-        self._is_selected = selected
-        self.setProperty("selected", bool(selected))
+    def _on_selected_changed(self) -> None:
         self._refresh_accessibility()
-        self._apply_card_style()
-        style = self.style()
-        if style is not None:
-            try:
-                style.unpolish(self)
-                style.polish(self)
-            except Exception:
-                pass
-        self.update()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
