@@ -100,9 +100,9 @@ class WindowLifecycleMixin:
         """Скрывает окно в трей (без выхода из GUI)."""
         return self._require_application_lifecycle().close_to_tray()
 
-    def _hide_to_tray_on_minimize_close_enabled(self) -> bool:
+    def _minimize_to_tray_enabled(self) -> bool:
         close_flow = getattr(self, "window_close_flow", None)
-        provider = getattr(close_flow, "hide_to_tray_on_minimize_close_enabled", None)
+        provider = getattr(close_flow, "minimize_to_tray_enabled", None)
         if not callable(provider):
             return False
         return bool(provider())
@@ -111,7 +111,7 @@ class WindowLifecycleMixin:
         if handle_native_minimize_command(
             self,
             message,
-            hide_to_tray_enabled=self._hide_to_tray_on_minimize_close_enabled,
+            minimize_to_tray_enabled=self._minimize_to_tray_enabled,
         ):
             return (True, 0)
         return super().nativeEvent(event_type, message)
@@ -119,7 +119,7 @@ class WindowLifecycleMixin:
     def showMinimized(self) -> None:  # noqa: N802 (Qt override)
         if handle_minimize_request(
             self,
-            hide_to_tray_enabled=self._hide_to_tray_on_minimize_close_enabled,
+            minimize_to_tray_enabled=self._minimize_to_tray_enabled,
         ):
             return
         super().showMinimized()

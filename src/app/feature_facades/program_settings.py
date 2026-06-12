@@ -43,19 +43,19 @@ class ProgramSettingsFeature:
     def publish_program_settings_snapshot(self, snapshot) -> bool:
         return bool(self._commands().publish_program_settings_snapshot(self.runtime_service, snapshot))
 
-    def hide_to_tray_on_minimize_close_enabled(self) -> bool:
-        return bool(
-            self._commands().peek_hide_to_tray_on_minimize_close(
+    def tray_close_mode(self) -> str:
+        return str(
+            self._commands().peek_tray_close_mode(
                 self.runtime_service,
-                default=False,
+                default="normal",
             )
         )
 
-    def remember_hide_to_tray_on_minimize_close(self, enabled: bool) -> bool:
+    def remember_tray_close_mode(self, mode: str) -> bool:
         return bool(
-            self._commands().remember_hide_to_tray_on_minimize_close(
+            self._commands().remember_tray_close_mode(
                 self.runtime_service,
-                bool(enabled),
+                str(mode or "normal"),
             )
         )
 
@@ -83,13 +83,13 @@ class ProgramSettingsFeature:
         normalized_action = str(action or "").strip()
         commands = self._commands()
 
-        def save_hide_to_tray(enabled: bool, *, status_callback=None):
-            return bool(commands.set_hide_to_tray_on_minimize_close(enabled))
+        def save_tray_close_mode(mode: str, *, status_callback=None):
+            return str(commands.set_tray_close_mode(str(mode or "normal")))
 
         actions = {
             "auto_dpi": commands.set_auto_dpi_enabled,
             "gui_autostart": commands.set_gui_autostart_enabled,
-            "hide_to_tray": save_hide_to_tray,
+            "tray_close_mode": save_tray_close_mode,
             "defender_disabled": commands.set_defender_disabled,
             "max_block": commands.set_max_block_enabled,
         }
@@ -97,18 +97,18 @@ class ProgramSettingsFeature:
         if save_action is not None:
             return save_action
 
-        def unknown_action(enabled: bool, *, status_callback=None):
+        def unknown_action(value: object, *, status_callback=None):
             raise ValueError(f"Неизвестная настройка программы: {normalized_action}")
 
         return unknown_action
 
-    def create_program_settings_save_worker(self, request_id: int, *, action: str, enabled: bool, parent=None):
+    def create_program_settings_save_worker(self, request_id: int, *, action: str, value: object, parent=None):
         from program_settings.workers import ProgramSettingsSaveWorker
 
         return ProgramSettingsSaveWorker(
             request_id,
             action=action,
-            enabled=bool(enabled),
+            value=value,
             save_action=self._program_settings_save_action(action),
             parent=parent,
         )

@@ -99,7 +99,7 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
         create_program_settings_admin_check_worker,
         attach_program_settings_runtime,
         publish_program_settings_snapshot,
-        remember_hide_to_tray_on_minimize_close,
+        remember_tray_close_mode,
         set_status,
         request_exit,
         open_connection_test,
@@ -131,7 +131,7 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
         self._create_program_settings_admin_check_worker = create_program_settings_admin_check_worker
         self._attach_program_settings_runtime_fn = attach_program_settings_runtime
         self._publish_program_settings_snapshot = publish_program_settings_snapshot
-        self._remember_hide_to_tray_on_minimize_close = remember_hide_to_tray_on_minimize_close
+        self._remember_tray_close_mode = remember_tray_close_mode
         self._set_status_callback = set_status
         self._request_exit_callback = request_exit
         self._open_connection_test_callback = open_connection_test
@@ -151,7 +151,7 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
         self.program_settings_card = None
         self.gui_autostart_toggle = None
         self.auto_dpi_toggle = None
-        self.hide_to_tray_toggle = None
+        self.tray_close_mode_combo = None
         self.defender_toggle = None
         self.max_block_toggle = None
         self.additional_settings_section_label = None
@@ -444,7 +444,7 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
         from presets.ui.control.zapret2.sections_build import (
             build_winws2_pages_settings_sections,
         )
-        from ui.widgets.win11_controls import Win11ToggleRow
+        from ui.widgets.win11_controls import Win11ComboRow, Win11ToggleRow
 
         section_widgets = build_winws2_pages_settings_sections(
             add_section_title=self.add_section_title,
@@ -453,9 +453,10 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
             setting_card_group_cls=SettingCardGroup,
             push_setting_card_cls=PushSettingCard,
             win11_toggle_row_cls=Win11ToggleRow,
+            win11_combo_row_cls=Win11ComboRow,
             on_gui_autostart_toggled=self._on_gui_autostart_toggled,
             on_auto_dpi_toggled=self._on_auto_dpi_toggled,
-            on_hide_to_tray_toggled=self._on_hide_to_tray_toggled,
+            on_tray_close_mode_changed=self._on_tray_close_mode_changed,
             on_defender_toggled=self._on_defender_toggled,
             on_max_blocker_toggled=self._on_max_blocker_toggled,
             on_discord_restart_changed=self._on_discord_restart_changed,
@@ -471,7 +472,7 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
         self.program_settings_card = section_widgets.program_settings_card
         self.gui_autostart_toggle = section_widgets.gui_autostart_toggle
         self.auto_dpi_toggle = section_widgets.auto_dpi_toggle
-        self.hide_to_tray_toggle = section_widgets.hide_to_tray_toggle
+        self.tray_close_mode_combo = section_widgets.tray_close_mode_combo
         self.defender_toggle = section_widgets.defender_toggle
         self.max_block_toggle = section_widgets.max_block_toggle
         self.add_spacing(8)
@@ -762,7 +763,7 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
             snapshot,
             auto_dpi_toggle=self.auto_dpi_toggle,
             gui_autostart_toggle=self.gui_autostart_toggle,
-            hide_to_tray_toggle=self.hide_to_tray_toggle,
+            tray_close_mode_combo=self.tray_close_mode_combo,
             defender_toggle=self.defender_toggle,
             max_block_toggle=self.max_block_toggle,
         )
@@ -773,8 +774,8 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
     def _on_auto_dpi_toggled(self, enabled: bool) -> None:
         self._request_program_settings_save("auto_dpi", bool(enabled))
 
-    def _on_hide_to_tray_toggled(self, enabled: bool) -> None:
-        self._request_program_settings_save("hide_to_tray", bool(enabled))
+    def _on_tray_close_mode_changed(self, mode: str) -> None:
+        self._request_program_settings_save("tray_close_mode", str(mode or "normal"))
 
     def _update_stop_winws_button_text(self):
         plan = _zapret2_page_runtime().build_stop_button_plan(language=self._ui_language)
@@ -952,7 +953,7 @@ class Zapret2ModeControlPage(ControlPageWindowsFeatureMixin, ControlPageActionMi
             program_settings_card=self.program_settings_card,
             auto_dpi_toggle=self.auto_dpi_toggle,
             gui_autostart_toggle=self.gui_autostart_toggle,
-            hide_to_tray_toggle=self.hide_to_tray_toggle,
+            tray_close_mode_combo=self.tray_close_mode_combo,
             defender_toggle=self.defender_toggle,
             max_block_toggle=self.max_block_toggle,
             additional_settings_card=self.additional_settings_card,

@@ -141,7 +141,7 @@ class GuiAutostartContractTests(unittest.TestCase):
                 "max_blocked": False,
             },
             "window": {
-                "hide_to_tray_on_minimize_close": False,
+                "tray_close_mode": "normal",
             },
         }
         with (

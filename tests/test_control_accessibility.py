@@ -101,7 +101,7 @@ def _language_refresh_kwargs() -> dict[str, object]:
         "program_settings_card": _CardTarget(),
         "auto_dpi_toggle": _ToggleTarget(),
         "gui_autostart_toggle": _ToggleTarget(),
-        "hide_to_tray_toggle": _ToggleTarget(),
+        "tray_close_mode_combo": _ToggleTarget(),
         "defender_toggle": _ToggleTarget(),
         "max_block_toggle": _ToggleTarget(),
         "test_card": _CardTarget(),

@@ -225,13 +225,13 @@ TEXTS: dict[str, dict[str, str]] = {
         "ru": "Запускать программу в трее при входе в Windows",
         "en": "Start the app in the tray when signing in to Windows",
     },
-    "page.control.setting.hide_to_tray.title": {
-        "ru": "Всегда скрывать в трей при сворачивании и закрытии",
-        "en": "Always hide to tray when minimizing and closing",
+    "page.control.setting.tray_close_mode.title": {
+        "ru": "Поведение окна и трея",
+        "en": "Window and tray behavior",
     },
-    "page.control.setting.hide_to_tray.desc": {
-        "ru": "Кнопка свернуть и крестик прячут окно в системный трей",
-        "en": "The minimize button and close button hide the window to the system tray",
+    "page.control.setting.tray_close_mode.desc": {
+        "ru": "Выберите, когда ZapretGUI будет скрывать окно в системный трей",
+        "en": "Choose when ZapretGUI hides the window to the system tray",
     },
     "page.control.setting.defender.title": {
         "ru": "Отключить Windows Defender",

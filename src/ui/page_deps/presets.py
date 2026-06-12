@@ -81,7 +81,7 @@ def build_control_page_kwargs(
         "create_program_settings_admin_check_worker": program_settings_feature.create_program_settings_admin_check_worker,
         "attach_program_settings_runtime": program_settings_feature.attach_program_settings_runtime,
         "publish_program_settings_snapshot": program_settings_feature.publish_program_settings_snapshot,
-        "remember_hide_to_tray_on_minimize_close": program_settings_feature.remember_hide_to_tray_on_minimize_close,
+        "remember_tray_close_mode": program_settings_feature.remember_tray_close_mode,
         "set_status": set_status,
         "request_exit": request_exit,
         "open_connection_test": open_connection_test,

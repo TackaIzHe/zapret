@@ -4,31 +4,43 @@ from dataclasses import dataclass
 from threading import RLock
 import weakref
 
+from settings.schema import (
+    TRAY_CLOSE_MODE_MINIMIZE_AND_CLOSE,
+    TRAY_CLOSE_MODE_MINIMIZE_ONLY,
+    TRAY_CLOSE_MODE_NORMAL,
+    VALID_TRAY_CLOSE_MODES,
+)
+
 
 @dataclass(frozen=True, slots=True)
 class ProgramSettingsSnapshot:
-    revision: tuple[bool, bool, bool, bool, bool]
+    revision: tuple[bool, bool, str, bool, bool]
     auto_dpi_enabled: bool
     gui_autostart_enabled: bool
-    hide_to_tray_on_minimize_close: bool
+    tray_close_mode: str
     defender_disabled: bool
     max_blocked: bool
 
 
-_warmed_hide_to_tray_lock = RLock()
-_warmed_hide_to_tray_on_minimize_close: bool | None = None
+_warmed_tray_close_mode_lock = RLock()
+_warmed_tray_close_mode: str | None = None
 
 
-def store_warmed_hide_to_tray_on_minimize_close(enabled: bool | None) -> None:
-    global _warmed_hide_to_tray_on_minimize_close
-    normalized = None if enabled is None else bool(enabled)
-    with _warmed_hide_to_tray_lock:
-        _warmed_hide_to_tray_on_minimize_close = normalized
+def normalize_tray_close_mode(value: object) -> str:
+    normalized = str(value or "").strip()
+    return normalized if normalized in VALID_TRAY_CLOSE_MODES else TRAY_CLOSE_MODE_NORMAL
 
 
-def peek_warmed_hide_to_tray_on_minimize_close() -> bool | None:
-    with _warmed_hide_to_tray_lock:
-        return _warmed_hide_to_tray_on_minimize_close
+def store_warmed_tray_close_mode(mode: str | None) -> None:
+    global _warmed_tray_close_mode
+    normalized = None if mode is None else normalize_tray_close_mode(mode)
+    with _warmed_tray_close_mode_lock:
+        _warmed_tray_close_mode = normalized
+
+
+def peek_warmed_tray_close_mode() -> str | None:
+    with _warmed_tray_close_mode_lock:
+        return _warmed_tray_close_mode
 
 
 class ProgramSettingsRuntimeService:
@@ -41,9 +53,7 @@ class ProgramSettingsRuntimeService:
 
     def __init__(self) -> None:
         self._lock = RLock()
-        self._hide_to_tray_on_minimize_close_cache: bool | None = (
-            peek_warmed_hide_to_tray_on_minimize_close()
-        )
+        self._tray_close_mode_cache: str | None = peek_warmed_tray_close_mode()
         self._snapshot: ProgramSettingsSnapshot | None = None
         self._subscribers: list[object] = []
 
@@ -52,14 +62,15 @@ class ProgramSettingsRuntimeService:
         *,
         auto_dpi_enabled: bool,
         gui_autostart_enabled: bool,
-        hide_to_tray_on_minimize_close: bool,
+        tray_close_mode: str,
         defender_disabled: bool,
         max_blocked: bool,
     ) -> ProgramSettingsSnapshot:
+        normalized_tray_close_mode = normalize_tray_close_mode(tray_close_mode)
         revision = (
             bool(auto_dpi_enabled),
             bool(gui_autostart_enabled),
-            bool(hide_to_tray_on_minimize_close),
+            normalized_tray_close_mode,
             bool(defender_disabled),
             bool(max_blocked),
         )
@@ -67,7 +78,7 @@ class ProgramSettingsRuntimeService:
             revision=revision,
             auto_dpi_enabled=bool(auto_dpi_enabled),
             gui_autostart_enabled=bool(gui_autostart_enabled),
-            hide_to_tray_on_minimize_close=bool(hide_to_tray_on_minimize_close),
+            tray_close_mode=normalized_tray_close_mode,
             defender_disabled=bool(defender_disabled),
             max_blocked=bool(max_blocked),
         )
@@ -89,7 +100,7 @@ class ProgramSettingsRuntimeService:
         return self._build_snapshot(
             auto_dpi_enabled=bool(program.get("dpi_autostart", True)),
             gui_autostart_enabled=bool(program.get("gui_autostart_enabled", False)),
-            hide_to_tray_on_minimize_close=bool(window.get("hide_to_tray_on_minimize_close", False)),
+            tray_close_mode=window.get("tray_close_mode", TRAY_CLOSE_MODE_NORMAL),
             defender_disabled=bool(program.get("defender_disabled", False)),
             max_blocked=bool(program.get("max_blocked", False)),
         )
@@ -101,9 +112,7 @@ class ProgramSettingsRuntimeService:
         should_notify = False
         with self._lock:
             previous = self._snapshot
-            self._hide_to_tray_on_minimize_close_cache = bool(
-                snapshot.hide_to_tray_on_minimize_close
-            )
+            self._tray_close_mode_cache = normalize_tray_close_mode(snapshot.tray_close_mode)
             if previous is None or previous.revision != snapshot.revision:
                 self._snapshot = snapshot
                 should_notify = True
@@ -114,20 +123,20 @@ class ProgramSettingsRuntimeService:
             self._notify(snapshot)
         return should_notify
 
-    def peek_hide_to_tray_on_minimize_close(self, *, default: bool = False) -> bool:
+    def peek_tray_close_mode(self, *, default: str = TRAY_CLOSE_MODE_NORMAL) -> str:
         with self._lock:
             snapshot = self._snapshot
-            cached = self._hide_to_tray_on_minimize_close_cache
+            cached = self._tray_close_mode_cache
         if snapshot is not None:
-            return bool(snapshot.hide_to_tray_on_minimize_close)
+            return normalize_tray_close_mode(snapshot.tray_close_mode)
         if cached is not None:
-            return bool(cached)
-        return bool(default)
+            return normalize_tray_close_mode(cached)
+        return normalize_tray_close_mode(default)
 
-    def remember_hide_to_tray_on_minimize_close(self, enabled: bool) -> bool:
-        enabled = bool(enabled)
+    def remember_tray_close_mode(self, mode: str) -> bool:
+        normalized_mode = normalize_tray_close_mode(mode)
         with self._lock:
-            self._hide_to_tray_on_minimize_close_cache = enabled
+            self._tray_close_mode_cache = normalized_mode
             snapshot = self._snapshot
         if snapshot is None:
             return False
@@ -135,13 +144,13 @@ class ProgramSettingsRuntimeService:
             revision=(
                 bool(snapshot.auto_dpi_enabled),
                 bool(snapshot.gui_autostart_enabled),
-                enabled,
+                normalized_mode,
                 bool(snapshot.defender_disabled),
                 bool(snapshot.max_blocked),
             ),
             auto_dpi_enabled=bool(snapshot.auto_dpi_enabled),
             gui_autostart_enabled=bool(snapshot.gui_autostart_enabled),
-            hide_to_tray_on_minimize_close=enabled,
+            tray_close_mode=normalized_mode,
             defender_disabled=bool(snapshot.defender_disabled),
             max_blocked=bool(snapshot.max_blocked),
         )

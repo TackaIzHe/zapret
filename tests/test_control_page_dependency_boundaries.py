@@ -110,8 +110,8 @@ class ControlPageDependencyBoundaryTests(unittest.TestCase):
             program_settings.publish_program_settings_snapshot,
         )
         self.assertIs(
-            kwargs["remember_hide_to_tray_on_minimize_close"],
-            program_settings.remember_hide_to_tray_on_minimize_close,
+            kwargs["remember_tray_close_mode"],
+            program_settings.remember_tray_close_mode,
         )
         self.assertNotIn("presets_feature", kwargs)
         self.assertNotIn("profile_feature", kwargs)

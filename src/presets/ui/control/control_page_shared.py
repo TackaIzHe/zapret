@@ -324,11 +324,11 @@ class ControlPageActionMixin:
         except Exception:
             pass
 
-    def create_program_settings_save_worker(self, request_id: int, *, action: str, enabled: bool):
+    def create_program_settings_save_worker(self, request_id: int, *, action: str, value: object):
         return self._create_program_settings_save_worker(
             request_id,
             action=action,
-            enabled=bool(enabled),
+            value=value,
             parent=self,
         )
 
@@ -424,18 +424,18 @@ class ControlPageActionMixin:
             return
         self._request_program_settings_load()
 
-    def _request_program_settings_save(self, action: str, enabled: bool) -> None:
+    def _request_program_settings_save(self, action: str, value: object) -> None:
         runtime = self._refresh_runtime
         state = runtime.program_settings_save_state
         if state.is_busy():
-            runtime.queue_program_settings_save(action, bool(enabled))
+            runtime.queue_program_settings_save(action, value)
             return
 
         runtime.program_settings_save_runtime.start_qthread_worker(
             worker_factory=lambda request_id: self.create_program_settings_save_worker(
                 request_id,
                 action=action,
-                enabled=bool(enabled),
+                value=value,
             ),
             on_loaded=self._on_program_settings_save_finished,
             on_failed=self._on_program_settings_save_failed,
@@ -488,8 +488,8 @@ class ControlPageActionMixin:
                 self._show_windows_feature_action_result(result, self.defender_toggle)
             elif action == "max_block":
                 self._show_windows_feature_action_result(result, self.max_block_toggle)
-            elif action == "hide_to_tray":
-                self._remember_hide_to_tray_on_minimize_close(bool(result))
+            elif action == "tray_close_mode":
+                self._remember_tray_close_mode(str(result or "normal"))
         finally:
             sync_program_settings = getattr(self, "_sync_program_settings", None)
             if callable(sync_program_settings):
@@ -520,11 +520,11 @@ class ControlPageActionMixin:
             single_shot=QTimer.singleShot,
             start=lambda item: self._run_scheduled_program_settings_save_start(
                 str(item[0]),
-                bool(item[1]),
+                item[1],
             ),
             queue_item=lambda item: runtime.queue_program_settings_save(
                 str(item[0]),
-                bool(item[1]),
+                item[1],
                 front=True,
             ),
             is_cleanup_in_progress=lambda: bool(getattr(self, "_cleanup_in_progress", False)),
@@ -532,33 +532,33 @@ class ControlPageActionMixin:
         if next_save is None:
             return
 
-    def _schedule_program_settings_save_start(self, action: str, enabled: bool) -> None:
+    def _schedule_program_settings_save_start(self, action: str, value: object) -> None:
         runtime = self._refresh_runtime
         state = runtime.program_settings_save_state
-        item = (str(action or ""), bool(enabled))
+        item = (str(action or ""), value)
         try:
             state.schedule_start(
                 item,
                 QTimer.singleShot,
                 lambda pending: self._run_scheduled_program_settings_save_start(
                     str(pending[0]),
-                    bool(pending[1]),
+                    pending[1],
                 ),
                 queue_item=lambda pending: runtime.queue_program_settings_save(
                     str(pending[0]),
-                    bool(pending[1]),
+                    pending[1],
                     front=True,
                 ),
                 is_cleanup_in_progress=lambda: bool(getattr(self, "_cleanup_in_progress", False)),
             )
         except Exception:
-            self._run_scheduled_program_settings_save_start(str(action or ""), bool(enabled))
+            self._run_scheduled_program_settings_save_start(str(action or ""), value)
 
-    def _run_scheduled_program_settings_save_start(self, action: str, enabled: bool) -> None:
+    def _run_scheduled_program_settings_save_start(self, action: str, value: object) -> None:
         self._refresh_runtime.program_settings_save_state.start_scheduled = False
         if bool(getattr(self, "_cleanup_in_progress", False)):
             return
-        self._request_program_settings_save(str(action or ""), bool(enabled))
+        self._request_program_settings_save(str(action or ""), value)
 
     def _is_current_worker_finish(self, runtime, worker) -> bool:
         if self.__dict__.get("_cleanup_in_progress", False):

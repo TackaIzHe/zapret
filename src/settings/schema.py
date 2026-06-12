@@ -27,6 +27,16 @@ VALID_BACKGROUND_PRESETS = frozenset({"standard", "amoled", "rkn_chan"})
 VALID_SIDEBAR_ICON_STYLES = frozenset({"standard", "windows11_fluent"})
 VALID_TG_PROXY_MODES = frozenset({"socks5", "mtproxy"})
 VALID_TG_PROXY_UPSTREAM_MODES = frozenset({"fallback", "always"})
+TRAY_CLOSE_MODE_MINIMIZE_AND_CLOSE = "minimize_and_close"
+TRAY_CLOSE_MODE_MINIMIZE_ONLY = "minimize_only"
+TRAY_CLOSE_MODE_NORMAL = "normal"
+VALID_TRAY_CLOSE_MODES = frozenset(
+    {
+        TRAY_CLOSE_MODE_MINIMIZE_AND_CLOSE,
+        TRAY_CLOSE_MODE_MINIMIZE_ONLY,
+        TRAY_CLOSE_MODE_NORMAL,
+    }
+)
 ORCHESTRA_ASKEYS = (
     "tls",
     "http",
@@ -63,7 +73,7 @@ def default_window() -> dict[str, Any]:
         "height": None,
         "maximized": False,
         "opacity": DEFAULT_WINDOW_OPACITY,
-        "hide_to_tray_on_minimize_close": False,
+        "tray_close_mode": TRAY_CLOSE_MODE_NORMAL,
     }
 
 

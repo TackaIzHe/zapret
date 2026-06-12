@@ -52,7 +52,7 @@ class ProgramSettingsWorkerArchitectureTests(unittest.TestCase):
     def test_feature_does_not_expose_direct_program_setting_setters(self) -> None:
         for method_name in (
             "set_auto_dpi_enabled",
-            "set_hide_to_tray_on_minimize_close",
+            "set_tray_close_mode",
             "set_defender_disabled",
             "set_max_block_enabled",
         ):

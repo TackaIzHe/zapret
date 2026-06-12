@@ -113,10 +113,11 @@ def set_gui_autostart_enabled(
         )
 
 
-def set_hide_to_tray_on_minimize_close(enabled: bool) -> bool:
-    from settings.store import set_hide_to_tray_on_minimize_close
+def set_tray_close_mode(mode: str) -> str:
+    from settings.store import get_tray_close_mode, set_tray_close_mode
 
-    return bool(set_hide_to_tray_on_minimize_close(bool(enabled)))
+    set_tray_close_mode(str(mode or "normal"))
+    return get_tray_close_mode()
 
 
 def save_ui_state_settings(values: dict) -> dict:

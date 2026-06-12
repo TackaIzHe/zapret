@@ -41,6 +41,8 @@ from settings.schema import (
     DEFAULT_WINDOW_OPACITY as _DEFAULT_WINDOW_OPACITY,
     SETTINGS_DIR_NAME as _SETTINGS_DIR_NAME,
     SETTINGS_FILE_NAME as _SETTINGS_FILE_NAME,
+    TRAY_CLOSE_MODE_NORMAL as _TRAY_CLOSE_MODE_NORMAL,
+    VALID_TRAY_CLOSE_MODES as _VALID_TRAY_CLOSE_MODES,
     build_default_settings as _build_default_settings,
 )
 from utils.atomic_text import atomic_write_text
@@ -200,6 +202,18 @@ def _get_str(path: tuple[str, ...], default: str = "") -> str:
 def _set_str(path: tuple[str, ...], value: str) -> bool:
     _update_settings(lambda data: _set_path_value(data, path, str(value)))
     return True
+
+
+def _get_str_in(path: tuple[str, ...], allowed: frozenset[str], default: str = "") -> str:
+    value = _get_str(path, default)
+    return value if value in allowed else default
+
+
+def _set_str_in(path: tuple[str, ...], value: str, allowed: frozenset[str], default: str = "") -> bool:
+    normalized = str(value or "")
+    if normalized not in allowed:
+        normalized = default
+    return _set_str(path, normalized)
 
 
 def _get_str_list(path: tuple[str, ...]) -> list[str]:
@@ -483,12 +497,12 @@ def set_window_opacity(value: int) -> bool:
     return _set_int(("window", "opacity"), value)
 
 
-def get_hide_to_tray_on_minimize_close() -> bool:
-    return _get_bool(("window", "hide_to_tray_on_minimize_close"), False)
+def get_tray_close_mode() -> str:
+    return _get_str_in(("window", "tray_close_mode"), _VALID_TRAY_CLOSE_MODES, _TRAY_CLOSE_MODE_NORMAL)
 
 
-def set_hide_to_tray_on_minimize_close(value: bool) -> bool:
-    return _set_bool(("window", "hide_to_tray_on_minimize_close"), value)
+def set_tray_close_mode(value: str) -> bool:
+    return _set_str_in(("window", "tray_close_mode"), value, _VALID_TRAY_CLOSE_MODES, _TRAY_CLOSE_MODE_NORMAL)
 
 
 def get_display_mode() -> str:
@@ -1307,7 +1321,6 @@ __all__ = [
     "get_gui_autostart_enabled",
     "get_hosts_bootstrap_signature",
     "get_hosts_selection",
-    "get_hide_to_tray_on_minimize_close",
     "get_isp_dns_info_shown",
     "get_kaspersky_warning_disabled",
     "get_max_blocked",
@@ -1369,6 +1382,7 @@ __all__ = [
     "get_tg_proxy_upstream_user",
     "get_tinted_background",
     "get_tinted_background_intensity",
+    "get_tray_close_mode",
     "get_tray_hint_shown",
     "get_ui_language",
     "get_window_geometry",
@@ -1404,7 +1418,6 @@ __all__ = [
     "set_gui_autostart_enabled",
     "set_hosts_bootstrap_signature",
     "set_hosts_selection",
-    "set_hide_to_tray_on_minimize_close",
     "set_isp_dns_info_shown",
     "set_kaspersky_warning_disabled",
     "set_max_blocked",
@@ -1466,6 +1479,7 @@ __all__ = [
     "set_tg_proxy_upstream_user",
     "set_tinted_background",
     "set_tinted_background_intensity",
+    "set_tray_close_mode",
     "set_tray_hint_shown",
     "set_ui_language",
     "set_window_geometry",

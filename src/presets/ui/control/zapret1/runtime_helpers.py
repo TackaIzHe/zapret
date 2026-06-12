@@ -25,7 +25,7 @@ def apply_program_settings_snapshot(
     *,
     auto_dpi_toggle,
     gui_autostart_toggle=None,
-    hide_to_tray_toggle=None,
+    tray_close_mode_combo=None,
     defender_toggle=None,
     max_block_toggle=None,
 ) -> None:
@@ -33,7 +33,7 @@ def apply_program_settings_snapshot(
         snapshot,
         auto_dpi_toggle=auto_dpi_toggle,
         gui_autostart_toggle=gui_autostart_toggle,
-        hide_to_tray_toggle=hide_to_tray_toggle,
+        tray_close_mode_combo=tray_close_mode_combo,
         defender_toggle=defender_toggle,
         max_block_toggle=max_block_toggle,
     )
@@ -61,7 +61,7 @@ def apply_winws1_pages_language(
     program_settings_card,
     auto_dpi_toggle,
     gui_autostart_toggle,
-    hide_to_tray_toggle,
+    tray_close_mode_combo,
     defender_toggle,
     max_block_toggle,
     test_card,
@@ -106,10 +106,10 @@ def apply_winws1_pages_language(
             tr_catalog("page.control.setting.gui_autostart.title", language=language, default="Автозапуск ZapretGUI"),
             tr_catalog("page.control.setting.gui_autostart.desc", language=language, default="Запускать программу в трее при входе в Windows"),
         )
-    if hide_to_tray_toggle is not None:
-        hide_to_tray_toggle.set_texts(
-            tr_catalog("page.control.setting.hide_to_tray.title", language=language, default="Всегда скрывать в трей при сворачивании и закрытии"),
-            tr_catalog("page.control.setting.hide_to_tray.desc", language=language, default="Кнопка свернуть и крестик прячут окно в системный трей"),
+    if tray_close_mode_combo is not None:
+        tray_close_mode_combo.set_texts(
+            tr_catalog("page.control.setting.tray_close_mode.title", language=language, default="Поведение окна и трея"),
+            tr_catalog("page.control.setting.tray_close_mode.desc", language=language, default="Выберите, когда ZapretGUI будет скрывать окно в системный трей"),
         )
     if defender_toggle is not None:
         defender_toggle.set_texts(

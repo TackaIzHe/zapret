@@ -8,16 +8,16 @@ from program_settings.commands import (
     set_auto_dpi_enabled,
     set_defender_disabled,
     set_gui_autostart_enabled,
-    set_hide_to_tray_on_minimize_close,
+    set_tray_close_mode,
     set_max_block_enabled,
     save_ui_state_settings,
 )
 from program_settings.runtime import (
     attach_program_settings_runtime,
     load_program_settings_snapshot,
-    peek_hide_to_tray_on_minimize_close,
+    peek_tray_close_mode,
     publish_program_settings_snapshot,
-    remember_hide_to_tray_on_minimize_close,
+    remember_tray_close_mode,
     refresh_program_settings_snapshot,
 )
 
@@ -28,14 +28,14 @@ __all__ = [
     "is_auto_dpi_enabled",
     "is_user_admin",
     "load_program_settings_snapshot",
-    "peek_hide_to_tray_on_minimize_close",
+    "peek_tray_close_mode",
     "publish_program_settings_snapshot",
-    "remember_hide_to_tray_on_minimize_close",
+    "remember_tray_close_mode",
     "refresh_program_settings_snapshot",
     "set_auto_dpi_enabled",
     "set_defender_disabled",
     "set_gui_autostart_enabled",
-    "set_hide_to_tray_on_minimize_close",
+    "set_tray_close_mode",
     "set_max_block_enabled",
     "save_ui_state_settings",
 ]

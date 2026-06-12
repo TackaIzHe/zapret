@@ -1484,22 +1484,23 @@ class StartupRuntimeSetupTests(unittest.TestCase):
         self.assertEqual(created_services, [runtime_service])
         commands.refresh_program_settings_snapshot.assert_called_once_with(runtime_service)
 
-    def test_program_settings_runtime_service_peeks_warmed_hide_to_tray_without_settings_read(self) -> None:
+    def test_program_settings_runtime_service_peeks_warmed_tray_close_mode_without_settings_read(self) -> None:
         from core.runtime.program_settings_runtime_service import (
+            TRAY_CLOSE_MODE_MINIMIZE_AND_CLOSE,
             ProgramSettingsRuntimeService,
-            store_warmed_hide_to_tray_on_minimize_close,
+            store_warmed_tray_close_mode,
         )
 
-        store_warmed_hide_to_tray_on_minimize_close(True)
+        store_warmed_tray_close_mode(TRAY_CLOSE_MODE_MINIMIZE_AND_CLOSE)
         service = ProgramSettingsRuntimeService()
-        store_warmed_hide_to_tray_on_minimize_close(None)
+        store_warmed_tray_close_mode(None)
 
         with patch(
-            "settings.store.get_hide_to_tray_on_minimize_close",
+            "settings.store.get_tray_close_mode",
             side_effect=AssertionError("settings read must not happen in click path"),
             create=True,
         ):
-            self.assertTrue(service.peek_hide_to_tray_on_minimize_close())
+            self.assertEqual(service.peek_tray_close_mode(), TRAY_CLOSE_MODE_MINIMIZE_AND_CLOSE)
 
     def test_startup_checks_are_delayed_after_ui_ready(self) -> None:
         from main import post_startup_checks
@@ -1748,7 +1749,7 @@ class StartupRuntimeSetupTests(unittest.TestCase):
             telegram_proxy=object(),
             tray=object(),
             program_settings=SimpleNamespace(
-                hide_to_tray_on_minimize_close_enabled=Mock(return_value=False),
+                tray_close_mode=Mock(return_value="normal"),
             ),
             window_geometry=SimpleNamespace(create_geometry_save_worker=Mock()),
         )
@@ -3036,7 +3037,7 @@ class WindowLifecycleEarlyEventTests(unittest.TestCase):
         window.changeEvent(Event(QEvent.Type.WindowStateChange))
         effects.set_animation_active.assert_called_with(True)
 
-    def test_native_minimize_command_hides_to_tray_when_window_setting_is_enabled(self) -> None:
+    def test_native_minimize_command_hides_to_tray_when_mode_includes_minimize(self) -> None:
         from main.window_native_commands import SC_MINIMIZE, WM_SYSCOMMAND
         from main.window_lifecycle import WindowLifecycleMixin
 
@@ -3050,7 +3051,7 @@ class WindowLifecycleEarlyEventTests(unittest.TestCase):
                 return True
 
             window_close_flow = SimpleNamespace(
-                hide_to_tray_on_minimize_close_enabled=Mock(return_value=True),
+                minimize_to_tray_enabled=Mock(return_value=True),
             )
 
         msg = wintypes.MSG()
@@ -3060,7 +3061,7 @@ class WindowLifecycleEarlyEventTests(unittest.TestCase):
 
         with (
             patch(
-                "settings.store.get_hide_to_tray_on_minimize_close",
+                "settings.store.get_tray_close_mode",
                 side_effect=AssertionError("settings read must not happen in minimize path"),
                 create=True,
             ),
@@ -3072,7 +3073,7 @@ class WindowLifecycleEarlyEventTests(unittest.TestCase):
         window.close_to_tray.assert_called_once()
         self.assertEqual(window.calls, ["hide_to_tray"])
 
-    def test_native_minimize_command_uses_normal_window_flow_when_setting_is_disabled(self) -> None:
+    def test_native_minimize_command_uses_normal_window_flow_when_mode_is_normal(self) -> None:
         from main.window_native_commands import SC_MINIMIZE, WM_SYSCOMMAND
         from main.window_lifecycle import WindowLifecycleMixin
 
@@ -3082,7 +3083,7 @@ class WindowLifecycleEarlyEventTests(unittest.TestCase):
                 self.close_to_tray = Mock(return_value=True)
 
             window_close_flow = SimpleNamespace(
-                hide_to_tray_on_minimize_close_enabled=Mock(return_value=False),
+                minimize_to_tray_enabled=Mock(return_value=False),
             )
 
         msg = wintypes.MSG()
@@ -3092,7 +3093,7 @@ class WindowLifecycleEarlyEventTests(unittest.TestCase):
 
         with (
             patch(
-                "settings.store.get_hide_to_tray_on_minimize_close",
+                "settings.store.get_tray_close_mode",
                 side_effect=AssertionError("settings read must not happen in minimize path"),
                 create=True,
             ),
@@ -3104,7 +3105,7 @@ class WindowLifecycleEarlyEventTests(unittest.TestCase):
         window.close_to_tray.assert_not_called()
         self.assertEqual(window.calls, ["base_native"])
 
-    def test_show_minimized_hides_to_tray_when_window_setting_is_enabled(self) -> None:
+    def test_show_minimized_hides_to_tray_when_mode_includes_minimize(self) -> None:
         from main.window_lifecycle import WindowLifecycleMixin
 
         class Window(WindowLifecycleMixin, _BaseWindowEvents):
@@ -3117,13 +3118,13 @@ class WindowLifecycleEarlyEventTests(unittest.TestCase):
                 return True
 
             window_close_flow = SimpleNamespace(
-                hide_to_tray_on_minimize_close_enabled=Mock(return_value=True),
+                minimize_to_tray_enabled=Mock(return_value=True),
             )
 
         window = Window()
 
         with patch(
-            "settings.store.get_hide_to_tray_on_minimize_close",
+            "settings.store.get_tray_close_mode",
             side_effect=AssertionError("settings read must not happen in minimize path"),
             create=True,
         ):
@@ -3132,7 +3133,7 @@ class WindowLifecycleEarlyEventTests(unittest.TestCase):
         window.close_to_tray.assert_called_once()
         self.assertEqual(window.calls, ["hide_to_tray"])
 
-    def test_show_minimized_uses_normal_window_flow_when_setting_is_disabled(self) -> None:
+    def test_show_minimized_uses_normal_window_flow_when_mode_is_normal(self) -> None:
         from main.window_lifecycle import WindowLifecycleMixin
 
         class Window(WindowLifecycleMixin, _BaseWindowEvents):
@@ -3141,13 +3142,13 @@ class WindowLifecycleEarlyEventTests(unittest.TestCase):
                 self.close_to_tray = Mock(return_value=True)
 
             window_close_flow = SimpleNamespace(
-                hide_to_tray_on_minimize_close_enabled=Mock(return_value=False),
+                minimize_to_tray_enabled=Mock(return_value=False),
             )
 
         window = Window()
 
         with patch(
-            "settings.store.get_hide_to_tray_on_minimize_close",
+            "settings.store.get_tray_close_mode",
             side_effect=AssertionError("settings read must not happen in minimize path"),
             create=True,
         ):
@@ -3270,7 +3271,7 @@ class WindowsSessionShutdownTests(unittest.TestCase):
         close_dialog_module.ask_close_action.assert_not_called()
         runtime.snapshot.assert_not_called()
 
-    def test_close_flow_hides_to_tray_without_dialog_when_window_setting_is_enabled(self) -> None:
+    def test_close_flow_hides_to_tray_without_dialog_when_mode_includes_close(self) -> None:
         from ui.window_close_flow import WindowCloseFlow
 
         close_dialog_module = types.ModuleType("ui.close_dialog")
@@ -3292,11 +3293,11 @@ class WindowsSessionShutdownTests(unittest.TestCase):
                 close_to_tray=close_to_tray,
                 exit_stop_dpi=Mock(),
                 exit_keep_dpi=Mock(),
-                hide_to_tray_on_minimize_close=Mock(return_value=True),
+                tray_close_mode=Mock(return_value="minimize_and_close"),
             )
 
             with patch(
-                "settings.store.get_hide_to_tray_on_minimize_close",
+                "settings.store.get_tray_close_mode",
                 side_effect=AssertionError("settings read must not happen in close path"),
                 create=True,
             ):
@@ -3312,7 +3313,7 @@ class WindowsSessionShutdownTests(unittest.TestCase):
         close_dialog_module.ask_close_action.assert_not_called()
         runtime.snapshot.assert_not_called()
 
-    def test_close_flow_shows_dialog_when_window_setting_is_disabled(self) -> None:
+    def test_close_flow_shows_dialog_when_mode_is_normal(self) -> None:
         from ui.window_close_flow import WindowCloseFlow
 
         close_dialog_module = types.ModuleType("ui.close_dialog")
@@ -3334,11 +3335,56 @@ class WindowsSessionShutdownTests(unittest.TestCase):
                 close_to_tray=close_to_tray,
                 exit_stop_dpi=Mock(),
                 exit_keep_dpi=Mock(),
-                hide_to_tray_on_minimize_close=Mock(return_value=False),
+                tray_close_mode=Mock(return_value="normal"),
             )
 
             with patch(
-                "settings.store.get_hide_to_tray_on_minimize_close",
+                "settings.store.get_tray_close_mode",
+                side_effect=AssertionError("settings read must not happen in close path"),
+                create=True,
+            ):
+                self.assertFalse(flow.should_continue_final_close(event))
+        finally:
+            if original_close_dialog is None:
+                sys.modules.pop("ui.close_dialog", None)
+            else:
+                sys.modules["ui.close_dialog"] = original_close_dialog
+
+        event.ignore.assert_called_once()
+        runtime.snapshot.assert_called_once()
+        close_dialog_module.ask_close_action.assert_called_once_with(
+            parent=flow._parent,
+            launch_running=True,
+        )
+        close_to_tray.assert_not_called()
+
+    def test_close_flow_shows_dialog_when_only_minimize_hides_to_tray(self) -> None:
+        from ui.window_close_flow import WindowCloseFlow
+
+        close_dialog_module = types.ModuleType("ui.close_dialog")
+        close_dialog_module.ask_close_action = Mock(return_value=None)
+        original_close_dialog = sys.modules.get("ui.close_dialog")
+        sys.modules["ui.close_dialog"] = close_dialog_module
+        try:
+            event = SimpleNamespace(ignore=Mock())
+            close_state = SimpleNamespace(
+                closing_completely=False,
+                windows_session_ending=False,
+            )
+            runtime = SimpleNamespace(snapshot=Mock(return_value=SimpleNamespace(launch_running=True)))
+            close_to_tray = Mock(return_value=True)
+            flow = WindowCloseFlow(
+                parent=object(),
+                close_state=close_state,
+                get_launch_state_snapshot=runtime.snapshot,
+                close_to_tray=close_to_tray,
+                exit_stop_dpi=Mock(),
+                exit_keep_dpi=Mock(),
+                tray_close_mode=Mock(return_value="minimize_only"),
+            )
+
+            with patch(
+                "settings.store.get_tray_close_mode",
                 side_effect=AssertionError("settings read must not happen in close path"),
                 create=True,
             ):
@@ -3378,11 +3424,11 @@ class WindowsSessionShutdownTests(unittest.TestCase):
                 close_to_tray=Mock(),
                 exit_stop_dpi=Mock(),
                 exit_keep_dpi=Mock(),
-                hide_to_tray_on_minimize_close=Mock(return_value=False),
+                tray_close_mode=Mock(return_value="normal"),
             )
 
             with patch(
-                "settings.store.get_hide_to_tray_on_minimize_close",
+                "settings.store.get_tray_close_mode",
                 side_effect=AssertionError("settings read must not happen in close path"),
                 create=True,
             ):

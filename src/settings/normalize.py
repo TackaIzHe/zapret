@@ -296,9 +296,10 @@ def normalize_window(data: object) -> dict[str, Any]:
         "height": as_nullable_int(raw.get("height")),
         "maximized": as_bool(raw.get("maximized"), defaults["maximized"]),
         "opacity": as_int(raw.get("opacity"), defaults["opacity"], minimum=0, maximum=100),
-        "hide_to_tray_on_minimize_close": as_bool(
-            raw.get("hide_to_tray_on_minimize_close"),
-            defaults["hide_to_tray_on_minimize_close"],
+        "tray_close_mode": as_str_in(
+            raw.get("tray_close_mode"),
+            schema.VALID_TRAY_CLOSE_MODES,
+            defaults["tray_close_mode"],
         ),
     }
 

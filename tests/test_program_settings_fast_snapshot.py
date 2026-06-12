@@ -27,7 +27,7 @@ class ProgramSettingsFastSnapshotTests(unittest.TestCase):
                 "max_blocked": True,
             },
             "window": {
-                "hide_to_tray_on_minimize_close": False,
+                "tray_close_mode": "minimize_only",
             },
         }
 
@@ -40,7 +40,7 @@ class ProgramSettingsFastSnapshotTests(unittest.TestCase):
 
         self.assertTrue(snapshot.auto_dpi_enabled)
         self.assertTrue(snapshot.gui_autostart_enabled)
-        self.assertFalse(snapshot.hide_to_tray_on_minimize_close)
+        self.assertEqual(snapshot.tray_close_mode, "minimize_only")
         self.assertTrue(snapshot.defender_disabled)
         self.assertTrue(snapshot.max_blocked)
         read_settings.assert_called_once_with()
@@ -72,7 +72,7 @@ class ProgramSettingsFastSnapshotTests(unittest.TestCase):
                             "defender_disabled": False,
                             "max_blocked": False,
                         },
-                        "window": {"hide_to_tray_on_minimize_close": False},
+                        "window": {"tray_close_mode": "normal"},
                     },
                     {
                         "program": {
@@ -81,7 +81,7 @@ class ProgramSettingsFastSnapshotTests(unittest.TestCase):
                             "defender_disabled": False,
                             "max_blocked": False,
                         },
-                        "window": {"hide_to_tray_on_minimize_close": False},
+                        "window": {"tray_close_mode": "normal"},
                     },
                 ],
             ) as read_settings,
@@ -92,6 +92,25 @@ class ProgramSettingsFastSnapshotTests(unittest.TestCase):
         self.assertFalse(first.gui_autostart_enabled)
         self.assertTrue(second.gui_autostart_enabled)
         self.assertEqual(read_settings.call_count, 2)
+
+    def test_fast_snapshot_ignores_old_true_tray_toggle_without_new_mode(self) -> None:
+        from core.runtime.program_settings_runtime_service import ProgramSettingsRuntimeService
+
+        with patch(
+            "settings.store.read_settings",
+            return_value={
+                "program": {
+                    "dpi_autostart": True,
+                    "gui_autostart_enabled": False,
+                    "defender_disabled": False,
+                    "max_blocked": False,
+                },
+                "window": {"hide_to_tray_on_minimize_close": True},
+            },
+        ):
+            snapshot = ProgramSettingsRuntimeService().read_snapshot()
+
+        self.assertEqual(snapshot.tray_close_mode, "normal")
 
     def test_attach_program_settings_runtime_applies_ready_snapshot_immediately(self) -> None:
         from program_settings.runtime import attach_program_settings_runtime

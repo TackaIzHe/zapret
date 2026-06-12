@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 from log.log import log
+from settings.schema import (
+    TRAY_CLOSE_MODE_MINIMIZE_AND_CLOSE,
+    TRAY_CLOSE_MODE_MINIMIZE_ONLY,
+    TRAY_CLOSE_MODE_NORMAL,
+)
 
 
 
@@ -21,7 +26,7 @@ class WindowCloseFlow:
         close_to_tray,
         exit_stop_dpi,
         exit_keep_dpi,
-        hide_to_tray_on_minimize_close=None,
+        tray_close_mode=None,
     ) -> None:
         self._parent = parent
         self._close_state = close_state
@@ -29,17 +34,33 @@ class WindowCloseFlow:
         self._close_to_tray = close_to_tray
         self._exit_stop_dpi = exit_stop_dpi
         self._exit_keep_dpi = exit_keep_dpi
-        self._hide_to_tray_on_minimize_close = hide_to_tray_on_minimize_close
+        self._tray_close_mode = tray_close_mode
 
-    def hide_to_tray_on_minimize_close_enabled(self) -> bool:
-        provider = self._hide_to_tray_on_minimize_close
+    def tray_close_mode(self) -> str:
+        provider = self._tray_close_mode
         if not callable(provider):
-            return False
+            return TRAY_CLOSE_MODE_NORMAL
         try:
-            return bool(provider())
+            mode = str(provider() or TRAY_CLOSE_MODE_NORMAL)
         except Exception as exc:
-            log(f"Не удалось прочитать состояние 'закрывать в трей' из памяти: {exc}", "DEBUG")
-            return False
+            log(f"Не удалось прочитать режим поведения окна и трея из памяти: {exc}", "DEBUG")
+            return TRAY_CLOSE_MODE_NORMAL
+        if mode in {
+            TRAY_CLOSE_MODE_MINIMIZE_AND_CLOSE,
+            TRAY_CLOSE_MODE_MINIMIZE_ONLY,
+            TRAY_CLOSE_MODE_NORMAL,
+        }:
+            return mode
+        return TRAY_CLOSE_MODE_NORMAL
+
+    def minimize_to_tray_enabled(self) -> bool:
+        return self.tray_close_mode() in {
+            TRAY_CLOSE_MODE_MINIMIZE_AND_CLOSE,
+            TRAY_CLOSE_MODE_MINIMIZE_ONLY,
+        }
+
+    def close_to_tray_enabled(self) -> bool:
+        return self.tray_close_mode() == TRAY_CLOSE_MODE_MINIMIZE_AND_CLOSE
 
     def should_continue_final_close(self, event) -> bool:
         """Возвращает True только для окончательного закрытия приложения."""
@@ -55,7 +76,7 @@ class WindowCloseFlow:
             pass
 
         try:
-            if self.hide_to_tray_on_minimize_close_enabled():
+            if self.close_to_tray_enabled():
                 minimized = bool(self._close_to_tray())
                 if not minimized:
                     log("Сценарий 'закрыть в трей' не выполнен: tray manager не готов", "WARNING")

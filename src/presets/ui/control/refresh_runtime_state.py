@@ -53,7 +53,7 @@ class ModeControlRefreshRuntime:
             empty_value=False,
         )
         self.program_settings_save_runtime = OneShotWorkerRuntime()
-        self.program_settings_save_state = QueuedWorkerState[tuple[str, bool]](
+        self.program_settings_save_state = QueuedWorkerState[tuple[str, object]](
             self.program_settings_save_runtime,
         )
 
@@ -77,8 +77,8 @@ class ModeControlRefreshRuntime:
         else:
             pending.append(item)
 
-    def queue_program_settings_save(self, action: str, enabled: bool, *, front: bool = False) -> None:
-        item = (str(action or ""), bool(enabled))
+    def queue_program_settings_save(self, action: str, value: object, *, front: bool = False) -> None:
+        item = (str(action or ""), value)
         pending = self.program_settings_save_state.pending
         pending[:] = [
             queued for queued in pending if queued[0] != item[0]
@@ -264,13 +264,13 @@ class ModeControlRefreshRuntime:
         self.program_settings_load_state.start_scheduled = bool(value)
 
     @property
-    def program_settings_save_pending(self) -> list[tuple[str, bool]]:
+    def program_settings_save_pending(self) -> list[tuple[str, object]]:
         return self.program_settings_save_state.pending
 
     @program_settings_save_pending.setter
-    def program_settings_save_pending(self, value: list[tuple[str, bool]]) -> None:
+    def program_settings_save_pending(self, value: list[tuple[str, object]]) -> None:
         self.program_settings_save_state.pending[:] = [
-            (str(item[0] or ""), bool(item[1]))
+            (str(item[0] or ""), item[1])
             for item in (value or [])
         ]
 

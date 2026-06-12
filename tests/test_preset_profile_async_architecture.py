@@ -3808,9 +3808,9 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
 
     def test_control_program_settings_save_runs_through_worker(self) -> None:
         zapret1_auto_source = inspect.getsource(Zapret1ModeControlPage._on_auto_dpi_toggled)
-        zapret1_tray_source = inspect.getsource(Zapret1ModeControlPage._on_hide_to_tray_toggled)
+        zapret1_tray_source = inspect.getsource(Zapret1ModeControlPage._on_tray_close_mode_changed)
         zapret2_auto_source = inspect.getsource(Zapret2ModeControlPage._on_auto_dpi_toggled)
-        zapret2_tray_source = inspect.getsource(Zapret2ModeControlPage._on_hide_to_tray_toggled)
+        zapret2_tray_source = inspect.getsource(Zapret2ModeControlPage._on_tray_close_mode_changed)
         defender_source = inspect.getsource(windows_features_runtime.ControlPageWindowsFeatureMixin._continue_defender_toggle)
         max_source = inspect.getsource(windows_features_runtime.ControlPageWindowsFeatureMixin._on_max_blocker_toggled)
 
@@ -3831,7 +3831,7 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         ):
             self.assertIn("_request_program_settings_save", source)
             self.assertNotIn("self._program_settings.set_auto_dpi_enabled", source)
-            self.assertNotIn("self._program_settings.set_hide_to_tray_on_minimize_close", source)
+            self.assertNotIn("self._program_settings.set_tray_close_mode", source)
 
         self.assertIn("create_program_settings_save_worker", shared_source)
         self.assertIn("program_settings_save_state", shared_source)

@@ -68,14 +68,14 @@ class ProgramSettingsSaveWorker(QThread):
         request_id: int,
         *,
         action: str,
-        enabled: bool,
+        value: object,
         save_action: Callable[..., Any],
         parent=None,
     ):
         super().__init__(parent)
         self._request_id = int(request_id)
         self._action = str(action or "").strip()
-        self._enabled = bool(enabled)
+        self._value = value
         self._save_action = save_action
 
     def run(self) -> None:
@@ -84,7 +84,7 @@ class ProgramSettingsSaveWorker(QThread):
 
         try:
             result = self._save_action(
-                self._enabled,
+                self._value,
                 status_callback=emit_status,
             )
         except Exception as exc:

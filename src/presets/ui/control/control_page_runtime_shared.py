@@ -94,12 +94,20 @@ def set_toggle_checked(toggle, checked: bool) -> None:
     toggle.setChecked(next_checked, block_signals=True)
 
 
+def set_combo_data(combo_row, value: object) -> None:
+    data = str(value or "normal")
+    try:
+        combo_row.setCurrentData(data, block_signals=True)
+    except Exception:
+        pass
+
+
 def apply_program_settings_toggles(
     snapshot,
     *,
     auto_dpi_toggle=None,
     gui_autostart_toggle=None,
-    hide_to_tray_toggle=None,
+    tray_close_mode_combo=None,
     defender_toggle=None,
     max_block_toggle=None,
 ) -> None:
@@ -107,8 +115,8 @@ def apply_program_settings_toggles(
         set_toggle_checked(auto_dpi_toggle, getattr(snapshot, "auto_dpi_enabled", False))
     if gui_autostart_toggle is not None:
         set_toggle_checked(gui_autostart_toggle, getattr(snapshot, "gui_autostart_enabled", False))
-    if hide_to_tray_toggle is not None:
-        set_toggle_checked(hide_to_tray_toggle, getattr(snapshot, "hide_to_tray_on_minimize_close", False))
+    if tray_close_mode_combo is not None:
+        set_combo_data(tray_close_mode_combo, getattr(snapshot, "tray_close_mode", "normal"))
     if defender_toggle is not None:
         set_toggle_checked(defender_toggle, getattr(snapshot, "defender_disabled", False))
     if max_block_toggle is not None:

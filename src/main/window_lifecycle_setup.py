@@ -36,7 +36,7 @@ def attach_window_lifecycle(window, features) -> None:
         close_to_tray=window.close_to_tray,
         exit_stop_dpi=window.exit_stop_dpi,
         exit_keep_dpi=window.exit_keep_dpi,
-        hide_to_tray_on_minimize_close=features.program_settings.hide_to_tray_on_minimize_close_enabled,
+        tray_close_mode=features.program_settings.tray_close_mode,
     )
 
 
