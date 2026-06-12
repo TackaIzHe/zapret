@@ -1,0 +1,4 @@
+interface:
+  display_name: "Zapret 1 Original"
+  short_description: "Правила оригинального Zapret 1 для winws1."
+  default_prompt: "Проверь поведение Zapret 1 по оригинальным исходникам."
