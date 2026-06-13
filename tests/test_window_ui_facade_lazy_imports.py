@@ -71,6 +71,24 @@ class WindowUiFacadeLazyImportTests(unittest.TestCase):
         self.assertEqual(navigation_steps, [1, -1])
         self.assertEqual(activations, [True])
 
+    def test_sidebar_search_clear_resets_screen_reader_state(self) -> None:
+        import ui.window_ui_facade as window_ui_facade
+
+        widget_cls = window_ui_facade._get_sidebar_search_nav_widget_cls()
+        widget = widget_cls()
+        self.addCleanup(widget.deleteLater)
+
+        widget.set_keyboard_result_text(
+            "Результат поиска: Логи, место: Логи. Нажмите Enter, чтобы открыть."
+        )
+
+        widget.clear()
+
+        self.assertEqual(widget.accessibleName(), "Глобальный поиск по ZapretGUI")
+        self.assertEqual(widget.property("screenReaderStateText"), "Глобальный поиск по ZapretGUI")
+        self.assertEqual(widget._search.accessibleName(), "Глобальный поиск по ZapretGUI")
+        self.assertEqual(widget._search.property("screenReaderStateText"), "Глобальный поиск по ZapretGUI")
+
 
 if __name__ == "__main__":
     unittest.main()

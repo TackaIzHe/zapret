@@ -108,6 +108,7 @@ def _get_sidebar_search_nav_widget_cls():
 
         def clear(self) -> None:
             self._search.clear()
+            self.set_keyboard_result_text("Глобальный поиск по ZapretGUI")
 
         def text(self) -> str:
             return self._search.text()
