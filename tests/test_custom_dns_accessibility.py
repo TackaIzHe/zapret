@@ -110,6 +110,37 @@ class CustomDnsAccessibilityTests(unittest.TestCase):
                 self.assertTrue(buttons)
                 self.assertTrue(all(button.focusPolicy() == Qt.FocusPolicy.NoFocus for button in buttons))
 
+    def test_custom_dns_dialog_title_and_cancel_action_are_named_for_screen_reader(self) -> None:
+        parent = QWidget()
+        self.addCleanup(parent.deleteLater)
+        dialog = CustomDnsDialog(parent)
+        self.addCleanup(dialog.deleteLater)
+
+        self.assertEqual(dialog.titleLabel.accessibleName(), "Диалог: Добавить свой DNS")
+        self.assertEqual(
+            dialog.titleLabel.property("screenReaderStateText"),
+            "Диалог: Добавить свой DNS",
+        )
+        self.assertEqual(
+            dialog.subtitleLabel.accessibleName(),
+            "Описание диалога DNS: Укажите DNS-сервер. После сохранения он появится в общем списке DNS.",
+        )
+        self.assertEqual(dialog.cancelButton.accessibleName(), "Отменить добавление своего DNS")
+        self.assertEqual(
+            dialog.cancelButton.property("screenReaderStateText"),
+            "Отменить добавление своего DNS",
+        )
+
+    def test_edit_custom_dns_dialog_cancel_action_is_named_for_screen_reader(self) -> None:
+        parent = QWidget()
+        self.addCleanup(parent.deleteLater)
+        dialog = CustomDnsDialog(parent, server={"id": "custom-1", "name": "Дом", "ipv4": ["8.8.8.8"]})
+        self.addCleanup(dialog.deleteLater)
+
+        self.assertEqual(dialog.titleLabel.accessibleName(), "Диалог: Редактировать свой DNS")
+        self.assertEqual(dialog.yesButton.accessibleName(), "Сохранить свой DNS")
+        self.assertEqual(dialog.cancelButton.accessibleName(), "Отменить изменение своего DNS")
+
 
 class _Card(QWidget):
     def add_layout(self, layout) -> None:

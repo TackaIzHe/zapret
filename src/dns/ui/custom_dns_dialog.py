@@ -133,6 +133,22 @@ class CustomDnsDialog(MessageBoxBase):
         return True
 
     def _install_accessibility(self, *, editing: bool) -> None:
+        title_text = str(self.titleLabel.text() or "").strip()
+        subtitle_text = str(self.subtitleLabel.text() or "").strip()
+        if title_text:
+            set_state_text(self.titleLabel, f"Диалог: {title_text}")
+            set_control_accessibility(
+                self.titleLabel,
+                name=f"Диалог: {title_text}",
+                description="Заголовок окна настройки своего DNS.",
+            )
+        if subtitle_text:
+            set_state_text(self.subtitleLabel, f"Описание диалога DNS: {subtitle_text}")
+            set_control_accessibility(
+                self.subtitleLabel,
+                name=f"Описание диалога DNS: {subtitle_text}",
+                description="Поясняет, что нужно заполнить в окне своего DNS.",
+            )
         set_control_accessibility(
             self.nameEdit,
             name="Название своего DNS",
@@ -172,10 +188,11 @@ class CustomDnsDialog(MessageBoxBase):
             name=action_text,
             description="Сохраняет DNS и закрывает окно.",
         )
-        set_state_text(self.cancelButton, "Отменить изменение своего DNS")
+        cancel_text = "Отменить изменение своего DNS" if editing else "Отменить добавление своего DNS"
+        set_state_text(self.cancelButton, cancel_text)
         set_control_accessibility(
             self.cancelButton,
-            name="Отменить изменение своего DNS",
+            name=cancel_text,
             description="Закрывает окно без применения изменений.",
         )
 
