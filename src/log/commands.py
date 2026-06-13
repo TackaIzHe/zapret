@@ -276,9 +276,10 @@ def build_tail_start_plan(
     )
 
 def build_support_feedback(result) -> LogsSupportFeedbackPlan:
+    archive_paths = list(getattr(result, "archive_paths", None) or ([result.zip_path] if result.zip_path else []))
     status_parts: list[str] = []
-    if result.zip_path:
-        status_parts.append("ZIP готов")
+    if archive_paths:
+        status_parts.append("ZIP готовы" if len(archive_paths) > 1 else "ZIP готов")
     if result.copied_to_clipboard:
         status_parts.append("шаблон скопирован")
     if result.discussions_opened:
@@ -286,8 +287,11 @@ def build_support_feedback(result) -> LogsSupportFeedbackPlan:
     if result.bundle_folder_opened:
         status_parts.append("папка открыта")
 
-    archive_name = os.path.basename(result.zip_path) if result.zip_path else "архив не создан"
-    content = f"Архив: {archive_name}\n"
+    if archive_paths:
+        archive_names = "\n".join(f"- {os.path.basename(path)}" for path in archive_paths)
+        content = f"Архивы:\n{archive_names}\n"
+    else:
+        content = "Архив: архив не создан\n"
     content += (
         "Шаблон обращения скопирован в буфер обмена."
         if result.copied_to_clipboard

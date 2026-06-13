@@ -19,9 +19,10 @@ class SupportRequestFeedback:
 
 
 def _build_feedback(result: PreparedSupportRequest) -> SupportRequestFeedback:
+    archive_paths = list(result.archive_paths or ([result.zip_path] if result.zip_path else []))
     status_parts: list[str] = []
-    if result.zip_path:
-        status_parts.append("ZIP готов")
+    if archive_paths:
+        status_parts.append("ZIP готовы" if len(archive_paths) > 1 else "ZIP готов")
     if result.copied_to_clipboard:
         status_parts.append("шаблон скопирован")
     if result.discussions_opened:
@@ -29,8 +30,11 @@ def _build_feedback(result: PreparedSupportRequest) -> SupportRequestFeedback:
     if result.bundle_folder_opened:
         status_parts.append("папка открыта")
 
-    archive_name = os.path.basename(result.zip_path) if result.zip_path else "архив не создан"
-    info_text = f"Архив: {archive_name}"
+    if archive_paths:
+        archive_names = "\n".join(f"- {os.path.basename(path)}" for path in archive_paths)
+        info_text = f"Архивы:\n{archive_names}"
+    else:
+        info_text = "Архив: архив не создан"
     if result.copied_to_clipboard:
         info_text += "\nШаблон обращения скопирован в буфер обмена."
     else:

@@ -996,8 +996,9 @@ class BlockcheckPage(BasePage):
         if self._support_prepare_state_obj().has_pending():
             return
         result = feedback.result
-        if result.zip_path:
-            logger.info("Prepared BlockCheck support archive: %s", result.zip_path)
+        archive_paths = list(getattr(result, "archive_paths", None) or ([result.zip_path] if result.zip_path else []))
+        if archive_paths:
+            logger.info("Prepared BlockCheck support archive(s): %s", ", ".join(archive_paths))
 
         self._set_support_status(feedback.status_text)
 

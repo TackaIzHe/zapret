@@ -196,8 +196,13 @@ def prepare_support_request_for_connection(*, selection: str) -> ConnectionSuppo
         )
 
         lines: list[str] = []
-        if result.zip_path:
-            lines.append(f"📦 Подготовлен архив: {result.zip_path}")
+        archive_paths = list(getattr(result, "archive_paths", None) or ([result.zip_path] if result.zip_path else []))
+        if archive_paths:
+            if len(archive_paths) == 1:
+                lines.append(f"📦 Подготовлен архив: {archive_paths[0]}")
+            else:
+                lines.append("📦 Подготовлены архивы:")
+                lines.extend(f"- {path}" for path in archive_paths)
         else:
             lines.append("⚠️ Архив не был создан, потому что подходящие файлы логов не найдены.")
 

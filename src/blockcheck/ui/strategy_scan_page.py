@@ -1292,8 +1292,9 @@ class StrategyScanPage(BasePage):
         if self._support_prepare_state_obj().has_pending():
             return
         result = feedback.result
-        if result.zip_path:
-            logger.info("Prepared Strategy Scan support archive: %s", result.zip_path)
+        archive_paths = list(getattr(result, "archive_paths", None) or ([result.zip_path] if result.zip_path else []))
+        if archive_paths:
+            logger.info("Prepared Strategy Scan support archive(s): %s", ", ".join(archive_paths))
 
         message_plan = self._blockcheck.build_support_success_plan(feedback)
         self._set_support_status(message_plan.status_text)

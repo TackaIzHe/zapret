@@ -21,8 +21,9 @@ def apply_support_feedback(
     status_state_setter,
 ) -> None:
     try:
-        if getattr(result, "zip_path", None):
-            log_fn(f"Подготовлен архив поддержки: {result.zip_path}", "INFO")
+        archive_paths = list(getattr(result, "archive_paths", None) or ([result.zip_path] if getattr(result, "zip_path", None) else []))
+        if archive_paths:
+            log_fn(f"Подготовлены архивы поддержки: {', '.join(archive_paths)}", "INFO")
         feedback = build_feedback_fn(result)
         status_state_setter(feedback.status_text, feedback.status_tone)
         render_status_fn()

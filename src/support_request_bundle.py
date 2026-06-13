@@ -9,7 +9,7 @@ import sys
 import time
 import webbrowser
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Sequence
 
@@ -17,6 +17,10 @@ from config.build_info import APP_VERSION
 from config.config import LOGS_FOLDER
 
 from config.urls import SUPPORT_DISCUSSIONS_URL
+
+
+GITHUB_ATTACHMENT_LIMIT_BYTES = 25 * 1024 * 1024
+SUPPORT_ARCHIVE_MAX_BYTES = GITHUB_ATTACHMENT_LIMIT_BYTES - 1024 * 1024
 
 
 @dataclass(slots=True)
@@ -27,6 +31,15 @@ class PreparedSupportRequest:
     copied_to_clipboard: bool
     discussions_opened: bool
     bundle_folder_opened: bool
+    archive_paths: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class _SupportArchiveEntry:
+    source_path: Path
+    arcname: str
+    offset: int
+    size: int
 
 
 def _unique_existing_paths(paths: Iterable[str | os.PathLike[str] | None]) -> list[Path]:
@@ -90,22 +103,129 @@ def create_support_zip(
     candidate_paths: Iterable[str | os.PathLike[str] | None],
     output_dir: str | os.PathLike[str] | None = None,
 ) -> tuple[str | None, list[str]]:
+    archive_paths, included_files = create_support_archives(
+        bundle_prefix=bundle_prefix,
+        candidate_paths=candidate_paths,
+        output_dir=output_dir,
+    )
+    return (archive_paths[0] if archive_paths else None), included_files
+
+
+def _part_arcname(path: Path, *, part_index: int, part_count: int) -> str:
+    stem = path.stem or path.name
+    suffix = path.suffix
+    return f"{stem}.part{part_index:02d}-of-{part_count:02d}{suffix}"
+
+
+def _archive_payload_limit(max_archive_bytes: int) -> int:
+    max_bytes = max(1, int(max_archive_bytes))
+    overhead = min(64 * 1024, max(1, max_bytes // 4))
+    return max(1, max_bytes - overhead)
+
+
+def _build_archive_entries(files: Sequence[Path], *, payload_limit: int) -> list[_SupportArchiveEntry]:
+    entries: list[_SupportArchiveEntry] = []
+
+    for file_path in files:
+        try:
+            file_size = max(0, int(file_path.stat().st_size))
+        except OSError:
+            continue
+
+        if file_size <= payload_limit:
+            entries.append(
+                _SupportArchiveEntry(
+                    source_path=file_path,
+                    arcname=file_path.name,
+                    offset=0,
+                    size=file_size,
+                )
+            )
+            continue
+
+        part_count = (file_size + payload_limit - 1) // payload_limit
+        for index in range(part_count):
+            offset = index * payload_limit
+            size = min(payload_limit, file_size - offset)
+            entries.append(
+                _SupportArchiveEntry(
+                    source_path=file_path,
+                    arcname=_part_arcname(file_path, part_index=index + 1, part_count=part_count),
+                    offset=offset,
+                    size=size,
+                )
+            )
+
+    return entries
+
+
+def _pack_archive_entries(
+    entries: Sequence[_SupportArchiveEntry],
+    *,
+    payload_limit: int,
+) -> list[list[_SupportArchiveEntry]]:
+    packs: list[list[_SupportArchiveEntry]] = []
+    current_pack: list[_SupportArchiveEntry] = []
+    current_size = 0
+
+    for entry in entries:
+        entry_size = max(0, int(entry.size))
+        if current_pack and current_size + entry_size > payload_limit:
+            packs.append(current_pack)
+            current_pack = []
+            current_size = 0
+
+        current_pack.append(entry)
+        current_size += entry_size
+
+    if current_pack:
+        packs.append(current_pack)
+
+    return packs
+
+
+def _write_archive_entry(archive: zipfile.ZipFile, entry: _SupportArchiveEntry) -> None:
+    if entry.offset == 0 and entry.size == entry.source_path.stat().st_size and entry.arcname == entry.source_path.name:
+        archive.write(entry.source_path, arcname=entry.arcname)
+        return
+
+    with entry.source_path.open("rb") as source:
+        source.seek(entry.offset)
+        archive.writestr(entry.arcname, source.read(entry.size))
+
+
+def create_support_archives(
+    *,
+    bundle_prefix: str,
+    candidate_paths: Iterable[str | os.PathLike[str] | None],
+    output_dir: str | os.PathLike[str] | None = None,
+    max_archive_bytes: int = SUPPORT_ARCHIVE_MAX_BYTES,
+) -> tuple[list[str], list[str]]:
     files = _unique_existing_paths(candidate_paths)
     if not files:
-        return None, []
+        return [], []
 
     bundle_root = Path(output_dir) if output_dir else Path(LOGS_FOLDER) / "support_bundles"
     bundle_root.mkdir(parents=True, exist_ok=True)
 
+    payload_limit = _archive_payload_limit(max_archive_bytes)
+    entries = _build_archive_entries(files, payload_limit=payload_limit)
+    if not entries:
+        return [], []
+
+    packs = _pack_archive_entries(entries, payload_limit=payload_limit)
     timestamp = time.strftime("%Y%m%d_%H%M%S")
-    zip_name = f"{bundle_prefix}_{timestamp}.zip"
-    zip_path = bundle_root / zip_name
+    archive_paths: list[str] = []
 
-    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for file_path in files:
-            archive.write(file_path, arcname=file_path.name)
+    for index, pack in enumerate(packs, start=1):
+        suffix = f"_part{index:02d}" if len(packs) > 1 else ""
+        zip_path = bundle_root / f"{bundle_prefix}_{timestamp}{suffix}.zip"
+        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for entry in pack:
+                _write_archive_entry(archive, entry)
+        archive_paths.append(str(zip_path))
 
-    return str(zip_path), [path.name for path in files]
+    return archive_paths, [entry.arcname for entry in entries]
 
 
 def build_support_template(
@@ -114,8 +234,17 @@ def build_support_template(
     zip_path: str | None,
     included_files: Sequence[str],
     extra_note: str = "",
+    archive_paths: Sequence[str] | None = None,
 ) -> str:
-    archive_line = zip_path or "ZIP не был создан"
+    paths = [str(path) for path in (archive_paths or []) if str(path).strip()]
+    if not paths and zip_path:
+        paths = [zip_path]
+
+    if len(paths) > 1:
+        archive_block = "Архивы с логами:\n" + "\n".join(f"- {path}" for path in paths)
+    else:
+        archive_block = f"Архив с логами: {paths[0] if paths else 'ZIP не был создан'}"
+
     files_block = "\n".join(f"- {name}" for name in included_files) if included_files else "- Нет файлов"
     note_block = f"\nПримечание: {extra_note.strip()}" if extra_note.strip() else ""
 
@@ -125,7 +254,7 @@ def build_support_template(
         f"ОС: {platform.platform()}\n"
         f"Имя компьютера: {platform.node() or 'неизвестно'}\n"
         f"Время подготовки: {time.strftime('%d.%m.%Y %H:%M:%S')}\n"
-        f"Архив с логами: {archive_line}\n"
+        f"{archive_block}\n"
         f"Вложенные файлы:\n{files_block}"
         f"{note_block}\n\n"
         "Что делал:\n"
@@ -251,16 +380,18 @@ def prepare_support_request(
     open_bundle_folder: bool = True,
 ) -> PreparedSupportRequest:
     recent_files = find_recent_logs(patterns=recent_patterns)
-    zip_path, included_files = create_support_zip(
+    archive_paths, included_files = create_support_archives(
         bundle_prefix=bundle_prefix,
         candidate_paths=[*candidate_paths, *recent_files],
     )
+    zip_path = archive_paths[0] if archive_paths else None
 
     template_text = build_support_template(
         context_label=context_label,
         zip_path=zip_path,
         included_files=included_files,
         extra_note=extra_note,
+        archive_paths=archive_paths,
     )
 
     copied = _copy_to_clipboard(template_text)
@@ -277,4 +408,5 @@ def prepare_support_request(
         copied_to_clipboard=copied,
         discussions_opened=bool(discussions_opened),
         bundle_folder_opened=folder_opened,
+        archive_paths=archive_paths,
     )
