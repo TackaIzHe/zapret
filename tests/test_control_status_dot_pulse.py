@@ -205,6 +205,14 @@ class ControlStatusDotPulseTests(unittest.TestCase):
 
         self.assertEqual(status_title.accessible_name, "Ошибка запуска")
         self.assertEqual(status_title.accessible_description, "Не удалось запустить процесс обхода блокировок")
+        self.assertEqual(
+            status_desc.accessible_name,
+            "Описание состояния Zapret: Не удалось запустить процесс обхода блокировок",
+        )
+        self.assertEqual(
+            status_desc.properties.get("screenReaderStateText"),
+            "Описание состояния Zapret: Не удалось запустить процесс обхода блокировок",
+        )
 
     def test_apply_status_plan_sets_screen_reader_dot_state_text(self) -> None:
         from presets.ui.control.control_page_runtime_shared import apply_status_plan
