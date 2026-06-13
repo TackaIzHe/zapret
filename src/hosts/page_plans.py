@@ -235,7 +235,7 @@ def build_catalog_refresh_plan(*, current_signature, new_signature, trigger: str
         invalidate_cache=changed,
         should_rebuild=bool(changed and services_layout_exists),
         should_log=bool(changed and current_signature is not None and services_layout_exists),
-        log_message=f"Hosts: hosts_catalog.json изменился ({trigger}) — обновляем список сервисов",
+        log_message=f"Hosts: hosts-каталог изменился ({trigger}) — обновляем список сервисов",
     )
 
 

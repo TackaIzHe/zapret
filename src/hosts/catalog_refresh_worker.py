@@ -6,7 +6,7 @@ from log.log import log
 
 
 class HostsCatalogRefreshWorker(QThread):
-    """Проверяет изменение hosts_catalog.json вне UI-потока."""
+    """Проверяет изменение hosts-каталога вне UI-потока."""
 
     loaded = pyqtSignal(int, str, object)
     failed = pyqtSignal(int, str, str)

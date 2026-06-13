@@ -216,14 +216,14 @@ ini/реестр/старый файл". Старый путь не должен
 этого требует: DNS, Defender, политики запуска, службы, проверка установленных
 программ.
 
-`hosts_catalog.json` остаётся отдельным файлом-шаблоном каталога доменов:
+Hosts-каталог остаётся поставляемым шаблоном каталога доменов и hosts-записей:
 
 ```text
-source: <project>/private_zapretgui/resources/json/hosts_catalog.json
-exe:    <exe_dir>/json/hosts_catalog.json
+source: <project>/private_zapretgui/resources/json/hosts_catalog/
+exe:    <exe_dir>/json/hosts_catalog/
 ```
 
-`hosts_catalog.json` не является пользовательскими настройками. Пользовательский выбор
+Папка `hosts_catalog` не является пользовательскими настройками. Пользовательский выбор
 из hosts-каталога хранится только в `settings.json`.
 
 Встроенные ресурсы программы могут оставаться отдельными файлами, потому что это

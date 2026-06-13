@@ -37,9 +37,13 @@ class HostsCatalog:
 
 
 _SERVICE_MODE_DNS = "dns"
-_SERVICE_MODE_DIRECT = "direct"
-_CATALOG_FILE_NAME = "hosts_catalog.json"
-_DIRECT_PROFILE_ID = "direct"
+_SERVICE_MODE_HOSTS = "hosts"
+_LEGACY_SERVICE_MODE_DIRECT = "direct"
+_CATALOG_DIR_NAME = "hosts_catalog"
+_LEGACY_CATALOG_FILE_NAME = "hosts_catalog.json"
+_HOSTS_PROFILE_ID = "hosts"
+_HOSTS_PROFILE_NAME = "Вкл. (активировать hosts)"
+_LEGACY_DIRECT_PROFILE_ID = "direct"
 
 _CACHE_LOCK = threading.RLock()
 _CACHE: HostsCatalog | None = None
@@ -68,8 +72,13 @@ def _get_app_root() -> Path:
 def _get_hosts_catalog_candidates() -> list[Path]:
     root = _get_app_root()
     if getattr(sys, "frozen", False):
-        return [root / "json" / _CATALOG_FILE_NAME]
-    return [root / "private_zapretgui" / "resources" / "json" / _CATALOG_FILE_NAME]
+        json_root = root / "json"
+    else:
+        json_root = root / "private_zapretgui" / "resources" / "json"
+    return [
+        json_root / _CATALOG_DIR_NAME,
+        json_root / _LEGACY_CATALOG_FILE_NAME,
+    ]
 
 
 def _get_hosts_catalog_path() -> Path:
@@ -107,9 +116,24 @@ def _normalize_profile(raw: object) -> tuple[str, str] | None:
 
 def _normalize_mode(raw: object) -> str:
     mode = _clean_str(raw).lower()
-    if mode == _SERVICE_MODE_DIRECT:
-        return _SERVICE_MODE_DIRECT
+    if mode in {_SERVICE_MODE_HOSTS, _LEGACY_SERVICE_MODE_DIRECT}:
+        return _SERVICE_MODE_HOSTS
     return _SERVICE_MODE_DNS
+
+
+def _get_hosts_profile_id(profiles: list[str]) -> str:
+    if _HOSTS_PROFILE_ID in profiles:
+        return _HOSTS_PROFILE_ID
+    if _LEGACY_DIRECT_PROFILE_ID in profiles:
+        return _LEGACY_DIRECT_PROFILE_ID
+    return _HOSTS_PROFILE_ID
+
+
+def _ensure_hosts_profile(profiles: list[str], profile_names: dict[str, str]) -> None:
+    if _HOSTS_PROFILE_ID in profile_names or _LEGACY_DIRECT_PROFILE_ID in profile_names:
+        return
+    profiles.append(_HOSTS_PROFILE_ID)
+    profile_names[_HOSTS_PROFILE_ID] = _HOSTS_PROFILE_NAME
 
 
 def _normalize_ip_values(raw: object) -> list[str]:
@@ -207,7 +231,9 @@ def _parse_hosts_catalog_json(text: str) -> HostsCatalog:
         service_entries.setdefault(service_name, [])
         service_modes[service_name.casefold()] = mode
 
-        if mode == _SERVICE_MODE_DIRECT:
+        if mode == _SERVICE_MODE_HOSTS:
+            _ensure_hosts_profile(profiles, profile_names)
+            hosts_profile_id = _get_hosts_profile_id(profiles)
             for raw_row in raw_service.get("hosts") or []:
                 if not isinstance(raw_row, dict):
                     continue
@@ -219,7 +245,7 @@ def _parse_hosts_catalog_json(text: str) -> HostsCatalog:
                     service_entries=service_entries,
                     service_name=service_name,
                     host=host,
-                    profile_id=_DIRECT_PROFILE_ID,
+                    profile_id=hosts_profile_id,
                     ip=ip,
                 )
             continue
@@ -234,7 +260,7 @@ def _parse_hosts_catalog_json(text: str) -> HostsCatalog:
 
             values_by_profile: dict[str, list[str]] = {}
             for profile_id in profiles:
-                if profile_id == _DIRECT_PROFILE_ID:
+                if profile_id in {_HOSTS_PROFILE_ID, _LEGACY_DIRECT_PROFILE_ID}:
                     continue
                 values = _normalize_ip_values(raw_ips.get(profile_id))
                 if values:
@@ -265,8 +291,99 @@ def _parse_hosts_catalog_json(text: str) -> HostsCatalog:
     )
 
 
+def _read_json_file(path: Path) -> object:
+    return json.loads(path.read_text(encoding="utf-8", errors="replace") or "{}")
+
+
+def _iter_json_files(path: Path) -> list[Path]:
+    if not path.exists() or not path.is_dir():
+        return []
+    return sorted(
+        child
+        for child in path.iterdir()
+        if child.is_file() and child.suffix.lower() == ".json"
+    )
+
+
+def _normalize_split_profiles(raw: object) -> list[dict[str, str]]:
+    if isinstance(raw, dict):
+        raw_profiles = raw.get("dns_sources") or raw.get("profiles") or []
+    elif isinstance(raw, list):
+        raw_profiles = raw
+    else:
+        raw_profiles = []
+
+    profiles: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for raw_profile in raw_profiles:
+        normalized = _normalize_profile(raw_profile)
+        if normalized is None:
+            continue
+        profile_id, name = normalized
+        if profile_id in {_HOSTS_PROFILE_ID, _LEGACY_DIRECT_PROFILE_ID} or profile_id in seen:
+            continue
+        seen.add(profile_id)
+        profiles.append({"id": profile_id, "name": name})
+    return profiles
+
+
+def _normalize_split_services(raw: object, *, mode: str) -> list[dict]:
+    if isinstance(raw, dict) and isinstance(raw.get("services"), list):
+        raw_services = raw.get("services") or []
+    elif isinstance(raw, list):
+        raw_services = raw
+    else:
+        raw_services = [raw]
+
+    services: list[dict] = []
+    for raw_service in raw_services:
+        if not isinstance(raw_service, dict):
+            continue
+        service = dict(raw_service)
+        service["mode"] = mode
+        services.append(service)
+    return services
+
+
+def _load_split_catalog_data(path: Path) -> dict:
+    profiles_path = path / "dns_sources.json"
+    profiles = _normalize_split_profiles(_read_json_file(profiles_path) if profiles_path.exists() else [])
+
+    services: list[dict] = []
+    for service_path in _iter_json_files(path / "dns"):
+        try:
+            services.extend(_normalize_split_services(_read_json_file(service_path), mode=_SERVICE_MODE_DNS))
+        except Exception as exc:
+            _log(f"Не удалось прочитать DNS-сервис hosts-каталога {service_path.name}: {exc}", "WARNING")
+
+    for service_path in _iter_json_files(path / "hosts"):
+        try:
+            services.extend(_normalize_split_services(_read_json_file(service_path), mode=_SERVICE_MODE_HOSTS))
+        except Exception as exc:
+            _log(f"Не удалось прочитать hosts-сервис hosts-каталога {service_path.name}: {exc}", "WARNING")
+
+    return {
+        "version": 1,
+        "profiles": profiles,
+        "services": services,
+    }
+
+
 def _get_path_sig(path: Path) -> tuple[int, int] | None:
     try:
+        if path.is_dir():
+            newest_mtime_ns = 0
+            total_size = 0
+            for child in sorted(path.rglob("*.json")):
+                if not child.is_file():
+                    continue
+                st = child.stat()
+                mtime_ns = getattr(st, "st_mtime_ns", None)
+                if mtime_ns is None:
+                    mtime_ns = int(st.st_mtime * 1_000_000_000)
+                newest_mtime_ns = max(newest_mtime_ns, int(mtime_ns))
+                total_size += int(st.st_size)
+            return (newest_mtime_ns, total_size)
         st = path.stat()
         mtime_ns = getattr(st, "st_mtime_ns", None)
         if mtime_ns is None:
@@ -293,7 +410,7 @@ def _load_catalog() -> HostsCatalog:
         if not exists:
             if not _MISSING_CATALOG_LOGGED:
                 _log(
-                    f"{_CATALOG_FILE_NAME} не найден. Ожидается внешний файл: "
+                    "hosts-каталог не найден. Ожидается внешняя папка или файл: "
                     + " | ".join(str(path) for path in candidates),
                     "WARNING",
                 )
@@ -313,9 +430,13 @@ def _load_catalog() -> HostsCatalog:
             return _CACHE
 
         try:
-            text = path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
+            if path.exists() and path.is_dir():
+                data = _load_split_catalog_data(path)
+                text = json.dumps(data, ensure_ascii=False, sort_keys=True)
+            else:
+                text = path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
         except Exception as exc:
-            _log(f"Не удалось прочитать {_CATALOG_FILE_NAME}: {exc}", "WARNING")
+            _log(f"Не удалось прочитать hosts-каталог: {exc}", "WARNING")
             text = ""
 
         _CACHE_TEXT = text
@@ -335,7 +456,7 @@ def invalidate_hosts_catalog_cache() -> None:
 
 
 def get_hosts_catalog_signature() -> tuple[str, int, int] | None:
-    """Возвращает сигнатуру текущего `hosts_catalog.json`: (path, mtime_ns, size)."""
+    """Возвращает сигнатуру текущего hosts-каталога: (path, mtime_ns, size)."""
     path, _candidates, _exists = _select_catalog_path()
     if not path.exists():
         return None
@@ -347,7 +468,7 @@ def get_hosts_catalog_signature() -> tuple[str, int, int] | None:
 
 
 def get_hosts_catalog_text() -> str:
-    """Возвращает сырой текст `hosts_catalog.json` с учётом кэша."""
+    """Возвращает сырой текст hosts-каталога с учётом кэша."""
     _load_catalog()
     with _CACHE_LOCK:
         return _CACHE_TEXT or ""
@@ -447,10 +568,11 @@ def _is_direct_profile_name(profile_name: str) -> bool:
     display_name = get_dns_profile_display_name(profile_name).lower()
     text = f"{profile_id} {display_name}"
     return (
-        profile_id == _DIRECT_PROFILE_ID
+        profile_id in {_HOSTS_PROFILE_ID, _LEGACY_DIRECT_PROFILE_ID}
         or "вкл. (активировать hosts)" in text
         or "no proxy" in text
         or "direct" in text
+        or "hosts" in text
     )
 
 
@@ -458,10 +580,11 @@ def _infer_direct_profile_index(cat: HostsCatalog) -> int | None:
     for index, profile_id in enumerate(cat.dns_profiles):
         profile_text = f"{profile_id} {cat.dns_profile_names.get(profile_id, '')}".lower()
         if (
-            profile_id == _DIRECT_PROFILE_ID
+            profile_id in {_HOSTS_PROFILE_ID, _LEGACY_DIRECT_PROFILE_ID}
             or "вкл. (активировать hosts)" in profile_text
             or "no proxy" in profile_text
             or "direct" in profile_text
+            or "hosts" in profile_text
         ):
             return index
     return None
@@ -476,7 +599,7 @@ def _get_declared_service_mode(cat: HostsCatalog, service_name: str) -> str | No
 
 def _service_has_proxy_ips(cat: HostsCatalog, service_name: str) -> bool:
     declared_mode = _get_declared_service_mode(cat, service_name)
-    if declared_mode == _SERVICE_MODE_DIRECT:
+    if declared_mode == _SERVICE_MODE_HOSTS:
         return False
     if declared_mode == _SERVICE_MODE_DNS:
         return True

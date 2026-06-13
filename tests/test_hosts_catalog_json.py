@@ -68,6 +68,61 @@ class HostsCatalogJsonTests(unittest.TestCase):
         )
         return catalog_path
 
+    def _write_split_catalog(self, root: Path) -> Path:
+        catalog_dir = root / "private_zapretgui" / "resources" / "json" / "hosts_catalog"
+        (catalog_dir / "dns").mkdir(parents=True, exist_ok=True)
+        (catalog_dir / "hosts").mkdir(parents=True, exist_ok=True)
+        (catalog_dir / "dns_sources.json").write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "dns_sources": [
+                        {"id": "zapret_dns", "name": "Zapret DNS"},
+                        {"id": "xbox_dns", "name": "XBOX DNS"},
+                        {"id": "xbox_dns_old", "name": "XBOX DNS (old)"},
+                    ],
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        (catalog_dir / "dns" / "chatgpt.json").write_text(
+            json.dumps(
+                {
+                    "name": "ChatGPT",
+                    "domains": [
+                        {
+                            "host": "chat.openai.com",
+                            "ips": {
+                                "zapret_dns": "72.56.93.144",
+                                "xbox_dns": "2.23.88.118",
+                                "xbox_dns_old": "45.155.204.190",
+                            },
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        (catalog_dir / "hosts" / "instagram.json").write_text(
+            json.dumps(
+                {
+                    "name": "Instagram",
+                    "hosts": [
+                        {"ip": "157.240.245.174", "host": "instagram.com"},
+                        {"ip": "2a03:2880:f330:25:face:b00c:0:4420", "host": "instagram.com"},
+                    ],
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        return catalog_dir
+
     def test_source_mode_uses_repo_json_hosts_catalog_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -78,7 +133,52 @@ class HostsCatalogJsonTests(unittest.TestCase):
             with patch.object(self.proxy_domains, "__file__", str(fake_module)):
                 self.assertEqual(
                     self.proxy_domains.get_hosts_catalog_path(),
-                    root / "private_zapretgui" / "resources" / "json" / "hosts_catalog.json",
+                    root / "private_zapretgui" / "resources" / "json" / "hosts_catalog",
+                )
+
+    def test_source_mode_uses_split_hosts_catalog_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fake_module = root / "public_zapretgui" / "src" / "hosts" / "proxy_domains.py"
+            fake_module.parent.mkdir(parents=True, exist_ok=True)
+            fake_module.write_text("", encoding="utf-8")
+
+            with patch.object(self.proxy_domains, "__file__", str(fake_module)):
+                self.assertEqual(
+                    self.proxy_domains.get_hosts_catalog_path(),
+                    root / "private_zapretgui" / "resources" / "json" / "hosts_catalog",
+                )
+
+    def test_split_catalog_reads_dns_sources_and_hosts_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_split_catalog(root)
+            fake_module = root / "public_zapretgui" / "src" / "hosts" / "proxy_domains.py"
+            fake_module.parent.mkdir(parents=True, exist_ok=True)
+            fake_module.write_text("", encoding="utf-8")
+
+            with patch.object(self.proxy_domains, "__file__", str(fake_module)):
+                self.proxy_domains.invalidate_hosts_catalog_cache()
+
+                self.assertEqual(
+                    self.proxy_domains.get_dns_profiles(),
+                    ["zapret_dns", "xbox_dns", "xbox_dns_old", "hosts"],
+                )
+                self.assertEqual(
+                    self.proxy_domains.get_dns_profile_display_name("hosts"),
+                    "Вкл. (активировать hosts)",
+                )
+                self.assertEqual(self.proxy_domains.get_all_services(), ["ChatGPT", "Instagram"])
+                self.assertEqual(
+                    self.proxy_domains.get_service_domain_ip_rows("ChatGPT", "zapret_dns"),
+                    [("chat.openai.com", "72.56.93.144")],
+                )
+                self.assertEqual(
+                    self.proxy_domains.get_service_domain_ip_rows("Instagram", "hosts"),
+                    [
+                        ("instagram.com", "157.240.245.174"),
+                        ("instagram.com", "2a03:2880:f330:25:face:b00c:0:4420"),
+                    ],
                 )
 
     def test_json_catalog_uses_profile_ids_and_display_names(self) -> None:
