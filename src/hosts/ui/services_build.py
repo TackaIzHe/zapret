@@ -113,6 +113,11 @@ def build_hosts_services_group(
             chips_layout.addWidget(btn)
 
         chips_scroll = ScrollArea()
+        chips_scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        try:
+            chips_scroll.viewport().setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        except Exception:
+            pass
         chips_scroll.setFrameShape(QFrame.Shape.NoFrame)
         chips_scroll.setWidgetResizable(True)
         chips_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)

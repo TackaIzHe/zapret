@@ -171,6 +171,24 @@ class HostsServicesAccessibilityTests(unittest.TestCase):
         )
         self.assertIn("YouTube, Twitch", widgets.chip_buttons[1].accessibleDescription())
 
+    def test_group_chips_scroll_area_does_not_take_tab_focus(self) -> None:
+        widgets = build_hosts_services_group(
+            HostsServiceGroupPlan(
+                title="Видео",
+                direct_only=False,
+                service_names=["YouTube", "Twitch"],
+                common_profiles=[("zapret_dns", "Zapret DNS")],
+                rows=[],
+            ),
+            off_label="Отключено",
+            strong_body_label_cls=StrongBodyLabel,
+            make_chip=lambda label: PushButton(label),
+            on_bulk_apply=lambda *_args: None,
+        )
+
+        self.assertIsNotNone(widgets.chips_scroll)
+        self.assertEqual(widgets.chips_scroll.focusPolicy(), Qt.FocusPolicy.NoFocus)
+
 
 if __name__ == "__main__":
     unittest.main()
