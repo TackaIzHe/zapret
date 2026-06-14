@@ -1,6 +1,6 @@
 <h1 align="center"><img width="30" alt="image" src="https://github.com/user-attachments/assets/a9865f26-a61d-444f-8f6c-d186e5e21973" /><a href="https://github.com/bol-van/zapret2">Zapret 2</a> (Запрет: обход блокировки Дискорда и Ютуба) </h1>
 
-### Документация доступна здесь https://publish.obsidian.md/zapret/Privacy/Zapret2/Zapret2
+### Документация доступна [здесь](https://publish.obsidian.md/zapret/Privacy/Zapret2/Zapret2)
 
 ### Попробуйте наш новый [Zapret KVN](https://github.com/youtubediscord/zapret-kvn)!
 
