@@ -18,6 +18,7 @@ _WINWS2_PRESET_FOLDERS: tuple[tuple[str, str, bool], ...] = (
 
 _WINWS1_PRESET_FOLDERS: tuple[tuple[str, str, bool], ...] = (
     ("all-sites", "Все сайты", False),
+    ("1-9-9a", "1.9.9a", False),
     ("alt", "ALT", False),
     ("games", "Игры", False),
     ("youtube", "YouTube", False),
@@ -121,6 +122,8 @@ def _is_winws1_scope(scope_key: object) -> bool:
 def _classify_winws1_preset_folder(text: str) -> str:
     if not text:
         return COMMON_FOLDER_KEY
+    if "1.9.9a" in text:
+        return "1-9-9a"
     if any(token in text for token in ("allsite", "allsites", "all-site", "all sites", "все сайты")):
         return "all-sites"
     if "alt" in text:
