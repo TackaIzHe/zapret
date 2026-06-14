@@ -522,9 +522,17 @@
 
 --new
 
---name=Ubisoft / DeepSeek
---filter-tcp=443
---hostlist-domains=ubisoft.com,uplay.com,ubi.com,chat.deepseek.com,api.deepseek.com
+--name=DeepSeek
+--filter-tcp=80,443-65535
+--hostlist=lists/deepseek.txt
+--payload=all
+--lua-desync=multisplit:pos=1:seqovl=568:seqovl_pattern=tls_4pda
+
+--new
+
+--name=Ubisoft
+--filter-tcp=80,443-65535
+--hostlist=lists/ubisoft.txt
 --payload=all
 --lua-desync=multisplit:pos=1:seqovl=568:seqovl_pattern=tls_4pda
 

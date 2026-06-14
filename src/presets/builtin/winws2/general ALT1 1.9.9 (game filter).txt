@@ -638,9 +638,17 @@
 
 --new
 
---name=Ubisoft / DeepSeek
---filter-tcp=443
---hostlist-domains=ubisoft.com,uplay.com,ubi.com,chat.deepseek.com,api.deepseek.com
+--name=DeepSeek
+--filter-tcp=80,443-65535
+--hostlist=lists/deepseek.txt
+--payload=all
+--lua-desync=fake:blob=fake_stun_as_tls:tcp_ts=-600000:repeats=6
+
+--new
+
+--name=Ubisoft
+--filter-tcp=80,443-65535
+--hostlist=lists/ubisoft.txt
 --payload=all
 --lua-desync=fake:blob=fake_stun_as_tls:tcp_ts=-600000:repeats=6
 --lua-desync=fake:blob=tls_google:tcp_ts=-600000:repeats=6
