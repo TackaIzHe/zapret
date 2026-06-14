@@ -2096,9 +2096,10 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         ensure_source = inspect.getsource(AppearancePage._ensure_lower_sections_built)
         settings_source = inspect.getsource(appearance_settings.load_page_initial_state)
 
-        self.assertNotIn("load_page_initial_state", build_source)
+        self.assertIn("appearance_settings.load_page_initial_state()", build_source)
         self.assertNotIn("load_page_initial_state", ensure_source)
-        self.assertIn("_request_initial_state_load", build_source)
+        self.assertNotIn("_request_initial_state_load", build_source)
+        self.assertIn("self._initial_state_plan = initial_state", build_source)
         self.assertIn("initial_state.ui_language = self._ui_language", build_source)
         self.assertNotIn("appearance_settings.load_ui_language()", build_source)
         self.assertNotIn("appearance_settings.load_window_opacity()", build_source)
@@ -2113,7 +2114,7 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertNotIn("get_window_opacity", settings_source)
         self.assertNotIn("get_animations_enabled", settings_source)
 
-    def test_appearance_initial_state_loads_through_worker(self) -> None:
+    def test_appearance_first_render_uses_direct_initial_state_plan(self) -> None:
         self.assertTrue(hasattr(appearance_workers, "AppearanceInitialStateLoadWorker"))
         appearance_feature = importlib.import_module("app.feature_facades.appearance")
         worker_source = inspect.getsource(appearance_workers.AppearanceInitialStateLoadWorker.run)
@@ -2136,7 +2137,8 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("_initial_state_load_runtime", page_source)
         self.assertIn("start_qthread_worker", start_source)
         self.assertNotIn("worker.start()", start_source)
-        self.assertIn("_request_initial_state_load", build_source)
+        self.assertIn("appearance_settings.load_page_initial_state()", build_source)
+        self.assertNotIn("_request_initial_state_load", build_source)
         self.assertNotIn("settings.appearance", worker_source)
 
     def test_base_page_language_uses_warmed_cache_not_settings_read(self) -> None:
@@ -2148,19 +2150,19 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertNotIn("load_ui_language", base_source)
         self.assertNotIn("load_ui_language", navigation_source)
 
-    def test_appearance_lower_sections_are_built_after_initial_shell(self) -> None:
+    def test_appearance_page_builds_all_sections_in_initial_pass(self) -> None:
         build_source = inspect.getsource(AppearancePage._build_ui)
         activated_source = inspect.getsource(AppearancePage.on_page_activated)
         schedule_source = inspect.getsource(AppearancePage._schedule_lower_sections_build)
         ensure_source = inspect.getsource(AppearancePage._ensure_lower_sections_built)
 
-        self.assertNotIn("build_holiday_sections", build_source)
-        self.assertNotIn("build_opacity_section", build_source)
-        self.assertNotIn("build_performance_section", build_source)
+        self.assertIn("_ensure_lower_sections_built(require_visible=False)", build_source)
+        self.assertIn("build_holiday_sections", ensure_source)
+        self.assertIn("build_opacity_section", ensure_source)
+        self.assertIn("build_performance_section", ensure_source)
         self.assertIn("_schedule_lower_sections_build", activated_source)
         self.assertIn("QTimer.singleShot", schedule_source)
-        self.assertIn("build_holiday_sections", ensure_source)
-        self.assertIn("build_performance_section", ensure_source)
+        self.assertIn("require_visible", ensure_source)
 
     def test_appearance_settings_save_runs_through_worker(self) -> None:
         appearance_feature = importlib.import_module("app.feature_facades.appearance")

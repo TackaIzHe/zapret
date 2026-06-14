@@ -359,11 +359,15 @@ class AppearancePage(BasePage):
     def _build_ui(self):
         total_started_at = time.perf_counter()
         warmed_state = appearance_settings.consume_warmed_page_initial_state()
-        initial_state = warmed_state or appearance_settings.build_default_page_initial_state()
         if warmed_state is not None:
-            self._initial_state_plan = warmed_state
+            initial_state = warmed_state
         else:
-            initial_state.ui_language = self._ui_language
+            try:
+                initial_state = appearance_settings.load_page_initial_state()
+            except Exception:
+                initial_state = appearance_settings.build_default_page_initial_state()
+                initial_state.ui_language = self._ui_language
+        self._initial_state_plan = initial_state
         self._ui_language = initial_state.ui_language
         # ═══════════════════════════════════════════════════════════
         # РЕЖИМ ОТОБРАЖЕНИЯ
@@ -484,7 +488,7 @@ class AppearancePage(BasePage):
         # Load saved display mode and bg preset
         section_started_at = time.perf_counter()
         self._apply_initial_display_state(initial_state)
-        self._request_initial_state_load(force=warmed_state is None)
+        self._ensure_lower_sections_built(require_visible=False)
         self._log_ui_timing("appearance_ui.initial_state.load", section_started_at)
         self._log_ui_timing("appearance_ui.build.total", total_started_at)
 
@@ -500,11 +504,11 @@ class AppearancePage(BasePage):
         self._lower_sections_build_scheduled = True
         QTimer.singleShot(0, self._ensure_lower_sections_built)
 
-    def _ensure_lower_sections_built(self) -> bool:
+    def _ensure_lower_sections_built(self, *, require_visible: bool = True) -> bool:
         if self._lower_sections_built:
             return True
         self._lower_sections_build_scheduled = False
-        if self._cleanup_in_progress or not self.isVisible():
+        if self._cleanup_in_progress or (require_visible and not self.isVisible()):
             return False
         initial_state = self._initial_state_plan
         if initial_state is None:
