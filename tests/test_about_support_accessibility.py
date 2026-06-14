@@ -32,6 +32,16 @@ class AboutSupportAccessibilityTests(unittest.TestCase):
             on_open_discord=lambda: None,
         )
 
+        self.assertEqual(widgets.discussions_group.accessibleName(), "Раздел поддержки: GitHub Discussions")
+        self.assertEqual(
+            widgets.discussions_group.property("screenReaderStateText"),
+            "Раздел поддержки: GitHub Discussions",
+        )
+        self.assertEqual(widgets.community_group.accessibleName(), "Раздел поддержки: Каналы сообщества")
+        self.assertEqual(
+            widgets.community_group.property("screenReaderStateText"),
+            "Раздел поддержки: Каналы сообщества",
+        )
         self.assertEqual(widgets.discussions_card.accessibleName(), "Открыть GitHub Discussions")
         self.assertEqual(widgets.discussions_card.property("screenReaderStateText"), "Открыть GitHub Discussions")
         self.assertIn("Основной канал поддержки", widgets.discussions_card.accessibleDescription())

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from collections.abc import Callable
 
 from qfluentwidgets import SettingCardGroup, PushSettingCard, PrimaryPushSettingCard
+from ui.accessibility import set_state_text
 from ui.pages.about_page_support_accessibility import set_support_card_accessibility
 from ui.theme import get_themed_qta_icon
 
@@ -29,10 +30,9 @@ def build_about_page_support_content(
     on_open_telegram,
     on_open_discord,
 ) -> AboutPageSupportWidgets:
-    discussions_group = SettingCardGroup(
-        tr_fn("page.about.support.section.discussions", "GitHub Discussions"),
-        content_parent,
-    )
+    discussions_title = tr_fn("page.about.support.section.discussions", "GitHub Discussions")
+    discussions_group = SettingCardGroup(discussions_title, content_parent)
+    set_state_text(discussions_group, f"Раздел поддержки: {discussions_title}")
     discussions_card = PrimaryPushSettingCard(
         tr_fn("page.about.support.discussions.button", "Открыть"),
         get_themed_qta_icon("fa5b.github", color=tokens.accent_hex),
@@ -55,10 +55,9 @@ def build_about_page_support_content(
     layout.addWidget(discussions_group)
     layout.addSpacing(16)
 
-    community_group = SettingCardGroup(
-        tr_fn("page.about.support.section.community", "Каналы сообщества"),
-        content_parent,
-    )
+    community_title = tr_fn("page.about.support.section.community", "Каналы сообщества")
+    community_group = SettingCardGroup(community_title, content_parent)
+    set_state_text(community_group, f"Раздел поддержки: {community_title}")
     telegram_card = PushSettingCard(
         tr_fn("page.about.support.button.open", "Открыть"),
         get_themed_qta_icon("fa5b.telegram", color="#229ED9"),
