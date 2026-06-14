@@ -39,6 +39,7 @@ from blockcheck.models import TestStatus
 from blockcheck.scan_models import StrategyProbeResult, StrategyScanReport
 from blockcheck.stun_tester import test_stun
 from config.config import MAIN_DIRECTORY
+from profile.winws2_preset_source import WINWS2_LUA_INIT_LINES
 from settings.mode import (
     ENGINE_WINWS2,
     EXE_NAME_WINWS2,
@@ -89,18 +90,6 @@ class _NullCallback:
     def is_cancelled(self) -> bool:
         return False
 
-
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
-_LUA_INITS = [
-    "--lua-init=@lua/zapret-lib.lua",
-    "--lua-init=@lua/zapret-antidpi.lua",
-    "--lua-init=@lua/zapret-auto.lua",
-    "--lua-init=@lua/custom_funcs.lua",
-    "--lua-init=@lua/zapret-multishake.lua",
-]
 
 _PROTOCOL_TCP_HTTPS = "tcp_https"
 _PROTOCOL_STUN_VOICE = "stun_voice"
@@ -1452,7 +1441,7 @@ class StrategyScanner:
         lines: list[str] = []
 
         # Lua inits
-        lines.extend(_LUA_INITS)
+        lines.extend(WINWS2_LUA_INIT_LINES)
         lines.append("")
 
         if self._scan_protocol == _PROTOCOL_STUN_VOICE:

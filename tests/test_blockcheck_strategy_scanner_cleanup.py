@@ -1,12 +1,42 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
+from pathlib import Path
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
 
 class BlockcheckStrategyScannerCleanupTests(unittest.TestCase):
+    def test_probe_preset_uses_shared_winws2_lua_init_lines(self) -> None:
+        from blockcheck.strategy_scanner import StrategyScanner
+        from profile.winws2_preset_source import WINWS2_LUA_INIT_LINES
+
+        scanner = object.__new__(StrategyScanner)
+        scanner._work_dir = ""
+        scanner._scan_protocol = "tcp_https"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            scanner._work_dir = tmp
+
+            preset_path = scanner._write_temp_preset(
+                "--lua-desync=fake:blob=fake_default_tls",
+                "discord.com",
+            )
+
+            lines = Path(preset_path).read_text(encoding="utf-8").splitlines()
+
+        init_lines = []
+        for line in lines:
+            if not line:
+                break
+            init_lines.append(line)
+
+        self.assertEqual(init_lines, list(WINWS2_LUA_INIT_LINES))
+        self.assertIn("--lua-init=@lua/custom_diag.lua", init_lines)
+        self.assertNotIn("--lua-init=@lua/custom-diag.lua", init_lines)
+
     def test_post_scan_cleanup_uses_runtime_windivert_cleanup(self) -> None:
         from blockcheck.strategy_scanner import StrategyScanner
 

@@ -3,26 +3,34 @@ from __future__ import annotations
 import re
 
 
-CORE_LUA_INITS: tuple[str, ...] = (
+WINWS2_LUA_INIT_PATHS: tuple[str, ...] = (
     "lua/zapret-lib.lua",
     "lua/zapret-antidpi.lua",
     "lua/zapret-auto.lua",
     "lua/custom_funcs.lua",
     "lua/custom_diag.lua",
+    "lua/zapret-multishake.lua",
+    "lua/fakemultisplit.lua",
+    "lua/fakemultidisorder.lua",
+)
+
+CORE_LUA_INITS: tuple[str, ...] = WINWS2_LUA_INIT_PATHS[:5]
+WINWS2_LUA_INIT_LINES: tuple[str, ...] = tuple(
+    f"--lua-init=@{lua_path}" for lua_path in WINWS2_LUA_INIT_PATHS
 )
 
 EXTENSION_LUA_INITS: dict[str, set[str]] = {
-    "lua/zapret-multishake.lua": {
+    WINWS2_LUA_INIT_PATHS[5]: {
         "hostfakesplit_stealth",
         "hostfakesplit_chaos",
         "hostfakesplit_multi",
         "hostfakesplit_gradual",
         "hostfakesplit_decoy",
     },
-    "lua/fakemultisplit.lua": {
+    WINWS2_LUA_INIT_PATHS[6]: {
         "fakemultisplit",
     },
-    "lua/fakemultidisorder.lua": {
+    WINWS2_LUA_INIT_PATHS[7]: {
         "fakemultidisorder",
     },
 }
@@ -100,6 +108,8 @@ def ensure_winws2_lua_init_lines(source_text: str) -> str:
 __all__ = [
     "CORE_LUA_INITS",
     "EXTENSION_LUA_INITS",
+    "WINWS2_LUA_INIT_LINES",
+    "WINWS2_LUA_INIT_PATHS",
     "ensure_winws2_lua_init_lines",
     "has_winws2_strategy_tags",
     "is_winws2_circular_preset_source",
