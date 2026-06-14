@@ -207,6 +207,7 @@ class ChangelogCard(CardWidget):
             name=changelog_name,
             description="Показывает, что изменилось в доступном обновлении.",
         )
+        set_state_text(self.changelog_text, changelog_name)
         self._update_progress_accessibility()
 
     def _update_progress_accessibility(self) -> None:

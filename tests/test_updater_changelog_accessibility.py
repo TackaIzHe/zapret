@@ -68,6 +68,10 @@ class UpdaterChangelogAccessibilityTests(unittest.TestCase):
             card.changelog_text.accessibleName(),
             "Список изменений обновления: Исправлена работа обновлений",
         )
+        self.assertEqual(
+            card.changelog_text.property("screenReaderStateText"),
+            "Список изменений обновления: Исправлена работа обновлений",
+        )
         self.assertIn("что изменилось", card.changelog_text.accessibleDescription().lower())
 
     def test_download_progress_labels_have_screen_reader_state_text(self) -> None:
