@@ -56,6 +56,14 @@ def build_hosts_info_note(*, tr_fn) -> HostsInfoNoteWidgets:
             "Некоторые сервисы (ChatGPT, Spotify и др.) сами блокируют доступ из России — это не блокировка РКН. Решается не через Zapret, а через проксирование: домены направляются через отдельный прокси-сервер в файле hosts.",
         )
     )
+    info_name = tr_fn("page.hosts.info.note.accessible_name", "Заметка hosts: зачем нужен hosts")
+    info_text = str(info_text_label.text() or "").strip()
+    set_control_accessibility(
+        info_text_label,
+        name=info_name,
+        description=info_text,
+    )
+    set_state_text(info_text_label, info_name)
     info_text_label.setWordWrap(True)
     info_layout.addWidget(info_text_label, 1)
 
@@ -67,13 +75,25 @@ def build_hosts_info_note(*, tr_fn) -> HostsInfoNoteWidgets:
 
 
 def build_hosts_browser_warning(*, tr_fn):
-    return SemanticNotice(
-        tr_fn(
-            "page.hosts.warning.browser_restart",
-            "После добавления или удаления доменов необходимо перезапустить браузер, чтобы изменения вступили в силу.",
-        ),
+    warning_text = tr_fn(
+        "page.hosts.warning.browser_restart",
+        "После добавления или удаления доменов необходимо перезапустить браузер, чтобы изменения вступили в силу.",
+    )
+    warning = SemanticNotice(
+        warning_text,
         tone="warning",
     )
+    warning_name = tr_fn(
+        "page.hosts.warning.browser_restart.accessible_name",
+        "Предупреждение hosts: перезапустите браузер",
+    )
+    set_control_accessibility(
+        warning,
+        name=warning_name,
+        description=warning_text,
+    )
+    set_state_text(warning, warning_name)
+    return warning
 
 
 def build_hosts_status_section(

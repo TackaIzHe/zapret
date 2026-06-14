@@ -130,6 +130,34 @@ class HostsStatusAccessibilityTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls._app = QApplication.instance() or QApplication([])
 
+    def test_info_note_reads_purpose_for_screen_reader(self) -> None:
+        from hosts.ui.sections_build import build_hosts_info_note
+
+        widgets = build_hosts_info_note(
+            tr_fn=lambda _key, default, **kwargs: default.format(**kwargs) if kwargs else default,
+        )
+
+        self.assertEqual(widgets.info_text_label.accessibleName(), "Заметка hosts: зачем нужен hosts")
+        self.assertIn("сами блокируют доступ", widgets.info_text_label.accessibleDescription())
+        self.assertIn(
+            "Заметка hosts: зачем нужен hosts",
+            widgets.info_text_label.property("screenReaderStateText"),
+        )
+
+    def test_browser_warning_reads_restart_requirement_for_screen_reader(self) -> None:
+        from hosts.ui.sections_build import build_hosts_browser_warning
+
+        warning = build_hosts_browser_warning(
+            tr_fn=lambda _key, default, **kwargs: default.format(**kwargs) if kwargs else default,
+        )
+
+        self.assertEqual(warning.accessibleName(), "Предупреждение hosts: перезапустите браузер")
+        self.assertIn("изменения вступили в силу", warning.accessibleDescription())
+        self.assertEqual(
+            warning.property("screenReaderStateText"),
+            "Предупреждение hosts: перезапустите браузер",
+        )
+
     def test_status_buttons_have_screen_reader_text(self) -> None:
         widgets = build_hosts_status_section(
             tr_fn=lambda _key, default, **kwargs: default.format(**kwargs) if kwargs else default,
