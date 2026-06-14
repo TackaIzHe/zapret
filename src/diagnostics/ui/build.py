@@ -46,6 +46,7 @@ def build_connection_header(*, container_layout, tr_fn, strong_body_label_cls, b
     hero_title = strong_body_label_cls(
         tr_fn("page.connection.hero.title", "Диагностика сетевых соединений")
     )
+    set_state_text(hero_title, f"Заголовок диагностики: {hero_title.text()}")
     hero_card.add_widget(hero_title)
 
     hero_subtitle = body_label_cls(
@@ -55,6 +56,7 @@ def build_connection_header(*, container_layout, tr_fn, strong_body_label_cls, b
         )
     )
     hero_subtitle.setWordWrap(True)
+    set_state_text(hero_subtitle, f"Описание диагностики: {hero_subtitle.text()}")
     hero_card.add_widget(hero_subtitle)
 
     badges_layout = QHBoxLayout()
@@ -105,6 +107,7 @@ def build_connection_controls(
     selector_row = QHBoxLayout()
     selector_row.setSpacing(12)
     test_select_label = body_label_cls(tr_fn("page.connection.test.select", "Выбор теста:"))
+    set_state_text(test_select_label, f"Поле диагностики: {test_select_label.text()}")
     selector_row.addWidget(test_select_label)
 
     test_combo = combo_cls()
@@ -132,6 +135,7 @@ def build_connection_controls(
     container_layout.addWidget(controls_card)
 
     actions_title_label = body_label_cls(tr_fn("page.connection.actions.title", "Действия"))
+    set_state_text(actions_title_label, f"Раздел диагностики: {actions_title_label.text()}")
     container_layout.addWidget(actions_title_label)
 
     actions_bar = QuickActionsBar(content_parent)

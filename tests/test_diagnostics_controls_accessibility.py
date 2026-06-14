@@ -9,7 +9,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QVBoxLayout, QWidget
 from qfluentwidgets import BodyLabel, CaptionLabel, ComboBox, IndeterminateProgressBar, ProgressBar, PushButton
 
-from diagnostics.ui.build import build_connection_controls, build_connection_log_viewer
+from diagnostics.ui.build import build_connection_controls, build_connection_header, build_connection_log_viewer
 from diagnostics.ui.components import ConnectionStatusBadge
 from diagnostics.ui.page import ConnectionTestPage
 from diagnostics.ui.runtime_helpers import (
@@ -62,6 +62,47 @@ class DiagnosticsControlsAccessibilityTests(unittest.TestCase):
             "Подготовить обращение с логами",
         )
         self.assertIn("архив логов", widgets.send_log_btn.accessibleDescription())
+
+    def test_connection_header_and_section_labels_have_screen_reader_state(self) -> None:
+        parent = QWidget()
+        layout = QVBoxLayout(parent)
+
+        header = build_connection_header(
+            container_layout=layout,
+            tr_fn=lambda _key, default: default,
+            strong_body_label_cls=BodyLabel,
+            body_label_cls=BodyLabel,
+        )
+        controls = build_connection_controls(
+            container_layout=layout,
+            content_parent=parent,
+            tr_fn=lambda _key, default: default,
+            combo_cls=ComboBox,
+            body_label_cls=BodyLabel,
+            caption_label_cls=CaptionLabel,
+            progress_bar_cls=ProgressBar,
+            push_button_cls=PushButton,
+            on_start=lambda: None,
+            on_stop=lambda: None,
+            on_support=lambda: None,
+        )
+
+        self.assertEqual(
+            header.hero_title.property("screenReaderStateText"),
+            "Заголовок диагностики: Диагностика сетевых соединений",
+        )
+        self.assertEqual(
+            header.hero_subtitle.property("screenReaderStateText"),
+            "Описание диагностики: Проверьте доступность Discord и YouTube, а затем одной кнопкой соберите ZIP с логами и откройте GitHub Discussions.",
+        )
+        self.assertEqual(
+            controls.test_select_label.property("screenReaderStateText"),
+            "Поле диагностики: Выбор теста:",
+        )
+        self.assertEqual(
+            controls.actions_title_label.property("screenReaderStateText"),
+            "Раздел диагностики: Действия",
+        )
 
     def test_test_combo_name_includes_selected_scenario(self) -> None:
         combo = ComboBox()
