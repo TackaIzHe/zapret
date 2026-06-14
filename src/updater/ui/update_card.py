@@ -43,6 +43,7 @@ class IndeterminateProgressPushButton(PushButton):
         self._stored_text = self.text()
         self.setText("")
         if self._ring is not None:
+            set_state_text(self._ring, "Проверка обновлений выполняется")
             self._ring.show()
             self._ring.start()
         self.setEnabled(False)
@@ -52,6 +53,7 @@ class IndeterminateProgressPushButton(PushButton):
         if self._ring is not None:
             self._ring.stop()
             self._ring.hide()
+            set_state_text(self._ring, "Индикатор проверки обновлений: не выполняется")
         self.setEnabled(True)
 
 
