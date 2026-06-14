@@ -767,7 +767,11 @@ class ProfilePresetService:
             return None
         current = read_editable_profile_settings(preset.profiles[index])
         next_filter_kind = str(filter_kind or "").strip().lower()
-        next_filter_value = _filter_value_for_settings_update(current, next_filter_kind, filter_value)
+        if next_filter_kind != current.filter_kind and next_filter_kind not in _available_filter_kinds(current, self._app_paths):
+            next_filter_kind = current.filter_kind
+            next_filter_value = current.filter_value
+        else:
+            next_filter_value = _filter_value_for_settings_update(current, next_filter_kind, filter_value)
         next_settings = EditableProfileSettings(
             filter_kind=next_filter_kind,
             filter_value=next_filter_value,

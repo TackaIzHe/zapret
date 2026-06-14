@@ -381,6 +381,40 @@ class ProfileFilterKindSwitchTests(unittest.TestCase):
         self.assertNotIn("--hostlist=lists/cloudflare-ipset.txt", store.text)
         self.assertNotIn("ipset-cloudflare-ipset.txt", store.text)
 
+    def test_update_settings_does_not_create_missing_cloudflare_hostlist_pair(self) -> None:
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            lists_dir = root / "lists"
+            (lists_dir / "base").mkdir(parents=True)
+            (lists_dir / "base" / "cloudflare-ipset.txt").write_text("1.1.1.1\n", encoding="utf-8")
+            service, store = self._service(
+                "\n".join(
+                    (
+                        "--name=Cloudflare legacy TCP",
+                        "--filter-tcp=80,443-65535",
+                        "--ipset=lists/cloudflare-ipset.txt",
+                        "--lua-desync=pass",
+                        "",
+                    )
+                ),
+                root=root,
+            )
+
+            new_key = service.update_winws2_editable_settings(
+                "profile:0",
+                filter_kind="hostlist",
+                filter_value="lists/cloudflare-ipset.txt",
+                in_range="x",
+                out_range="a",
+            )
+
+        self.assertEqual(new_key, "profile:0")
+        self.assertIn("--ipset=lists/cloudflare-ipset.txt", store.text)
+        self.assertNotIn("--hostlist=lists/cloudflare-ipset.txt", store.text)
+        self.assertNotIn("ipset-cloudflare-ipset.txt", store.text)
+
     def test_missing_generated_ipset_is_not_offered_or_written(self) -> None:
         from tempfile import TemporaryDirectory
 
