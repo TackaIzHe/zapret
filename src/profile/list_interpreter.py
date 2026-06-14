@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import PurePosixPath, PureWindowsPath
-import re
 
 from .models import Profile, build_profile_logical_key
 
@@ -190,8 +188,8 @@ def _resolved_display_name(selected: ProfileListSource, candidates: list[Profile
         template_name = _first_template_profile_name(candidates)
         if template_name:
             return template_name
-        return _technical_display_name(selected.profile)
-    return profile_name or _technical_display_name(selected.profile)
+        return _profile_display_name(selected.profile)
+    return profile_name or _profile_display_name(selected.profile)
 
 
 def _first_template_profile_name(candidates: list[ProfileListSource]) -> str:
@@ -209,49 +207,5 @@ def _profile_name(profile: Profile) -> str:
     return str(getattr(profile, "name", "") or "").strip()
 
 
-def _technical_display_name(profile: Profile) -> str:
-    identity = _resource_identity(profile)
-    if identity:
-        return identity
-    name = str(getattr(profile, "display_name", "") or "").strip()
-    name = re.sub(r"\s*\((?:IPset|Hostlist)\)\s*", "", name, flags=re.IGNORECASE).strip()
-    name = re.sub(r"\s*[•|-]\s*(?:hostlist|ipset)\s+[^|]+", "", name, flags=re.IGNORECASE).strip()
-    return name or "Профиль"
-
-
-def _resource_identity(profile: Profile) -> str:
-    match = getattr(profile, "match", None)
-    if match is None:
-        return ""
-    values = (
-        *_line_values(getattr(match, "hostlist_lines", ()) or ()),
-        *_line_values(getattr(match, "hostlist_domains_lines", ()) or ()),
-        *_line_values(getattr(match, "ipset_lines", ()) or ()),
-        *_line_values(getattr(match, "inline_ipset_lines", ()) or ()),
-    )
-    if not values:
-        return ""
-    return _normalize_resource_name(values[0])
-
-
-def _line_values(lines) -> tuple[str, ...]:
-    values: list[str] = []
-    for line in tuple(lines or ()):
-        text = str(line or "").strip()
-        if "=" not in text:
-            continue
-        values.append(text.split("=", 1)[1].strip())
-    return tuple(values)
-
-
-def _normalize_resource_name(value: str) -> str:
-    text = str(value or "").strip().replace("\\", "/")
-    if "/" in text:
-        text = PurePosixPath(text).name
-    else:
-        text = PureWindowsPath(text).name
-    text = re.sub(r"\.(txt|lst|list|json)$", "", text, flags=re.IGNORECASE).lower()
-    for prefix in ("ipset-", "hostlist-"):
-        if text.startswith(prefix):
-            text = text[len(prefix):]
-    return re.sub(r"[^a-z0-9а-яё]+", "-", text, flags=re.IGNORECASE).strip("-")
+def _profile_display_name(profile: Profile) -> str:
+    return str(getattr(profile, "display_name", "") or "").strip()

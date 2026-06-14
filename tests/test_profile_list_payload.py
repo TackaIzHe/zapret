@@ -673,6 +673,7 @@ class ProfileListPayloadTests(unittest.TestCase):
         self.assertTrue(payload.items[0].enabled)
         self.assertEqual(payload.items[0].strategy_id, "none")
         self.assertEqual(payload.items[0].strategy_name, "Стратегия не выбрана")
+        self.assertEqual(payload.items[0].display_name, "TCP 80,443 • hostlist youtube.txt")
 
     def test_same_profile_name_collapses_different_hostlist_files(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -835,7 +836,7 @@ class ProfileListPayloadTests(unittest.TestCase):
         display_items = build_profile_display_items(payload.items)
         self.assertEqual(display_items[0].display_name, "Facebook")
 
-    def test_template_profile_without_any_name_uses_technical_list_name(self) -> None:
+    def test_template_profile_without_any_name_uses_inferred_display_name(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             lists_dir = root / "lists"
@@ -866,7 +867,7 @@ class ProfileListPayloadTests(unittest.TestCase):
         self.assertEqual(len(payload.items), 1)
         self.assertFalse(payload.items[0].in_preset)
         self.assertEqual(payload.items[0].profile_name, "")
-        self.assertEqual(payload.items[0].display_name, "facebook")
+        self.assertEqual(payload.items[0].display_name, "TCP 80,443 • hostlist facebook.txt")
 
     def test_lowercase_preset_profile_name_wins_over_template_case(self) -> None:
         with TemporaryDirectory() as temp_dir:
