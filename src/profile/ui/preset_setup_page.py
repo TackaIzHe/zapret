@@ -86,6 +86,7 @@ class PresetSetupPageBase(BasePage):
         create_user_profile_update_worker,
         create_user_profile_delete_worker,
         create_profile_folder_action_worker,
+        create_profile_request_form_open_worker,
         open_profile_setup,
         open_profile_order,
         ui_state_store=None,
@@ -103,6 +104,7 @@ class PresetSetupPageBase(BasePage):
         self._create_user_profile_update_worker_fn = create_user_profile_update_worker
         self._create_user_profile_delete_worker_fn = create_user_profile_delete_worker
         self._create_profile_folder_action_worker_fn = create_profile_folder_action_worker
+        self._create_profile_request_form_open_worker_fn = create_profile_request_form_open_worker
         self._open_profile_setup = open_profile_setup
         self._open_profile_order_page = open_profile_order
 
@@ -133,6 +135,10 @@ class PresetSetupPageBase(BasePage):
         self._profile_folder_action_runtime = OneShotWorkerRuntime()
         self._profile_folder_action_state = QueuedWorkerState[dict[str, object]](
             self._profile_folder_action_runtime,
+        )
+        self._profile_request_form_open_runtime = OneShotWorkerRuntime()
+        self._profile_request_form_open_state = QueuedWorkerState[str](
+            self._profile_request_form_open_runtime,
         )
         self._profile_folder_action_refresh_by_request: dict[int, bool] = {}
         self._user_profile_create_request_id = 0
@@ -259,7 +265,7 @@ class PresetSetupPageBase(BasePage):
             request_button_key=self.request_button_key,
             request_hint_key=self.request_hint_key,
             loading_key=self.loading_key,
-            on_open_profile_request_form=self._show_profile_info,
+            on_open_profile_request_form=self._open_profile_request_form,
             on_add_user_profile=self._on_add_user_profile_clicked,
             on_expand_all=self._expand_all,
             on_collapse_all=self._collapse_all,
@@ -2258,6 +2264,7 @@ class PresetSetupPageBase(BasePage):
             ("_profile_context_action_runtime", "profile context action worker"),
             ("_profile_move_runtime", "profile move worker"),
             ("_profile_folder_action_runtime", "profile folder action worker"),
+            ("_profile_request_form_open_runtime", "profile request form open worker"),
             ("_user_profile_create_runtime", "user profile create worker"),
             ("_user_profile_update_runtime", "user profile update worker"),
             ("_user_profile_delete_runtime", "user profile delete worker"),
@@ -2293,6 +2300,91 @@ class PresetSetupPageBase(BasePage):
 
     def _open_profile_order(self) -> None:
         self._open_profile_order_page()
+
+    def _create_profile_request_form_open_worker(self, request_id: int, *, url: str, parent=None):
+        return self._create_profile_request_form_open_worker_fn(request_id, url=url, parent=parent)
+
+    def _open_profile_request_form(self) -> None:
+        from config.urls import PROFILE_REQUEST_FORM_URL
+
+        self._request_profile_request_form_open(PROFILE_REQUEST_FORM_URL)
+
+    def _request_profile_request_form_open(self, url: str) -> None:
+        target = str(url or "").strip()
+        self._profile_request_form_open_state.start_or_queue(
+            target,
+            self._start_profile_request_form_open_worker,
+            self._queue_profile_request_form_open,
+        )
+
+    def _queue_profile_request_form_open(self, url: str) -> bool:
+        return self._profile_request_form_open_state.append_unique(str(url or "").strip(), key=lambda item: item)
+
+    def _start_profile_request_form_open_worker(self, url: str) -> None:
+        self._profile_request_form_open_runtime.start_qthread_worker(
+            worker_factory=lambda request_id: self._create_profile_request_form_open_worker(
+                request_id,
+                url=url,
+                parent=self,
+            ),
+            on_loaded=self._on_profile_request_form_open_finished,
+            on_failed=self._on_profile_request_form_open_failed,
+            on_finished=self._on_profile_request_form_open_worker_finished,
+        )
+
+    def _on_profile_request_form_open_finished(self, request_id: int, result) -> None:
+        if not self._profile_request_form_open_runtime.is_current(
+            request_id,
+            cleanup_in_progress=bool(getattr(self, "_cleanup_in_progress", False)),
+        ):
+            return
+        if self._profile_request_form_open_state.has_pending():
+            return
+        if getattr(result, "ok", False):
+            return
+        self._show_profile_request_form_open_error(str(getattr(result, "error", "") or ""))
+
+    def _on_profile_request_form_open_failed(self, request_id: int, error: str) -> None:
+        if not self._profile_request_form_open_runtime.is_current(
+            request_id,
+            cleanup_in_progress=bool(getattr(self, "_cleanup_in_progress", False)),
+        ):
+            return
+        if self._profile_request_form_open_state.has_pending():
+            return
+        self._show_profile_request_form_open_error(str(error or ""))
+
+    def _on_profile_request_form_open_worker_finished(self, worker) -> None:
+        next_url = self._profile_request_form_open_state.pop_next_after_finish(
+            worker,
+            is_current_worker_finish=lambda runtime, finished_worker: getattr(runtime, "worker", None) is finished_worker,
+            cleanup_in_progress=bool(getattr(self, "_cleanup_in_progress", False)),
+        )
+        if next_url is not None:
+            self._schedule_profile_request_form_open_worker_start(next_url)
+
+    def _schedule_profile_request_form_open_worker_start(self, url: str) -> None:
+        if self._profile_request_form_open_state.start_scheduled:
+            self._queue_profile_request_form_open(url)
+            return
+        self._profile_request_form_open_state.start_scheduled = True
+        try:
+            QTimer.singleShot(0, lambda target=url: self._run_scheduled_profile_request_form_open_worker_start(target))
+        except Exception:
+            self._run_scheduled_profile_request_form_open_worker_start(url)
+
+    def _run_scheduled_profile_request_form_open_worker_start(self, url: str) -> None:
+        self._profile_request_form_open_state.start_scheduled = False
+        if bool(getattr(self, "_cleanup_in_progress", False)):
+            return
+        self._start_profile_request_form_open_worker(url)
+
+    def _show_profile_request_form_open_error(self, error: str) -> None:
+        InfoBar.warning(
+            title="Не удалось открыть GitHub",
+            content=f"Не удалось открыть форму GitHub:\n{error}",
+            parent=self.window(),
+        )
 
     def _show_profile_info(self) -> None:
         box = MessageBox(

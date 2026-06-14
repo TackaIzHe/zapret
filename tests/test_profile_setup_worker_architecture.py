@@ -489,6 +489,7 @@ class ProfileSetupWorkerArchitectureTests(unittest.TestCase):
         self.assertIn("create_user_profile_update_worker", init_source)
         self.assertIn("create_user_profile_delete_worker", init_source)
         self.assertIn("create_profile_folder_action_worker", init_source)
+        self.assertIn("create_profile_request_form_open_worker", init_source)
         self.assertNotIn("list_profiles", init_source)
         self.assertNotIn("create_user_profile,", init_source)
         self.assertNotIn("update_user_profile,", init_source)
@@ -514,9 +515,11 @@ class ProfileSetupWorkerArchitectureTests(unittest.TestCase):
         self.assertIn("_create_user_profile_delete_worker_fn", delete_user_source)
 
         profile_feature = Mock()
+        external_actions_feature = Mock()
         kwargs = build_preset_setup_page_kwargs(
             page_name=PageName.ZAPRET2_PRESET_SETUP,
             profile_feature=profile_feature,
+            external_actions_feature=external_actions_feature,
             open_profile_setup=Mock(),
             show_page=Mock(),
             ui_state_store=Mock(),
@@ -547,6 +550,10 @@ class ProfileSetupWorkerArchitectureTests(unittest.TestCase):
         self.assertIs(
             kwargs["create_profile_folder_action_worker"],
             profile_feature.create_profile_folder_action_worker,
+        )
+        self.assertIs(
+            kwargs["create_profile_request_form_open_worker"],
+            external_actions_feature.create_open_url_worker,
         )
         self.assertNotIn("list_profiles", kwargs)
         self.assertNotIn("create_user_profile", kwargs)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 import threading
 from dataclasses import dataclass, field
 from typing import Any
@@ -9,12 +10,20 @@ from profile.key_resolution import PresetProfileMoveResult
 from profile.state import StrategyApplyResult
 
 
+PROFILE_LIST_LOAD_RESULT_CACHE_LIMIT = 24
+
+
 @dataclass(frozen=True, slots=True)
 class ProfileFeature:
     _presets_feature: Any
     _app_paths: Any
     _preset_service_cache: dict[str, Any] = field(default_factory=dict, init=False, repr=False, compare=False)
-    _profile_list_load_result_cache: dict[str, Any] = field(default_factory=dict, init=False, repr=False, compare=False)
+    _profile_list_load_result_cache: dict[str, OrderedDict[tuple[object, ...], Any]] = field(
+        default_factory=dict,
+        init=False,
+        repr=False,
+        compare=False,
+    )
     _profile_list_load_result_lock: threading.RLock = field(
         default_factory=threading.RLock,
         init=False,
@@ -62,30 +71,49 @@ class ProfileFeature:
                 if str(getattr(item, "key", "") or "").strip()
             )
         )
-        with self._profile_list_load_result_lock:
-            self._profile_list_load_result_cache[method] = result
+        cache_entry = service.get_cached_profile_list_entry()
+        if cache_entry is not None:
+            revision, current_payload = cache_entry
+            if current_payload is payload:
+                self._remember_profile_list_load_result(method, tuple(revision), result)
         return result
+
+    def _remember_profile_list_load_result(self, method: str, revision: tuple[object, ...], result: Any) -> None:
+        with self._profile_list_load_result_lock:
+            method_cache = self._profile_list_load_result_cache.setdefault(method, OrderedDict())
+            method_cache[revision] = result
+            method_cache.move_to_end(revision)
+            limit = max(1, int(PROFILE_LIST_LOAD_RESULT_CACHE_LIMIT))
+            while len(method_cache) > limit:
+                method_cache.popitem(last=False)
 
     def _profile_list_load_result(self, service, launch_method: str):
         from settings.mode import normalize_launch_method
 
         method = normalize_launch_method(launch_method)
         try:
-            current_payload = service.get_cached_profile_list()
+            cache_entry = service.get_cached_profile_list_entry()
         except Exception as exc:
             log(f"кэш профилей не подошёл ({method}): не удалось проверить актуальность: {exc}", "DEBUG")
             return None
-        if current_payload is None:
+        if cache_entry is None:
             log(f"кэш профилей не подошёл ({method}): нет актуального списка", "DEBUG")
             return None
+        revision, current_payload = cache_entry
+        revision = tuple(revision)
         with self._profile_list_load_result_lock:
-            result = self._profile_list_load_result_cache.get(method)
+            method_cache = self._profile_list_load_result_cache.get(method)
+            result = method_cache.get(revision) if method_cache is not None else None
         if result is None:
             log(f"кэш профилей не подошёл ({method}): прогретый результат не найден", "DEBUG")
             return None
         if getattr(result, "payload", None) is not current_payload:
             log(f"кэш профилей не подошёл ({method}): версия списка изменилась", "DEBUG")
             return None
+        with self._profile_list_load_result_lock:
+            method_cache = self._profile_list_load_result_cache.get(method)
+            if method_cache is not None and revision in method_cache:
+                method_cache.move_to_end(revision)
         log(f"кэш профилей использован ({method})", "DEBUG")
         return result
 

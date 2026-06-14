@@ -178,6 +178,13 @@ class ProfilePresetService:
             return self._list_profiles_locked()
 
     def get_cached_profile_list(self) -> ProfileListPayload | None:
+        entry = self.get_cached_profile_list_entry()
+        if entry is None:
+            return None
+        _revision, payload = entry
+        return payload
+
+    def get_cached_profile_list_entry(self) -> tuple[tuple[object, ...], ProfileListPayload] | None:
         lock_acquired = self._profile_list_lock.acquire(blocking=False)
         if not lock_acquired:
             return None
@@ -195,12 +202,12 @@ class ProfilePresetService:
                 self._profile_list_snapshots_by_revision.move_to_end(list_revision)
                 self._profile_list_snapshot = revision_snapshot
                 self._profile_list_snapshot_revision = list_revision
-                return revision_snapshot
+                return list_revision, revision_snapshot
             if snapshot is None or self._profile_list_snapshot_revision is None:
                 return None
             if self._profile_list_snapshot_revision != list_revision:
                 return None
-            return snapshot
+            return list_revision, snapshot
         finally:
             self._profile_list_lock.release()
 

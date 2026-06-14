@@ -7,6 +7,7 @@ import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from profile.ui import shell as profile_shell
+from profile.ui import preset_setup_page
 from presets.ui.common import user_presets_build
 from presets.ui.common import user_presets_page
 
@@ -33,6 +34,13 @@ class ProfileToolbarContractTests(unittest.TestCase):
         self.assertIn("icon=FluentIcon.GITHUB", profile_source)
         self.assertIn("get_configs_btn = PrimaryPushButton(", presets_source)
         self.assertIn("icon=FluentIcon.GITHUB", presets_source)
+
+    def test_profile_request_button_opens_github_form_not_info_popup(self) -> None:
+        source = inspect.getsource(preset_setup_page.PresetSetupPageBase._build_content)
+
+        self.assertIn("on_open_profile_request_form=self._open_profile_request_form", source)
+        self.assertIn("on_show_info_popup=self._show_profile_info", source)
+        self.assertNotIn("on_open_profile_request_form=self._show_profile_info", source)
 
     def test_user_presets_list_reserves_space_for_visible_fluent_scrollbar(self) -> None:
         presets_source = inspect.getsource(user_presets_build.build_user_presets_page_shell)

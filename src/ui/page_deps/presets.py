@@ -94,7 +94,15 @@ def build_control_page_kwargs(
     }
 
 
-def build_preset_setup_page_kwargs(*, page_name: PageName, profile_feature, open_profile_setup, show_page, ui_state_store) -> dict:
+def build_preset_setup_page_kwargs(
+    *,
+    page_name: PageName,
+    profile_feature,
+    external_actions_feature,
+    open_profile_setup,
+    show_page,
+    ui_state_store,
+) -> dict:
     method = ZAPRET2_MODE if page_name == PageName.ZAPRET2_PRESET_SETUP else ZAPRET1_MODE
     return {
         "create_profile_list_load_worker": profile_feature.create_profile_list_load_worker,
@@ -105,6 +113,7 @@ def build_preset_setup_page_kwargs(*, page_name: PageName, profile_feature, open
         "create_user_profile_update_worker": profile_feature.create_user_profile_update_worker,
         "create_user_profile_delete_worker": profile_feature.create_user_profile_delete_worker,
         "create_profile_folder_action_worker": profile_feature.create_profile_folder_action_worker,
+        "create_profile_request_form_open_worker": external_actions_feature.create_open_url_worker,
         "open_profile_setup": lambda profile_key, m=method: open_profile_setup(m, profile_key),
         "open_profile_order": lambda m=method: show_page(resolve_profile_order_page_for_method(m), allow_internal=True),
         "ui_state_store": ui_state_store,
