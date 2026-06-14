@@ -330,7 +330,7 @@ class NetworkPage(BasePage):
                     title_label.hide()
             except Exception:
                 pass
-        if hasattr(self, "force_dns_action_btn"):
+        if getattr(self, "force_dns_action_btn", None) is not None:
             self._sync_force_dns_action_button(bool(self._force_dns_active))
         if hasattr(self, "force_dns_reset_dhcp_btn"):
             self.force_dns_reset_dhcp_btn.setText(
@@ -651,11 +651,6 @@ class NetworkPage(BasePage):
     
     def _on_dns_selected(self, name: str, data: dict):
         """Обработчик выбора DNS - сразу применяем"""
-        # Если Force DNS активен - подсвечиваем карточку Force DNS
-        if self._force_dns_active:
-            self._highlight_force_dns()
-            return
-        
         self._selected_provider = select_provider_dns_ui(
             name=name,
             dns_cards=self.dns_cards,
@@ -672,11 +667,6 @@ class NetworkPage(BasePage):
     
     def _select_auto_dns(self):
         """Выбор автоматического DNS"""
-        # Если Force DNS активен - подсвечиваем карточку Force DNS
-        if self._force_dns_active:
-            self._highlight_force_dns()
-            return
-        
         select_auto_dns_ui(
             dns_cards=self.dns_cards,
             auto_indicator=getattr(self, 'auto_indicator', None),
@@ -712,11 +702,6 @@ class NetworkPage(BasePage):
     
     def _apply_custom_dns_quick(self):
         """Быстрое применение пользовательского DNS"""
-        # Если Force DNS активен - подсвечиваем карточку Force DNS
-        if self._force_dns_active:
-            self._highlight_force_dns()
-            return
-        
         primary = self.custom_primary.text().strip()
         if not primary:
             return
@@ -1689,6 +1674,8 @@ class NetworkPage(BasePage):
     
     def _set_force_dns_toggle(self, checked: bool):
         """Устанавливает состояние переключателя без триггера сигналов"""
+        if getattr(self, "force_dns_action_btn", None) is None:
+            return
         self._sync_force_dns_action_button(bool(checked))
         set_force_dns_toggle(
             self.force_dns_action_btn,
@@ -1698,8 +1685,8 @@ class NetworkPage(BasePage):
 
     def _force_dns_action_button_text(self, active: bool) -> str:
         if active:
-            return self._tr("page.network.force_dns.action.disable.button", "Выключить принудительный DNS")
-        return self._tr("page.network.force_dns.action.enable.button", "Включить принудительный DNS")
+            return self._tr("page.network.force_dns.action.disable.button", "Ручная настройка DNS")
+        return self._tr("page.network.force_dns.action.enable.button", "Применить выбранный DNS")
 
     def _force_dns_action_button_key(self, enabled: bool) -> str:
         if enabled:
@@ -1708,8 +1695,8 @@ class NetworkPage(BasePage):
 
     def _force_dns_action_button_default(self, enabled: bool) -> str:
         if enabled:
-            return "Включить принудительный DNS"
-        return "Выключить принудительный DNS"
+            return "Применить выбранный DNS"
+        return "Ручная настройка DNS"
 
     def _force_dns_action_confirm_key(self, enabled: bool) -> str:
         if enabled:
@@ -1725,9 +1712,9 @@ class NetworkPage(BasePage):
         return self._tr(
             self._force_dns_action_description_key(enabled),
             (
-                "Программа пропишет DNS-серверы для обхода блокировок. Это поможет, если провайдер подменяет DNS."
+                "Выберите DNS из списка или добавьте свой адрес. Программа применит его только по вашему нажатию."
                 if enabled
-                else "Программа уберёт принудительные DNS и вернёт обычный режим."
+                else "DNS меняется только вручную: выберите сервер, добавьте свой адрес или верните автоматическое получение через DHCP."
             ),
         )
 
@@ -1735,11 +1722,11 @@ class NetworkPage(BasePage):
         if active:
             return self._tr(
                 "page.network.force_dns.action.disable.description",
-                "Программа уберёт принудительные DNS и вернёт обычный режим.",
+                "DNS меняется только вручную: выберите сервер, добавьте свой адрес или верните автоматическое получение через DHCP.",
             )
         return self._tr(
             "page.network.force_dns.action.enable.description",
-            "Программа пропишет DNS-серверы для обхода блокировок. Это поможет, если провайдер подменяет DNS.",
+            "Выберите DNS из списка или добавьте свой адрес. Программа применит его только по вашему нажатию.",
         )
 
     def _sync_force_dns_action_button(self, active: bool) -> None:
@@ -1784,9 +1771,9 @@ class NetworkPage(BasePage):
         )
     
     def _update_dns_selection_state(self):
-        """Обновляет состояние выбора DNS в зависимости от Force DNS"""
+        """Оставляет выбор DNS доступным в ручном режиме."""
         update_dns_selection_block_state(
-            blocked=bool(self._force_dns_active),
+            blocked=False,
             dns_cards_container=getattr(self, 'dns_cards_container', None),
             custom_card=getattr(self, 'custom_card', None),
         )
@@ -2038,16 +2025,20 @@ class NetworkPage(BasePage):
         )
 
     def _accept_isp_dns_recommendation(self):
-        """Включает Force DNS по рекомендации из баннера"""
+        """Применяет рекомендуемый DNS из баннера вручную."""
         accept_isp_dns_recommendation(
             cleanup_in_progress=self._cleanup_in_progress,
             build_accept_plan_fn=dns_page_plans.build_accept_isp_dns_warning_plan,
             warning=getattr(self, "_isp_warning", None),
             hide_warning_widget_fn=hide_isp_warning_widget,
-            set_force_dns_toggle_fn=self._set_force_dns_toggle,
-            on_force_dns_toggled_fn=self._on_force_dns_toggled,
+            apply_recommended_dns_fn=self._apply_recommended_dns_from_warning,
             log_fn=log,
         )
+
+    def _apply_recommended_dns_from_warning(self) -> None:
+        recommended = DNS_PROVIDERS.get("Безопасные", {}).get("Quad9")
+        if recommended:
+            self._on_dns_selected("Quad9", recommended)
 
     def _dismiss_isp_dns_warning(self):
         """Скрывает баннер (settings.json уже записан при показе)."""

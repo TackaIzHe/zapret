@@ -66,10 +66,7 @@ class DNSForceManager:
     
     def is_force_dns_enabled(self) -> bool:
         """Проверяет, включен ли принудительный DNS"""
-        try:
-            return bool(settings_store.get_force_dns_enabled())
-        except Exception:
-            return True  # По умолчанию включен
+        return False
     
     def set_force_dns_enabled(self, enabled: bool):
         """Устанавливает состояние принудительного DNS"""
@@ -254,45 +251,11 @@ class DNSForceManager:
         Returns:
             Tuple[bool, int, int, str]: (успех, количество_успешных, всего_адаптеров, сообщение)
         """
-        try:
-            # Включаем опцию в реестре
-            self.set_force_dns_enabled(True)
-            
-            # Применяем DNS
-            log("Применение принудительного DNS...", "DNS")
-            success, total = self.force_dns_on_all_adapters(
-                include_disconnected=include_disconnected,
-                enable_ipv6=self.ipv6_available,
-                adapters=adapters,
-            )
-            
-            if success > 0:
-                ipv6_status = (
-                    f"{self.DNS_PRIMARY_V6} (Quad9) + {self.DNS_SECONDARY_V6} (DNS.SB)"
-                    if self.ipv6_available
-                    else "не применён"
-                )
-                msg = (
-                    f"DNS успешно установлен на {success} из {total} адаптеров.\n\n"
-                    f"IPv4: {self.DNS_PRIMARY} (Quad9) + {self.DNS_SECONDARY} (DNS.SB)\n"
-                    f"IPv6: {ipv6_status}\n\n"
-                    "Изменения вступили в силу немедленно."
-                )
-                log(f"Принудительный DNS включен: {success}/{total} адаптеров", "INFO")
-                return (True, success, total, msg)
-            else:
-                msg = (
-                    "Не удалось установить DNS ни на одном адаптере.\n"
-                    "Возможно, требуются права администратора."
-                )
-                # Откатываем настройку
-                self.set_force_dns_enabled(False)
-                return (False, 0, total, msg)
-                
-        except Exception as e:
-            log(f"Ошибка включения Force DNS: {e}", "ERROR")
-            self.set_force_dns_enabled(False)
-            return (False, 0, 0, str(e))
+        _ = include_disconnected, adapters
+        self.set_force_dns_enabled(False)
+        msg = "Принудительный DNS удалён. Выберите нужный DNS вручную на странице DNS."
+        log(msg, "INFO")
+        return (False, 0, 0, msg)
     
     def disable_force_dns(
         self,

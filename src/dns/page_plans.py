@@ -86,7 +86,7 @@ class NetworkIspDnsWarningPlan:
 @dataclass(slots=True)
 class NetworkIspDnsActionPlan:
     hide_warning: bool
-    enable_force_dns: bool
+    apply_recommended_dns: bool
 
 
 @dataclass(slots=True)
@@ -169,7 +169,7 @@ def build_force_dns_toggle_plan(
                 force_dns_active=True,
                 details_key="page.network.force_dns.action.enable.description",
                 details_kwargs={},
-                details_fallback="Программа пропишет DNS-серверы для обхода блокировок. Это поможет, если провайдер подменяет DNS.",
+                details_fallback="Выберите DNS из списка или добавьте свой адрес. Программа применит его только по вашему нажатию.",
             )
         return NetworkForceDnsTogglePlan(
             final_checked=False,
@@ -185,7 +185,7 @@ def build_force_dns_toggle_plan(
             force_dns_active=False,
             details_key="page.network.force_dns.action.disable.description",
             details_kwargs={},
-            details_fallback="Программа уберёт принудительные DNS и вернёт обычный режим.",
+            details_fallback="DNS меняется только вручную: выберите сервер, добавьте свой адрес или верните автоматическое получение через DHCP.",
         )
 
     return NetworkForceDnsTogglePlan(
@@ -466,14 +466,14 @@ def build_isp_dns_warning_plan(
 def build_accept_isp_dns_warning_plan() -> NetworkIspDnsActionPlan:
     return NetworkIspDnsActionPlan(
         hide_warning=True,
-        enable_force_dns=True,
+        apply_recommended_dns=True,
     )
 
 
 def build_dismiss_isp_dns_warning_plan() -> NetworkIspDnsActionPlan:
     return NetworkIspDnsActionPlan(
         hide_warning=True,
-        enable_force_dns=False,
+        apply_recommended_dns=False,
     )
 
 

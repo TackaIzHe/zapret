@@ -1,4 +1,4 @@
-"""Сборка UI-блока Force DNS для страницы Network."""
+"""Сборка панели ручных DNS-действий для страницы Network."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ def build_force_dns_card_ui(
     on_custom_dns=None,
 ) -> tuple[bool, ForceDnsCardWidgets]:
     tokens = get_theme_tokens_fn()
-    force_dns_active = get_force_dns_status_fn()
+    force_dns_active = False
     _ = tokens
     _ = parent
     _ = setting_card_group_cls
@@ -56,27 +56,7 @@ def build_force_dns_card_ui(
     _ = enable_setting_card_group_auto_height_fn
 
     force_dns_card = QuickActionsBar(content_parent)
-    force_dns_button_text = tr_fn(
-        "page.network.force_dns.action.disable.button" if force_dns_active else "page.network.force_dns.action.enable.button",
-        "Выключить принудительный DNS" if force_dns_active else "Включить принудительный DNS",
-    )
-    force_dns_button_description = tr_fn(
-        "page.network.force_dns.action.disable.description" if force_dns_active else "page.network.force_dns.action.enable.description",
-        (
-            "Программа уберёт принудительные DNS и вернёт обычный режим."
-            if force_dns_active
-            else "Программа пропишет DNS-серверы для обхода блокировок. Это поможет, если провайдер подменяет DNS."
-        ),
-    )
-    force_dns_btn = action_button_cls(force_dns_button_text, icon=FluentIcon.POWER_BUTTON)
-    force_dns_btn.clicked.connect(lambda _checked=False: on_toggle())
-    set_tooltip(force_dns_btn, force_dns_button_description)
-    set_state_text(force_dns_btn, force_dns_button_text)
-    set_control_accessibility(
-        force_dns_btn,
-        name=force_dns_button_text,
-        description=force_dns_button_description,
-    )
+    _ = on_toggle
 
     force_dns_reset_dhcp_btn = action_button_cls(
         tr_fn("page.network.force_dns.reset.button", "Вернуть DNS автоматически"),
@@ -119,13 +99,13 @@ def build_force_dns_card_ui(
     force_dns_status_label.setWordWrap(True)
     force_dns_status_label.setVisible(False)
 
-    force_dns_card.add_buttons((force_dns_btn, force_dns_reset_dhcp_btn, custom_dns_btn))
+    force_dns_card.add_buttons((force_dns_reset_dhcp_btn, custom_dns_btn))
 
     add_widget_fn(force_dns_card)
 
     return force_dns_active, ForceDnsCardWidgets(
         card=force_dns_card,
-        force_button=force_dns_btn,
+        force_button=None,
         status_label=force_dns_status_label,
         reset_button=force_dns_reset_dhcp_btn,
         custom_button=custom_dns_btn,

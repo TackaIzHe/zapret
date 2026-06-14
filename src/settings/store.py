@@ -693,7 +693,7 @@ def set_tg_proxy_deeplink_done(value: bool) -> bool:
 
 
 def get_force_dns_enabled() -> bool:
-    return _get_bool(("dns", "force_dns_enabled"), True)
+    return _get_bool(("dns", "force_dns_enabled"), False)
 
 
 def set_force_dns_enabled(value: bool) -> bool:

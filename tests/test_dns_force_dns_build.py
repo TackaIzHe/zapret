@@ -82,15 +82,15 @@ class ForceDnsBuildTests(unittest.TestCase):
             on_custom_dns=lambda: custom_clicks.append(True),
         )
 
-        self.assertEqual(widgets.force_button.text(), "Включить принудительный DNS")
+        self.assertIsNone(widgets.force_button)
         self.assertEqual(widgets.reset_button.text(), "Вернуть DNS автоматически")
         self.assertEqual(widgets.custom_button.text(), "Добавить свой DNS")
-        self.assertEqual(widgets.card.actions_layout.count(), 3)
+        self.assertEqual(widgets.card.actions_layout.count(), 2)
         self.assertFalse(hasattr(widgets, "toggle"))
         widgets.custom_button.click()
         self.assertEqual(custom_clicks, [True])
 
-    def test_force_dns_action_button_text_reflects_active_state(self) -> None:
+    def test_manual_dns_actions_do_not_show_force_button_when_old_state_is_true(self) -> None:
         parent = QWidget()
 
         _active, widgets = build_force_dns_card_ui(
@@ -116,7 +116,9 @@ class ForceDnsBuildTests(unittest.TestCase):
             on_custom_dns=lambda: None,
         )
 
-        self.assertEqual(widgets.force_button.text(), "Выключить принудительный DNS")
+        self.assertFalse(_active)
+        self.assertIsNone(widgets.force_button)
+        self.assertEqual(widgets.card.actions_layout.count(), 2)
 
     def test_reset_button_has_screen_reader_text(self) -> None:
         parent = QWidget()
@@ -144,9 +146,7 @@ class ForceDnsBuildTests(unittest.TestCase):
             on_custom_dns=lambda: None,
         )
 
-        self.assertEqual(widgets.force_button.accessibleName(), "Включить принудительный DNS")
-        self.assertEqual(widgets.force_button.property("screenReaderStateText"), "Включить принудительный DNS")
-        self.assertIn("Программа пропишет DNS-серверы", widgets.force_button.accessibleDescription())
+        self.assertIsNone(widgets.force_button)
         self.assertEqual(widgets.reset_button.accessibleName(), "Вернуть DNS автоматически")
         self.assertEqual(widgets.reset_button.property("screenReaderStateText"), "Вернуть DNS автоматически")
         self.assertIn("DNS будет снова получаться автоматически", widgets.reset_button.accessibleDescription())
@@ -154,7 +154,7 @@ class ForceDnsBuildTests(unittest.TestCase):
         self.assertEqual(widgets.custom_button.property("screenReaderStateText"), "Добавить свой DNS")
         self.assertIn("Открывает окно", widgets.custom_button.accessibleDescription())
 
-    def test_force_dns_active_action_button_has_screen_reader_state_text(self) -> None:
+    def test_manual_dns_actions_ignore_old_force_active_state(self) -> None:
         parent = QWidget()
 
         _active, widgets = build_force_dns_card_ui(
@@ -180,8 +180,8 @@ class ForceDnsBuildTests(unittest.TestCase):
             on_custom_dns=lambda: None,
         )
 
-        self.assertEqual(widgets.force_button.accessibleName(), "Выключить принудительный DNS")
-        self.assertEqual(widgets.force_button.property("screenReaderStateText"), "Выключить принудительный DNS")
+        self.assertFalse(_active)
+        self.assertIsNone(widgets.force_button)
 
     def test_force_dns_opacity_is_not_applied_twice_to_nested_custom_dns_row(self) -> None:
         dns_container = QWidget()

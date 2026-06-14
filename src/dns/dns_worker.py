@@ -2,7 +2,7 @@
 """
 Воркеры для DNS операций (упрощенная Win32 версия)
 """
-from PyQt6.QtCore import QThread, pyqtSignal, QTimer
+from PyQt6.QtCore import QThread, pyqtSignal
 from log.log import log
 from ui.one_shot_worker_runtime import OneShotWorkerRuntime
 
@@ -121,60 +121,22 @@ def _cleanup_startup_worker():
 
 def apply_dns_on_startup_async(status_callback=None):
     """
-    Применяет DNS настройки при запуске приложения (отложенно).
+    Не применяет DNS при запуске.
 
     Args:
         status_callback: функция для обновления статуса
 
     Returns:
-        bool: True если задача запланирована
+        bool: False, потому что DNS меняется только вручную
     """
-    try:
-        if _dns_disabled_on_startup:
-            log("⚠️ DNS при запуске отключен", "WARNING")
-            if status_callback:
-                status_callback("DNS при запуске отключен")
-            return False
-
-        log("Планирование применения DNS при запуске", "INFO")
-
-        def delayed_apply():
-            try:
-                if _startup_runtime.is_running():
-                    log("DNS startup worker уже запущен", "DEBUG")
-                    return
-
-                _startup_runtime.start_qthread_worker(
-                    worker_factory=lambda _request_id: SafeDNSWorker(
-                        skip_on_startup=False,
-                        startup_mode=True,
-                    ),
-                    bind_worker=(
-                        (lambda worker: worker.status_update.connect(status_callback))
-                        if status_callback
-                        else None
-                    ),
-                )
-                log("DNS worker при старте приложения запущен в фоне", "DEBUG")
-            except Exception as e:
-                error_msg = f"Ошибка запуска DNS worker при старте: {e}"
-                log(error_msg, "ERROR")
-                if status_callback:
-                    status_callback("❌ Ошибка DNS")
-
-        QTimer.singleShot(3000, delayed_apply)
-        return True
-
-    except Exception as e:
-        log(f"Ошибка планирования DNS при запуске: {e}", "ERROR")
-        if status_callback:
-            status_callback("❌ Ошибка планирования DNS")
-        return False
+    _ = status_callback
+    log("DNS startup apply disabled: manual mode only", "INFO")
+    return False
 
 
 def apply_dns_on_startup_sync(status_callback=None):
     """
-    Синхронное применение DNS при запуске (блокирующее).
+    Синхронное применение DNS при запуске отключено.
 
     Args:
         status_callback: функция для обновления статуса
@@ -183,24 +145,9 @@ def apply_dns_on_startup_sync(status_callback=None):
         bool: True если применено успешно
     """
     try:
-        if _dns_disabled_on_startup:
-            log("DNS при запуске отключен", "WARNING")
-            return False
-
-        from .dns_force import DNSForceManager
-
-        manager = DNSForceManager(status_callback=status_callback)
-
-        if not manager.is_force_dns_enabled():
-            log("Принудительный DNS отключен", "INFO")
-            return False
-
-        success, total = manager.force_dns_on_all_adapters(
-            include_disconnected=False,
-            enable_ipv6=True
-        )
-
-        return success > 0
+        _ = status_callback
+        log("DNS startup apply disabled: manual mode only", "INFO")
+        return False
 
     except Exception as e:
         log(f"Ошибка синхронного применения DNS: {e}", "ERROR")

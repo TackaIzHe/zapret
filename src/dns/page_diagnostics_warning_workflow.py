@@ -138,8 +138,7 @@ def accept_isp_dns_recommendation(
     build_accept_plan_fn,
     warning,
     hide_warning_widget_fn,
-    set_force_dns_toggle_fn,
-    on_force_dns_toggled_fn,
+    apply_recommended_dns_fn,
     log_fn,
 ) -> None:
     if cleanup_in_progress:
@@ -148,9 +147,8 @@ def accept_isp_dns_recommendation(
         plan = build_accept_plan_fn()
         if plan.hide_warning and warning is not None:
             hide_warning_widget_fn(warning_widget=warning)
-        if plan.enable_force_dns:
-            set_force_dns_toggle_fn(True)
-            on_force_dns_toggled_fn(True)
+        if plan.apply_recommended_dns:
+            apply_recommended_dns_fn()
     except Exception as exc:
         log_fn(f"Ошибка применения рекомендуемого DNS: {exc}", "ERROR")
 

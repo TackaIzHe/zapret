@@ -1566,8 +1566,8 @@ TEXTS: dict[str, dict[str, str]] = {
         "en": "Prepare report",
     },
     "page.network.subtitle": {
-        "ru": "Здесь можно выбрать DNS-серверы, включить принудительный DNS и проверить, помогает ли настройка обходу блокировок.",
-        "en": "Choose DNS servers, enable forced DNS, and check whether the setting helps bypass blocking.",
+        "ru": "Здесь можно посмотреть текущие DNS, выбрать другие серверы и проверить, помогает ли настройка обходу блокировок.",
+        "en": "View current DNS servers, choose different servers, and check whether the setting helps bypass blocking.",
     },
     "page.network.section.dns_servers": {
         "ru": "DNS Серверы",
@@ -1618,28 +1618,28 @@ TEXTS: dict[str, dict[str, str]] = {
         "en": "Flush?",
     },
     "page.network.force_dns.action.enable.button": {
-        "ru": "Включить принудительный DNS",
-        "en": "Enable forced DNS",
+        "ru": "Применить выбранный DNS",
+        "en": "Apply selected DNS",
     },
     "page.network.force_dns.action.disable.button": {
-        "ru": "Выключить принудительный DNS",
-        "en": "Disable forced DNS",
+        "ru": "Ручная настройка DNS",
+        "en": "Manual DNS setup",
     },
     "page.network.force_dns.action.enable.description": {
-        "ru": "Программа пропишет DNS-серверы для обхода блокировок. Это поможет, если провайдер подменяет DNS.",
-        "en": "The app will set DNS servers for bypassing blocks. This helps when the provider tampers with DNS.",
+        "ru": "Выберите DNS из списка или добавьте свой адрес. Программа применит его только по вашему нажатию.",
+        "en": "Choose DNS from the list or add your own address. The app applies it only when you ask.",
     },
     "page.network.force_dns.action.enable.confirm": {
-        "ru": "Программа пропишет DNS-серверы ZapretGUI на выбранных сетевых адаптерах. Это может помочь, если провайдер подменяет ответы DNS и сайты открываются неправильно. Продолжить?",
-        "en": "The app will set ZapretGUI DNS servers on the selected network adapters. This may help when the provider tampers with DNS answers and sites open incorrectly. Continue?",
+        "ru": "Программа применит выбранный DNS на отмеченных сетевых адаптерах. Это может помочь, если провайдер подменяет ответы DNS и сайты открываются неправильно. Продолжить?",
+        "en": "The app will apply the selected DNS to the checked network adapters. This may help when the provider tampers with DNS answers and sites open incorrectly. Continue?",
     },
     "page.network.force_dns.action.disable.description": {
-        "ru": "Программа уберёт принудительные DNS и вернёт обычный режим.",
-        "en": "The app will remove forced DNS and return to the normal mode.",
+        "ru": "DNS меняется только вручную: выберите сервер, добавьте свой адрес или верните автоматическое получение через DHCP.",
+        "en": "DNS changes only manually: choose a server, add your own address, or restore automatic DNS through DHCP.",
     },
     "page.network.force_dns.action.disable.confirm": {
-        "ru": "Программа перестанет принудительно держать свои DNS-серверы на сетевых адаптерах. Выбор DNS снова станет обычным, но уже прописанные адреса могут остаться до следующей настройки. Продолжить?",
-        "en": "The app will stop forcing its DNS servers on the network adapters. DNS selection will return to normal, but already applied addresses may remain until the next DNS setup. Continue?",
+        "ru": "DNS меняется только вручную. Уже прописанные адреса останутся до следующей настройки или сброса на DHCP. Продолжить?",
+        "en": "DNS changes only manually. Already applied addresses remain until the next setup or DHCP reset. Continue?",
     },
     "page.network.force_dns.action.reset.description": {
         "ru": "DNS будет снова получаться автоматически от роутера или провайдера через DHCP. Это полезно, если интернет работает нестабильно после ручной настройки DNS.",
@@ -1650,8 +1650,8 @@ TEXTS: dict[str, dict[str, str]] = {
         "en": "Restore automatic DNS",
     },
     "page.network.force_dns.reset.confirm": {
-        "ru": "Программа отключит принудительный DNS и вернёт автоматическое получение DNS через DHCP для всех адаптеров. DHCP — это обычный режим, когда DNS выдаёт роутер или провайдер. Продолжить?",
-        "en": "The app will disable forced DNS and restore automatic DNS through DHCP for all adapters. DHCP is the normal mode where DNS is provided by the router or provider. Continue?",
+        "ru": "Программа вернёт автоматическое получение DNS через DHCP для выбранных адаптеров. DHCP — это обычный режим, когда DNS выдаёт роутер или провайдер. Продолжить?",
+        "en": "The app will restore automatic DNS through DHCP for selected adapters. DHCP is the normal mode where DNS is provided by the router or provider. Continue?",
     },
     "page.network.force_dns.status.details.enable_failed": {
         "ru": "Не удалось включить",
@@ -1666,8 +1666,8 @@ TEXTS: dict[str, dict[str, str]] = {
         "en": "Apply error",
     },
     "page.network.force_dns.status.details.dhcp_not_applied": {
-        "ru": "Force DNS отключен, DHCP не применён",
-        "en": "Force DNS disabled, DHCP not applied",
+        "ru": "DHCP не применён",
+        "en": "DHCP was not applied",
     },
     "page.network.error.title": {
         "ru": "Ошибка",
@@ -1714,12 +1714,12 @@ TEXTS: dict[str, dict[str, str]] = {
         "en": "ISP DNS detected",
     },
     "page.network.isp_dns.infobar.content": {
-        "ru": "У вас установлен DNS от провайдера (получен автоматически через DHCP). Провайдерский DNS может подменять ответы и мешать обходу блокировок.\n\nРекомендуем установить публичный DNS (Google + OpenDNS) для стабильной работы.",
-        "en": "Your DNS is set automatically from your ISP (via DHCP). ISP DNS may poison responses and interfere with DPI bypass.\n\nWe recommend setting public DNS (Google + OpenDNS) for stable operation.",
+        "ru": "У вас установлен DNS от провайдера (получен автоматически через DHCP). Провайдерский DNS может подменять ответы и мешать обходу блокировок.\n\nМожно вручную применить публичный DNS Quad9 или выбрать другой DNS из списка ниже.",
+        "en": "Your DNS is set automatically from your ISP (via DHCP). ISP DNS may poison responses and interfere with DPI bypass.\n\nYou can manually apply public Quad9 DNS or choose another DNS from the list below.",
     },
     "page.network.isp_dns.infobar.action": {
-        "ru": "Установить рекомендуемый DNS",
-        "en": "Set recommended DNS",
+        "ru": "Применить Quad9",
+        "en": "Apply Quad9",
     },
     "page.network.isp_dns.infobar.dismiss": {
         "ru": "Нет, спасибо",

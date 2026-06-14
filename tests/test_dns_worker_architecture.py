@@ -365,9 +365,9 @@ class DnsWorkerArchitectureTests(unittest.TestCase):
 
         page._confirm_action.assert_called_once_with(
             "page.network.force_dns.action.enable.button",
-            "Включить принудительный DNS",
+            "Применить выбранный DNS",
             "page.network.force_dns.action.enable.confirm",
-            "Программа пропишет DNS-серверы для обхода блокировок. Это поможет, если провайдер подменяет DNS.",
+            "Выберите DNS из списка или добавьте свой адрес. Программа применит его только по вашему нажатию.",
         )
         page._on_force_dns_toggled.assert_called_once_with(True)
         page._update_force_dns_status.assert_not_called()
@@ -384,9 +384,9 @@ class DnsWorkerArchitectureTests(unittest.TestCase):
 
         page._confirm_action.assert_called_once_with(
             "page.network.force_dns.action.disable.button",
-            "Выключить принудительный DNS",
+            "Ручная настройка DNS",
             "page.network.force_dns.action.disable.confirm",
-            "Программа уберёт принудительные DNS и вернёт обычный режим.",
+            "DNS меняется только вручную: выберите сервер, добавьте свой адрес или верните автоматическое получение через DHCP.",
         )
         page._on_force_dns_toggled.assert_not_called()
         page._update_force_dns_status.assert_not_called()
@@ -1421,8 +1421,10 @@ class DnsWorkerArchitectureTests(unittest.TestCase):
         cleanup_source = inspect.getsource(dns_worker._cleanup_startup_worker)
 
         self.assertIn("_startup_runtime = OneShotWorkerRuntime()", module_source)
-        self.assertIn("_startup_runtime.is_running()", async_source)
-        self.assertIn("_startup_runtime.start_qthread_worker", async_source)
+        self.assertIn("DNS startup apply disabled: manual mode only", async_source)
+        self.assertIn("return False", async_source)
+        self.assertNotIn("_startup_runtime.start_qthread_worker", async_source)
+        self.assertNotIn("QTimer.singleShot", async_source)
         self.assertIn("_startup_runtime.stop", cleanup_source)
         self.assertIn("_startup_runtime.cancel", cleanup_source)
         self.assertNotIn("_startup_worker = None", module_source)

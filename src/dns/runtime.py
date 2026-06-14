@@ -73,7 +73,7 @@ def load_page_data() -> NetworkPageData:
     dns_info = dns_manager.get_all_dns_info_fast(adapter_names)
 
     ensure_default_force_dns()
-    force_dns_active = _new_force_dns_manager().is_force_dns_enabled()
+    force_dns_active = False
 
     return NetworkPageData(
         adapters=adapters,
@@ -169,7 +169,7 @@ def apply_custom_dns(adapters: list[str], primary: str, secondary: str | None) -
 
 
 def get_force_dns_status() -> bool:
-    return _new_force_dns_manager().is_force_dns_enabled()
+    return False
 
 
 def enable_force_dns(
