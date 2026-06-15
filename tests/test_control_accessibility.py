@@ -9,7 +9,14 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt6.QtCore import QEvent, Qt
 from PyQt6.QtGui import QIcon, QKeyEvent
 from PyQt6.QtWidgets import QApplication, QWidget
-from qfluentwidgets import CaptionLabel, IndeterminateProgressBar, PrimaryPushButton, PushButton, PushSettingCard
+from qfluentwidgets import (
+    CaptionLabel,
+    IndeterminateProgressBar,
+    PrimaryPushButton,
+    PushButton,
+    PushSettingCard,
+    StrongBodyLabel,
+)
 
 
 class _ButtonTarget:
@@ -163,6 +170,25 @@ class ControlAccessibilityTests(unittest.TestCase):
         self.assertIn("Показывает", progress.accessibleDescription())
         self.assertEqual(loading.accessibleName(), "Статус запуска Zapret: нет активного запуска")
         self.assertEqual(loading.property("screenReaderStateText"), "Статус запуска Zapret: нет активного запуска")
+
+    def test_status_dot_has_initial_screen_reader_state(self) -> None:
+        from presets.ui.control.shared_builders import build_mode_status_section_common
+
+        _card, status_dot, _title, _desc = build_mode_status_section_common(
+            tr_fn=lambda _key, default: default,
+            strong_body_label_cls=StrongBodyLabel,
+            caption_label_cls=CaptionLabel,
+            checking_key="checking",
+            checking_default="Проверка состояния",
+            detecting_key="detecting",
+            detecting_default="Определяем текущий статус",
+        )
+
+        self.assertEqual(status_dot.accessibleName(), "Индикатор состояния Zapret: состояние пока не загружено")
+        self.assertEqual(
+            status_dot.property("screenReaderStateText"),
+            "Индикатор состояния Zapret: состояние пока не загружено",
+        )
 
     def test_stop_button_loads_square_stop_icon_after_first_paint(self) -> None:
         from presets.ui.control.shared_builders import build_mode_management_section_common

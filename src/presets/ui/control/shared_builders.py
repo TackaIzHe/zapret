@@ -44,6 +44,7 @@ def build_mode_status_section_common(
     status_layout.setSpacing(16)
 
     status_dot = PulsingDot()
+    set_state_text(status_dot, "Индикатор состояния Zapret: состояние пока не загружено")
     status_layout.addWidget(status_dot)
 
     status_text = QVBoxLayout()
