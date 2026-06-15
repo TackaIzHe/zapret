@@ -74,6 +74,7 @@ def build_last_status_message_card_common(
 
     dot = PulsingDot()
     dot.set_color("#8ab4f8")
+    set_state_text(dot, "Индикатор последнего сообщения: пока нет новых сообщений")
     layout.addWidget(dot, 0, Qt.AlignmentFlag.AlignTop)
 
     text_layout = QVBoxLayout()

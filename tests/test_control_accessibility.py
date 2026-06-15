@@ -190,6 +190,21 @@ class ControlAccessibilityTests(unittest.TestCase):
             "Индикатор состояния Zapret: состояние пока не загружено",
         )
 
+    def test_last_status_message_dot_has_initial_screen_reader_state(self) -> None:
+        from presets.ui.control.shared_builders import build_last_status_message_card_common
+
+        widgets = build_last_status_message_card_common(
+            tr_fn=lambda _key, default: default,
+            strong_body_label_cls=StrongBodyLabel,
+            caption_label_cls=CaptionLabel,
+        )
+
+        self.assertEqual(widgets.dot.accessibleName(), "Индикатор последнего сообщения: пока нет новых сообщений")
+        self.assertEqual(
+            widgets.dot.property("screenReaderStateText"),
+            "Индикатор последнего сообщения: пока нет новых сообщений",
+        )
+
     def test_stop_button_loads_square_stop_icon_after_first_paint(self) -> None:
         from presets.ui.control.shared_builders import build_mode_management_section_common
 
