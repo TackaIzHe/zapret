@@ -178,7 +178,7 @@ def apply_status_plan(
     setattr(status_dot, "_last_control_status_plan_key", plan_key)
     set_text_if_changed(status_title, plan.title)
     set_text_if_changed(status_desc, plan.description)
-    set_state_text(status_title, plan.title)
+    set_state_text(status_title, f"Статус Zapret: {plan.title}")
     set_accessible_description(status_title, plan.description)
     set_state_text(status_desc, f"Описание состояния Zapret: {plan.description}")
     set_state_text(status_dot, f"Индикатор состояния Zapret: {plan.title}")

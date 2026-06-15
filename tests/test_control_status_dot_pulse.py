@@ -203,7 +203,11 @@ class ControlStatusDotPulseTests(unittest.TestCase):
             update_stop_button_text=lambda: None,
         )
 
-        self.assertEqual(status_title.accessible_name, "Ошибка запуска")
+        self.assertEqual(status_title.accessible_name, "Статус Zapret: Ошибка запуска")
+        self.assertEqual(
+            status_title.properties.get("screenReaderStateText"),
+            "Статус Zapret: Ошибка запуска",
+        )
         self.assertEqual(status_title.accessible_description, "Не удалось запустить процесс обхода блокировок")
         self.assertEqual(
             status_desc.accessible_name,
