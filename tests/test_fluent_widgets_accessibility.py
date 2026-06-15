@@ -87,6 +87,15 @@ class FluentWidgetsAccessibilityTests(unittest.TestCase):
         self.assertEqual(notice.property("screenReaderStateText"), expected)
         self.assertEqual(notice._text_label.property("screenReaderStateText"), expected)
 
+    def test_premium_badge_reads_text_for_screen_reader(self) -> None:
+        from ui.fluent_widgets import build_premium_badge
+
+        badge = build_premium_badge("Premium")
+        self.addCleanup(badge.deleteLater)
+
+        self.assertEqual(badge.accessibleName(), "Метка Premium: Premium")
+        self.assertEqual(badge.property("screenReaderStateText"), "Метка Premium: Premium")
+
 
 if __name__ == "__main__":
     unittest.main()

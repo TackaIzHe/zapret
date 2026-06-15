@@ -574,7 +574,8 @@ def style_semantic_caption_label(label, *, tone: str = "error") -> None:
 def build_premium_badge(text: str, parent=None) -> QLabel:
     """Создаёт единый бейдж Premium без копирования inline-стилей по страницам."""
 
-    badge = QLabel(str(text or ""), parent)
+    badge_text = str(text or "")
+    badge = QLabel(badge_text, parent)
     badge.setStyleSheet(
         "color: #b45309; "
         "font-size: 10px; "
@@ -583,6 +584,9 @@ def build_premium_badge(text: str, parent=None) -> QLabel:
         "padding: 2px 6px; "
         "border-radius: 4px;"
     )
+    clean_text = " ".join(badge_text.strip().split())
+    if clean_text:
+        set_state_text(badge, f"Метка Premium: {clean_text}")
     return badge
 
 
