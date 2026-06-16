@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication
 from qfluentwidgets import Action, RoundMenu
 
@@ -88,10 +89,11 @@ def show_log_context_menu(
         )
 
     actions_by_id: dict[str, Action] = {}
-    for action_plan in context_plan.actions:
+    for row, action_plan in enumerate(context_plan.actions):
         action = Action(action_plan.label, owner)
         actions_by_id[action_plan.action_id] = action
         menu.addAction(action)
+        _set_menu_item_accessibility(menu, row, action_plan.label)
 
     copy_action = actions_by_id.get("copy")
     if copy_action is not None:
@@ -110,6 +112,30 @@ def show_log_context_menu(
             actions_by_id["whitelist"].triggered.connect(lambda: add_to_whitelist_fn(domain))
 
     exec_popup_menu(menu, log_text.mapToGlobal(pos), owner=owner)
+
+
+def _set_menu_item_accessibility(menu, row: int, text: str) -> None:
+    accessible_text = _context_action_accessible_text(text)
+    if not accessible_text:
+        return
+    try:
+        item = menu.view.item(int(row))
+    except Exception:
+        item = None
+    if item is None:
+        return
+    try:
+        item.setData(Qt.ItemDataRole.AccessibleTextRole, accessible_text)
+        item.setData(Qt.ItemDataRole.AccessibleDescriptionRole, accessible_text)
+    except Exception:
+        pass
+
+
+def _context_action_accessible_text(text: str) -> str:
+    value = " ".join(str(text or "").strip().split())
+    while value and not value[0].isalnum():
+        value = value[1:].lstrip()
+    return value
 
 
 def copy_line_to_clipboard(*, text: str, append_log, tr_fn) -> None:

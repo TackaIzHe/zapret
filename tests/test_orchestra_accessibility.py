@@ -636,6 +636,109 @@ class OrchestraAccessibilityTests(unittest.TestCase):
         self.assertEqual(widgets.delete_log_btn.accessibleName(), "Удалить выбранный лог Оркестратора")
         self.assertEqual(widgets.clear_all_logs_btn.accessibleName(), "Очистить всю историю логов Оркестратора")
 
+    def test_log_context_menu_actions_have_screen_reader_text(self) -> None:
+        from orchestra.ui import page_log_context_workflow
+
+        class _Item:
+            def __init__(self) -> None:
+                self.values = {}
+
+            def setData(self, role, value):  # noqa: N802
+                self.values[role] = value
+
+            def data(self, role):
+                return self.values.get(role)
+
+        class _View:
+            def __init__(self) -> None:
+                self.items: list[_Item] = []
+
+            def item(self, row: int):
+                return self.items[row]
+
+        class _Menu:
+            instances: list["_Menu"] = []
+
+            def __init__(self, parent=None) -> None:
+                self.parent = parent
+                self.view = _View()
+                _Menu.instances.append(self)
+
+            def addAction(self, _action):  # noqa: N802
+                self.view.items.append(_Item())
+
+            def insertSeparator(self, _action):  # noqa: N802
+                pass
+
+        class _Signal:
+            def connect(self, _callback) -> None:
+                pass
+
+        class _Action:
+            def __init__(self, text, parent=None) -> None:
+                self.text = text
+                self.parent = parent
+                self.triggered = _Signal()
+
+        class _Cursor:
+            class SelectionType:
+                LineUnderCursor = object()
+
+            def select(self, _selection_type) -> None:
+                pass
+
+            def selectedText(self) -> str:  # noqa: N802
+                return "strategy line"
+
+        class _LogText:
+            def cursorForPosition(self, _pos):  # noqa: N802
+                return _Cursor()
+
+            def mapToGlobal(self, pos):  # noqa: N802
+                return pos
+
+        with (
+            patch.object(page_log_context_workflow, "RoundMenu", _Menu),
+            patch.object(page_log_context_workflow, "Action", _Action),
+            patch.object(page_log_context_workflow, "exec_popup_menu", lambda *_args, **_kwargs: None),
+            patch.object(page_log_context_workflow, "parse_log_line_for_strategy", return_value=("example.com", 3, "tls")),
+        ):
+            page_log_context_workflow.show_log_context_menu(
+                owner=object(),
+                log_text=_LogText(),
+                pos=object(),
+                is_strategy_blocked_fn=lambda _domain, _strategy: False,
+                tr_fn=lambda _key, default, **kwargs: default.format(**kwargs) if kwargs else default,
+                copy_line_fn=lambda _line: None,
+                lock_strategy_fn=lambda *_args: None,
+                block_strategy_fn=lambda *_args: None,
+                unblock_strategy_fn=lambda *_args: None,
+                add_to_whitelist_fn=lambda _domain: None,
+            )
+
+        menu = _Menu.instances[-1]
+        accessible_texts = [
+            item.data(Qt.ItemDataRole.AccessibleTextRole)
+            for item in menu.view.items
+        ]
+
+        self.assertEqual(
+            accessible_texts,
+            [
+                "Копировать строку",
+                "Залочить стратегию #3 для example.com",
+                "Заблокировать стратегию #3 для example.com",
+                "Добавить example.com в белый список",
+            ],
+        )
+        self.assertEqual(
+            [
+                item.data(Qt.ItemDataRole.AccessibleDescriptionRole)
+                for item in menu.view.items
+            ],
+            accessible_texts,
+        )
+
     def test_log_history_items_expose_screen_reader_text(self) -> None:
         from orchestra.ui.page_runtime_helpers import update_log_history_view
 
