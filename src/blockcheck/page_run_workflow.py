@@ -68,9 +68,9 @@ def start_blockcheck_page_run(
     set_state_text(progress_bar, "Ход BlockCheck: выполняется")
     if hasattr(progress_bar, "start"):
         progress_bar.start()
-    status_label.setText(
-        tr_fn("page.blockcheck.running", default="Запуск тестов...")
-    )
+    running_text = tr_fn("page.blockcheck.running", default="Запуск тестов...")
+    status_label.setText(running_text)
+    set_state_text(status_label, f"Статус BlockCheck: {running_text}")
 
     worker = blockcheck_feature.create_blockcheck_worker(
         mode=mode,
@@ -110,9 +110,9 @@ def request_blockcheck_stop(
 
     stop_button.setEnabled(False)
     set_state_text(stop_button, "Остановить BlockCheck, недоступно")
-    status_label.setText(
-        tr_fn("page.blockcheck.stopping", default="Остановка...")
-    )
+    stopping_text = tr_fn("page.blockcheck.stopping", default="Остановка...")
+    status_label.setText(stopping_text)
+    set_state_text(status_label, f"Статус BlockCheck: {stopping_text}")
     QTimer.singleShot(5000, lambda worker=expected_worker: force_stop(worker))
 
 
