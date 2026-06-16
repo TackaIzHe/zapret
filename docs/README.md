@@ -54,10 +54,7 @@
 
 Подробности о блокировках и прочих интересных штучках доступно [на нашей вики](https://publish.obsidian.md/zapret/Privacy/Zapret/home).
 
-> [!CAUTION]  
-> [Касперский](https://github.com/bol-van/zapret/issues/611) и иные российские вирусы начали войну с запретами и иными средствами обхода блокировок. Чтобы использовать их спокойно рекомендуется перейти на **альтернативные** антивирусы (Defender, ESET32 и т.д.), которые не выдают ложные и обманчивые срабатывания и помогают от большего количества угроз. Также не следует использовать российские антивирусы, либо добавлять файлы в исключения.
-
-### Другие полезные сервисы и VPN https://github.com/awesome-windows11/CensorNet
+Другие полезные сервисы и VPN https://github.com/awesome-windows11/CensorNet
 
  <picture>
    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=youtubediscord/zapret&type=Date&theme=dark" />
