@@ -6,6 +6,8 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PyQt6.QtCore import Qt
+from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication
 from qfluentwidgets import FluentIcon, PrimaryPushButton, PushButton, ToolButton
 
@@ -27,6 +29,34 @@ class FluentButtonContractTests(unittest.TestCase):
 
         for button in buttons:
             self.assertFalse(button.icon().isNull())
+
+    def test_refresh_button_reads_name_state_and_clicks_from_keyboard(self) -> None:
+        button = RefreshButton("Обновить статус")
+        self.addCleanup(button.deleteLater)
+        clicked: list[bool] = []
+        button.clicked.connect(lambda: clicked.append(True))
+
+        self.assertEqual(button.accessibleName(), "Обновить статус")
+        self.assertEqual(button.property("screenReaderStateText"), "Обновить статус")
+
+        button.show()
+        self._app.processEvents()
+        button.setFocus()
+        self._app.processEvents()
+        QTest.keyClick(button, Qt.Key.Key_Return)
+        self._app.processEvents()
+
+        self.assertEqual(clicked, [True])
+
+        button.set_loading(True)
+
+        self.assertEqual(button.accessibleName(), "Обновить статус, выполняется")
+        self.assertEqual(button.property("screenReaderStateText"), "Обновить статус, выполняется")
+
+        button.set_loading(False)
+
+        self.assertEqual(button.accessibleName(), "Обновить статус")
+        self.assertEqual(button.property("screenReaderStateText"), "Обновить статус")
 
     def test_legacy_project_button_layer_is_removed(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))

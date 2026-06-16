@@ -15,7 +15,12 @@ import qtawesome as qta
 from ui.theme import get_cached_qta_pixmap, get_themed_qta_icon, get_theme_tokens
 from ui.theme_refresh import ThemeRefreshBinding
 from ui.pulsing_dot import PulsingDot
-from ui.accessibility import set_accessible_description, set_accessible_name, set_state_text
+from ui.accessibility import (
+    set_accessible_description,
+    set_accessible_name,
+    set_control_accessibility,
+    set_state_text,
+)
 from qfluentwidgets import (
     BodyLabel, CaptionLabel, CardWidget, CheckBox, ComboBox, FlowLayout,
     FluentIcon, HeaderCardWidget, IndeterminateProgressBar, InfoBar,
@@ -645,6 +650,7 @@ class RefreshButton(PushButton):
         self._spin_timer = QTimer(self)
         self._spin_timer.setInterval(40)  # ~25 fps
         self._spin_timer.timeout.connect(self._spin_tick)
+        self._update_accessibility()
 
     def set_loading(self, loading: bool) -> None:
         """Start or stop the spinning loading animation."""
@@ -661,6 +667,18 @@ class RefreshButton(PushButton):
             if timer is not None:
                 timer.stop()
             self.setIcon(self._base_icon)
+        self._update_accessibility()
+
+    def _update_accessibility(self) -> None:
+        base_text = " ".join(str(self.text() or "Обновить").strip().split()) or "Обновить"
+        if self._loading:
+            state_text = f"{base_text}, выполняется"
+            description = "Обновление уже запущено, дождитесь завершения."
+        else:
+            state_text = base_text
+            description = "Запускает обновление."
+        set_control_accessibility(self, name=state_text, description=description)
+        set_state_text(self, state_text)
 
     def _spin_tick(self) -> None:
         self._spin_angle = (self._spin_angle + 12) % 360  # ~1 rotation/sec
