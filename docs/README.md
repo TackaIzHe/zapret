@@ -2,6 +2,15 @@
 
 ### Документация доступна [здесь](https://publish.obsidian.md/zapret/Privacy/Zapret2/Zapret2) | Попробуйте наш новый [Zapret KVN](https://github.com/youtubediscord/zapret-kvn)!
 
+<p align="center">
+  <a href="https://t.me/bypassblock"><img alt="Основной канал" src="https://img.shields.io/badge/Основной_канал-Telegram-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white"></a>
+  <a href="https://t.me/vpndiscordyooutube"><img alt="VPN-канал" src="https://img.shields.io/badge/VPN_канал-Telegram-179CDE?style=for-the-badge&logo=telegram&logoColor=white"></a>
+  <a href="https://discord.com/invite/kkcBDG2uws"><img alt="Discord" src="https://img.shields.io/badge/Discord-сообщество-5865F2?style=for-the-badge&logo=discord&logoColor=white"></a>
+  <a href="https://t.me/zapretvpns_bot"><img alt="Поддержать донатами" src="https://img.shields.io/badge/Поддержать-донат-FF424D?style=for-the-badge&logo=telegram&logoColor=white"></a>
+  <a href="https://publish.obsidian.md/zapret/Privacy/Zapret/home"><img alt="Вики" src="https://img.shields.io/badge/Вики-публичная-7C3AED?style=for-the-badge&logo=obsidian&logoColor=white"></a>
+  <a href="https://github.com/youtubediscord/zapret/issues/new"><img alt="Вопросы и баги" src="https://img.shields.io/badge/Вопросы_и_баги-GitHub-181717?style=for-the-badge&logo=github&logoColor=white"></a>
+</p>
+
 Один из самых (_если не самый_) популярных GUI лаунчеров для программы Запрет.
 
 Мы собрали и продолжаем собирать свыше **200 стратегий** обхода блокировок для Discord и YouTube. **Вы можете добавить свою Если напишите нам в Issues!** 
