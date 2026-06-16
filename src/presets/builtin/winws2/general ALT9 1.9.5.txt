@@ -81,6 +81,17 @@
 --wf-raw-part=@windivert.filter/windivert_part.stun.txt
 --wf-raw-part=@windivert.filter/windivert_part.wireguard.txt
 
+--name=Исключения (RU сайты)
+--filter-tcp=80,443-65535
+--ipset=lists/ipset-ru.txt
+--ipset=lists/ipset-dns.txt
+--ipset=lists/ipset-exclude.txt
+--out-range=-d8
+--payload=tls_client_hello
+--lua-desync=pass
+
+--new
+
 --name=Все сайты (исключение)
 --filter-tcp=80,443-65535
 --ipset-exclude=lists/ipset-ru.txt

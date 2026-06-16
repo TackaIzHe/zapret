@@ -27,6 +27,17 @@
 --blob=quic_google:@bin/quic_initial_www_google_com.bin
 --blob=tls_gosuslugi:@bin/tls_clienthello_gosuslugi_ru.bin
 
+--name=Исключения (RU сайты)
+--filter-tcp=80,443-65535
+--ipset=lists/ipset-ru.txt
+--ipset=lists/ipset-dns.txt
+--ipset=lists/ipset-exclude.txt
+--out-range=-d8
+--payload=tls_client_hello
+--lua-desync=pass
+
+--new
+
 --name=updates.discord.com
 --filter-tcp=443
 --hostlist=lists/discord-updates.txt

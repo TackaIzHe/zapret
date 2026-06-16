@@ -22,6 +22,17 @@
 --blob=tls7:@bin/tls_clienthello_7.bin
 --blob=fake_default_udp:0x00000000000000000000000000000000
 
+--name=Исключения (RU сайты)
+--filter-tcp=80,443-65535
+--ipset=lists/ipset-ru.txt
+--ipset=lists/ipset-dns.txt
+--ipset=lists/ipset-exclude.txt
+--out-range=-d8
+--payload=tls_client_hello
+--lua-desync=pass
+
+--new
+
 --name=Все сайты (исключение)
 --filter-tcp=80,443-65535
 --ipset-exclude=lists/ipset-ru.txt
