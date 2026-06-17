@@ -75,6 +75,14 @@ CUSTOM_KEYBOARD_ACTION_MARKERS = (
     "enable_keyboard_toggle",
 )
 
+ALLOWED_NO_FOCUS_SOURCES = {
+    "src/hosts/ui/services_build.py",
+    "src/ui/accessibility.py",
+    "src/ui/segmented_accessibility.py",
+    "src/ui/widgets/fluent_scrollbar.py",
+    "src/ui/widgets/win11_controls.py",
+}
+
 
 def _source(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
@@ -126,6 +134,22 @@ def test_custom_mouse_actions_keep_keyboard_activation() -> None:
         missing.append(rel_path)
 
     assert missing == []
+
+
+def test_no_focus_usage_stays_limited_to_decorative_helpers() -> None:
+    unexpected: list[str] = []
+    for path in sorted((ROOT / "src").rglob("*.py")):
+        rel_path = path.relative_to(ROOT).as_posix()
+        if rel_path.startswith("src/themes/cache/"):
+            continue
+        source = path.read_text(encoding="utf-8", errors="ignore")
+        if "FocusPolicy.NoFocus" not in source:
+            continue
+        if rel_path in ALLOWED_NO_FOCUS_SOURCES:
+            continue
+        unexpected.append(rel_path)
+
+    assert unexpected == []
 
 
 def test_profile_shell_keeps_toolbar_accessibility_helper() -> None:

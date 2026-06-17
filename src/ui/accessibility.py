@@ -276,12 +276,12 @@ def enable_keyboard_click(widget) -> None:
 
 
 def _activate_keyboard_click_target(widget) -> bool:
-    click = getattr(widget, "click", None)
+    click = _safe_getattr(widget, "click")
     if callable(click):
         click()
         return True
-    clicked = getattr(widget, "clicked", None)
-    emit = getattr(clicked, "emit", None)
+    clicked = _safe_getattr(widget, "clicked")
+    emit = _safe_getattr(clicked, "emit")
     if callable(emit):
         try:
             emit()
@@ -289,8 +289,8 @@ def _activate_keyboard_click_target(widget) -> bool:
         except TypeError:
             pass
     for child_name in ("button", "linkButton"):
-        child = getattr(widget, child_name, None)
-        click = getattr(child, "click", None)
+        child = _safe_getattr(widget, child_name)
+        click = _safe_getattr(child, "click")
         if not callable(click):
             continue
         click()
@@ -298,17 +298,24 @@ def _activate_keyboard_click_target(widget) -> bool:
     return False
 
 
+def _safe_getattr(obj, name: str):
+    try:
+        return getattr(obj, name, None)
+    except Exception:
+        return None
+
+
 def _has_keyboard_click_target(widget) -> bool:
-    click = getattr(widget, "click", None)
+    click = _safe_getattr(widget, "click")
     if callable(click):
         return True
-    clicked = getattr(widget, "clicked", None)
-    emit = getattr(clicked, "emit", None)
+    clicked = _safe_getattr(widget, "clicked")
+    emit = _safe_getattr(clicked, "emit")
     if callable(emit):
         return True
     for child_name in ("button", "linkButton"):
-        child = getattr(widget, child_name, None)
-        click = getattr(child, "click", None)
+        child = _safe_getattr(widget, child_name)
+        click = _safe_getattr(child, "click")
         if callable(click):
             return True
     return False
