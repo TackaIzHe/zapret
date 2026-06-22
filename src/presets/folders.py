@@ -448,6 +448,7 @@ def build_preset_folder_rows(
                 "date": str(preset.get("modified_display") or ""),
                 "is_active": bool(file_name and file_name == str(active_file_name or "").strip()),
                 "is_builtin": bool(preset.get("is_builtin", False)),
+                "can_reset_to_builtin": bool(preset.get("can_reset_to_builtin", False)),
                 "icon_color": str(preset.get("icon_color") or ""),
                 "depth": 1,
                 "folder_key": str(row.get("folder_key") or ""),

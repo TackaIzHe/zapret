@@ -15,6 +15,7 @@ class RawPresetLoadResult:
     display_name: str = ""
     path: Path | None = None
     origin: str = "user"
+    can_reset_to_builtin: bool = False
     active_file_name: str = ""
     active_name: str = ""
 
@@ -24,6 +25,7 @@ class RawPresetSaveResult:
     updated: object
     path: Path
     footer_text: str
+    can_reset_to_builtin: bool = False
 
 
 def load_raw_preset_text(path: Path | None) -> RawPresetLoadResult:
@@ -65,6 +67,11 @@ def save_raw_preset_text(
         updated=updated,
         path=path,
         footer_text=f"Сохранено {datetime.now().strftime('%H:%M:%S')}",
+        can_reset_to_builtin=preset_differs_from_builtin(
+            presets_feature=presets_feature,
+            launch_method=launch_method,
+            file_name=updated.file_name,
+        ),
     )
 
 
@@ -123,9 +130,24 @@ def load_raw_preset_for_file(*, presets_feature, launch_method: str | None, file
         display_name=display_name,
         path=path,
         origin=origin,
+        can_reset_to_builtin=preset_differs_from_builtin(
+            presets_feature=presets_feature,
+            launch_method=launch_method,
+            file_name=resolved_file_name,
+        ),
         active_file_name=active_file_name,
         active_name=active_name,
     )
+
+
+def preset_differs_from_builtin(*, presets_feature, launch_method: str | None, file_name: str) -> bool:
+    checker = getattr(presets_feature, "preset_differs_from_builtin_by_file_name", None)
+    if not callable(checker):
+        return False
+    try:
+        return bool(checker(launch_method, file_name))
+    except Exception:
+        return False
 
 
 def is_builtin_raw_preset(*, presets_feature, launch_method: str | None, file_name: str) -> bool:

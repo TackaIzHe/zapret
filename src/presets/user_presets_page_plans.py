@@ -44,6 +44,7 @@ def build_preset_rows_plan(
                 "file_name": file_name,
                 "display_name": display_name,
                 "is_builtin": builtin_by_file.get(file_name, False),
+                "can_reset_to_builtin": bool(meta.get("can_reset_to_builtin", False)),
             }
         )
 

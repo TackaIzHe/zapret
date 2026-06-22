@@ -298,6 +298,7 @@ class PresetRawEditorPage(BasePage):
         self._preset_file_name = ""
         self._preset_path: Path | None = None
         self._preset_origin = "user"
+        self._preset_can_reset_to_builtin = False
         self._active_preset_file_name = ""
         self._active_preset_name = ""
         self._raw_editor_text_snapshot: str | None = None
@@ -661,6 +662,12 @@ class PresetRawEditorPage(BasePage):
         except Exception:
             return False
 
+    def _can_reset_current_to_builtin(self) -> bool:
+        return bool(
+            not self._is_current_builtin()
+            and self.__dict__.get("_preset_can_reset_to_builtin", False)
+        )
+
     def _build_ui(self) -> None:
         try:
             self.title_label.hide()
@@ -983,6 +990,7 @@ class PresetRawEditorPage(BasePage):
             self._preset_name = str(result.display_name or "").strip()
         self._preset_path = getattr(result, "path", None)
         self._preset_origin = str(getattr(result, "origin", "") or "user").strip().lower() or "user"
+        self._preset_can_reset_to_builtin = bool(getattr(result, "can_reset_to_builtin", False))
         self._apply_raw_preset_active_state(
             getattr(result, "active_file_name", ""),
             getattr(result, "active_name", ""),
@@ -1276,6 +1284,7 @@ class PresetRawEditorPage(BasePage):
         self._preset_file_name = updated.file_name
         self._preset_path = result.path
         self._preset_origin = str(getattr(updated, "kind", "") or self._preset_origin or "user").strip().lower() or "user"
+        self._preset_can_reset_to_builtin = bool(getattr(result, "can_reset_to_builtin", False))
         self._raw_preset_content_loaded_once = True
         self._raw_preset_content_dirty = False
         if publish_content_changed:
@@ -1786,6 +1795,7 @@ class PresetRawEditorPage(BasePage):
             self._preset_file_name = updated.file_name
             self._preset_path = path
             self._preset_origin = str(getattr(updated, "kind", "") or "user").strip().lower() or "user"
+            self._preset_can_reset_to_builtin = False
             self._load_file()
             self._refresh_header()
             self._show_success(f"Пресет переименован: {payload.get('new_name') or updated.name}")
@@ -1796,6 +1806,7 @@ class PresetRawEditorPage(BasePage):
             self._preset_file_name = duplicated.file_name
             self._preset_path = path
             self._preset_origin = str(getattr(duplicated, "kind", "") or "user").strip().lower() or "user"
+            self._preset_can_reset_to_builtin = False
             self._load_file()
             self._refresh_header()
             self._show_success(f"Создан дубликат: {payload.get('new_name') or duplicated.name}")
@@ -1807,6 +1818,7 @@ class PresetRawEditorPage(BasePage):
             self._preset_file_name = updated.file_name
             self._preset_path = path
             self._preset_origin = str(getattr(updated, "kind", "") or "builtin").strip().lower() or "builtin"
+            self._preset_can_reset_to_builtin = False
             self._load_file()
             self._refresh_header()
             self._show_success(f"Восстановлен встроенный пресет «{self._preset_name}»")
@@ -1865,12 +1877,14 @@ class PresetRawEditorPage(BasePage):
             delete_action = None
             if not self._is_current_builtin():
                 rename_action = _make_menu_action("Переименовать", icon=_fluent_icon("RENAME"), parent=menu)
-                reset_action = _make_menu_action("Вернуть встроенный", icon=_fluent_icon("SYNC"), parent=menu)
                 delete_action = _make_menu_action("Удалить", icon=_fluent_icon("DELETE"), parent=menu)
+                if self._can_reset_current_to_builtin():
+                    reset_action = _make_menu_action("Вернуть встроенный", icon=_fluent_icon("SYNC"), parent=menu)
                 if self._is_current_selected_file() and hasattr(delete_action, "setEnabled"):
                     delete_action.setEnabled(False)
                 action_map[rename_action] = "rename"
-                action_map[reset_action] = "reset"
+                if reset_action is not None:
+                    action_map[reset_action] = "reset"
                 action_map[delete_action] = "delete"
             if rename_action is not None:
                 menu.addAction(rename_action)

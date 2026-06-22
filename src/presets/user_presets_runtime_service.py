@@ -660,6 +660,7 @@ class UserPresetsRuntimeService:
             date=str(next_metadata.get("modified_display") or ""),
             is_active=bool(normalized_file_name and normalized_file_name == active_file_name),
             is_builtin=bool(next_metadata.get("is_builtin", False)),
+            can_reset_to_builtin=bool(next_metadata.get("can_reset_to_builtin", False)),
             icon_color=normalize_preset_icon_color(str(next_metadata.get("icon_color") or "")),
         )
 

@@ -15,6 +15,7 @@ def show_preset_actions_menu(
     *,
     global_pos: QPoint | None,
     is_builtin: bool,
+    can_reset_to_builtin: bool = False,
     disabled_actions: set[str] | None = None,
     labels: dict[str, str],
     make_menu_action: Callable[..., object],
@@ -46,7 +47,8 @@ def show_preset_actions_menu(
     action_order = ["open", "rating", "move_up", "move_down", "duplicate", "export"]
     if not is_builtin:
         action_order.insert(4, "rename")
-        action_order.append("reset")
+        if can_reset_to_builtin:
+            action_order.append("reset")
         action_order.append("delete")
 
     disabled_action_keys = {str(key or "").strip() for key in (disabled_actions or set())}

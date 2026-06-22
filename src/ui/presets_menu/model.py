@@ -23,6 +23,7 @@ class PresetListModel(QAbstractListModel):
     CountRole = Qt.ItemDataRole.UserRole + 15
     SystemRole = Qt.ItemDataRole.UserRole + 16
     ServiceRole = Qt.ItemDataRole.UserRole + 17
+    CanResetRole = Qt.ItemDataRole.UserRole + 18
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -30,6 +31,7 @@ class PresetListModel(QAbstractListModel):
         self._preset_row_by_file_name: dict[str, int] = {}
         self._preset_name_by_file_name: dict[str, str] = {}
         self._preset_builtin_by_file_name: dict[str, bool] = {}
+        self._preset_reset_by_file_name: dict[str, bool] = {}
         self._preset_rating_by_file_name: dict[str, int] = {}
         self._active_preset_file_names: set[str] = set()
         self._first_preset_row = -1
@@ -89,6 +91,7 @@ class PresetListModel(QAbstractListModel):
         self._preset_row_by_file_name = {}
         self._preset_name_by_file_name = {}
         self._preset_builtin_by_file_name = {}
+        self._preset_reset_by_file_name = {}
         self._preset_rating_by_file_name = {}
         self._active_preset_file_names = set()
         self._first_preset_row = -1
@@ -105,6 +108,7 @@ class PresetListModel(QAbstractListModel):
             if display_name:
                 self._preset_name_by_file_name[file_name] = display_name
             self._preset_builtin_by_file_name[file_name] = bool(row.get("is_builtin", False))
+            self._preset_reset_by_file_name[file_name] = bool(row.get("can_reset_to_builtin", False))
             self._preset_rating_by_file_name[file_name] = _safe_int(row.get("rating"))
             if bool(row.get("is_active", False)):
                 self._active_preset_file_names.add(file_name)
@@ -132,6 +136,12 @@ class PresetListModel(QAbstractListModel):
         if not candidate:
             return None
         return self._preset_rating_by_file_name.get(candidate)
+
+    def preset_can_reset_to_builtin(self, file_name: str) -> bool | None:
+        candidate = str(file_name or "").strip()
+        if not candidate:
+            return None
+        return self._preset_reset_by_file_name.get(candidate)
 
     def active_preset_file_name(self) -> str:
         for file_name in self._active_preset_file_names:
@@ -227,6 +237,7 @@ class PresetListModel(QAbstractListModel):
             "is_active": [self.ActiveRole, int(Qt.ItemDataRole.AccessibleTextRole)],
             "icon_color": [self.IconColorRole],
             "is_builtin": [self.BuiltinRole, int(Qt.ItemDataRole.AccessibleTextRole)],
+            "can_reset_to_builtin": [self.CanResetRole, int(Qt.ItemDataRole.AccessibleTextRole)],
             "is_pinned": [self.PinnedRole, int(Qt.ItemDataRole.AccessibleTextRole)],
             "rating": [self.RatingRole, int(Qt.ItemDataRole.AccessibleTextRole)],
         }
@@ -257,6 +268,10 @@ class PresetListModel(QAbstractListModel):
                 file_name = str(row.get("file_name") or "").strip()
                 if file_name:
                     self._preset_builtin_by_file_name[file_name] = bool(value)
+            if key == "can_reset_to_builtin":
+                file_name = str(row.get("file_name") or "").strip()
+                if file_name:
+                    self._preset_reset_by_file_name[file_name] = bool(value)
             if key == "rating":
                 file_name = str(row.get("file_name") or "").strip()
                 if file_name:
@@ -517,6 +532,8 @@ class PresetListModel(QAbstractListModel):
             return row.get("icon_color", "#5caee8")
         if role == self.BuiltinRole:
             return bool(row.get("is_builtin", False))
+        if role == self.CanResetRole:
+            return bool(row.get("can_reset_to_builtin", False))
         if role == self.DepthRole:
             return int(row.get("depth", 0) or 0)
         if role == self.PinnedRole:
@@ -688,6 +705,7 @@ def _all_data_roles() -> list[int]:
         PresetListModel.CountRole,
         PresetListModel.SystemRole,
         PresetListModel.ServiceRole,
+        PresetListModel.CanResetRole,
         int(Qt.ItemDataRole.AccessibleTextRole),
     ]
 

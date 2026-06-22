@@ -7,13 +7,32 @@ def _tr_key(tr_prefix: str, suffix: str) -> str:
     return f"{tr_prefix}.{suffix}"
 
 
-def open_edit_preset_menu_action(*, page, name: str, global_pos, is_builtin_preset_file_fn, is_selected_preset_file_fn, tr_fn, make_menu_action, fluent_icon, round_menu_cls, on_preset_list_action_fn, show_preset_actions_menu_fn, tr_prefix: str) -> None:
+def open_edit_preset_menu_action(
+    *,
+    page,
+    name: str,
+    global_pos,
+    is_builtin_preset_file_fn,
+    is_selected_preset_file_fn,
+    can_reset_preset_to_builtin_fn=None,
+    tr_fn,
+    make_menu_action,
+    fluent_icon,
+    round_menu_cls,
+    on_preset_list_action_fn,
+    show_preset_actions_menu_fn,
+    tr_prefix: str,
+) -> None:
     is_builtin = is_builtin_preset_file_fn(name)
+    can_reset_to_builtin = False
+    if not is_builtin and callable(can_reset_preset_to_builtin_fn):
+        can_reset_to_builtin = bool(can_reset_preset_to_builtin_fn(name))
     disabled_actions = {"delete"} if (not is_builtin and is_selected_preset_file_fn(name)) else set()
     chosen = show_preset_actions_menu_fn(
         page,
         global_pos=global_pos,
         is_builtin=is_builtin,
+        can_reset_to_builtin=can_reset_to_builtin,
         disabled_actions=disabled_actions,
         labels={
             "open": tr_fn(_tr_key(tr_prefix, "menu.open"), "Открыть"),

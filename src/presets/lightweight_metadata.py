@@ -11,10 +11,12 @@ def build_lightweight_preset_metadata(
     display_name: str,
     kind: str,
     is_builtin: bool,
+    can_reset_to_builtin: bool = False,
 ) -> dict[str, object]:
     normalized_display_name = str(display_name or path.name).strip()
     normalized_kind = str(kind or "").strip() or "user"
     normalized_is_builtin = bool(is_builtin)
+    normalized_can_reset_to_builtin = bool(can_reset_to_builtin)
 
     try:
         return {
@@ -22,6 +24,7 @@ def build_lightweight_preset_metadata(
             "display_name": normalized_display_name,
             "kind": normalized_kind,
             "is_builtin": normalized_is_builtin,
+            "can_reset_to_builtin": normalized_can_reset_to_builtin,
         }
     except Exception:
         return {
@@ -31,4 +34,5 @@ def build_lightweight_preset_metadata(
             "display_name": normalized_display_name,
             "kind": normalized_kind,
             "is_builtin": normalized_is_builtin,
+            "can_reset_to_builtin": normalized_can_reset_to_builtin,
         }

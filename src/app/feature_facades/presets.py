@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 
@@ -93,16 +94,20 @@ class PresetsFeature:
                 display_name=display_name,
                 kind=kind,
                 is_builtin=is_builtin,
+                can_reset_to_builtin=can_reset_to_builtin,
             )
-            for file_name, display_name, kind, is_builtin, path, _stat_key in entries
+            for file_name, display_name, kind, is_builtin, can_reset_to_builtin, path, _stat_key in entries
         }
-        signature = tuple((file_name, str(path), stat_key) for file_name, _display, _kind, _builtin, path, stat_key in entries)
+        signature = tuple(
+            (file_name, str(path), stat_key)
+            for file_name, _display, _kind, _builtin, _can_reset, path, stat_key in entries
+        )
         return signature, metadata
 
     def _build_preset_list_metadata_signature(self, launch_method: str):
         return tuple(
             (file_name, str(path), stat_key)
-            for file_name, _display, _kind, _builtin, path, stat_key in self._preset_list_metadata_entries(launch_method)
+            for file_name, _display, _kind, _builtin, _can_reset, path, stat_key in self._preset_list_metadata_entries(launch_method)
         )
 
     def _preset_list_metadata_entries(self, launch_method: str):
@@ -125,8 +130,39 @@ class PresetsFeature:
             storage_scope = str(getattr(manifest, "storage_scope", "") or "").strip().lower()
             is_builtin = kind.lower() == "builtin" or storage_scope == "builtin"
             path = (engine_paths.builtin_presets_dir if storage_scope == "builtin" else engine_paths.user_presets_dir) / file_name
-            entries.append((file_name, display_name, kind, is_builtin, path, self._preset_file_stat_key(path)))
+            builtin_path = engine_paths.builtin_presets_dir / file_name
+            can_reset_to_builtin = False if is_builtin else self._preset_differs_from_builtin_paths(path, builtin_path)
+            stat_key = (
+                self._preset_file_stat_key(path),
+                self._preset_file_stat_key(builtin_path) if not is_builtin else (0, 0),
+            )
+            entries.append((file_name, display_name, kind, is_builtin, can_reset_to_builtin, path, stat_key))
         return tuple(entries)
+
+    def preset_differs_from_builtin_by_file_name(self, launch_method: str, file_name: str) -> bool:
+        from settings.mode import engine_for_launch_method_or_none
+
+        candidate = str(file_name or "").strip()
+        if not candidate:
+            return False
+        engine = engine_for_launch_method_or_none(launch_method)
+        if engine is None:
+            return False
+        try:
+            manifest = self.get_preset_manifest_by_file_name(launch_method, candidate)
+        except Exception:
+            manifest = None
+        if manifest is None:
+            return False
+        manifest_file_name = str(getattr(manifest, "file_name", "") or candidate).strip() or candidate
+        kind = str(getattr(manifest, "kind", "") or "").strip().lower()
+        storage_scope = str(getattr(manifest, "storage_scope", "") or "").strip().lower()
+        if kind == "builtin" or storage_scope == "builtin":
+            return False
+        engine_paths = self._preset_services().app_paths.engine_paths(engine).ensure_directories()
+        user_path = engine_paths.user_presets_dir / manifest_file_name
+        builtin_path = engine_paths.builtin_presets_dir / manifest_file_name
+        return self._preset_differs_from_builtin_paths(user_path, builtin_path)
 
     @staticmethod
     def _preset_file_stat_key(path) -> tuple[int, int]:
@@ -138,6 +174,32 @@ class PresetsFeature:
             )
         except Exception:
             return (0, 0)
+
+    @classmethod
+    def _preset_differs_from_builtin_paths(cls, user_path, builtin_path) -> bool:
+        try:
+            user = Path(user_path)
+            builtin = Path(builtin_path)
+            if not user.is_file() or not builtin.is_file():
+                return False
+            try:
+                if user.stat().st_size != builtin.stat().st_size:
+                    return True
+            except Exception:
+                pass
+            return cls._file_sha256(user) != cls._file_sha256(builtin)
+        except Exception:
+            return False
+
+    @staticmethod
+    def _file_sha256(path: Path) -> str:
+        import hashlib
+
+        digest = hashlib.sha256()
+        with Path(path).open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
 
     def get_preset_manifest_by_file_name(self, launch_method: str, file_name: str):
         return self._commands().get_preset_manifest_by_file_name(launch_method, file_name, preset_services=self._preset_services())

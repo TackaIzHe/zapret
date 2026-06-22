@@ -17,6 +17,7 @@ class UserPresetsRuntimeActions:
     get_cached_preset_list_metadata: Callable[..., object]
     warm_preset_list_metadata_cache: Callable[..., object]
     get_preset_source_path_by_file_name: Callable[..., object]
+    preset_differs_from_builtin_by_file_name: Callable[..., object] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -306,6 +307,13 @@ class UserPresetsPageRuntime:
         display_name = str(matched_entry.get("display_name") or candidate_file_name).strip()
         kind = str(matched_entry.get("kind") or "").strip() or "user"
         is_builtin = bool(matched_entry.get("is_builtin", False))
+        can_reset = bool(matched_entry.get("can_reset_to_builtin", False))
+        checker = getattr(self._preset_actions(), "preset_differs_from_builtin_by_file_name", None)
+        if callable(checker):
+            try:
+                can_reset = bool(checker(self._config.launch_method, candidate_file_name))
+            except Exception:
+                can_reset = False
 
         path = self._preset_actions().get_preset_source_path_by_file_name(
             self._config.launch_method,
@@ -317,6 +325,7 @@ class UserPresetsPageRuntime:
             display_name=display_name,
             kind=kind,
             is_builtin=is_builtin,
+            can_reset_to_builtin=can_reset,
         )
 
         return candidate_file_name, metadata

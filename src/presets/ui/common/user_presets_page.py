@@ -372,6 +372,30 @@ class UserPresetsPageBase(BasePage):
 
         return False
 
+    def _can_reset_preset_to_builtin(self, name: str) -> bool:
+        candidate = str(name or "").strip()
+        if not candidate:
+            return False
+
+        model = getattr(self, "_presets_model", None)
+        try:
+            reset_getter = getattr(model, "preset_can_reset_to_builtin", None)
+            if callable(reset_getter):
+                cached_reset = reset_getter(candidate)
+                if cached_reset is not None:
+                    return bool(cached_reset)
+        except Exception:
+            pass
+
+        cached_metadata = self._runtime_service.cached_presets_metadata()
+        metadata = cached_metadata.get(candidate)
+        if metadata is None and candidate and not candidate.lower().endswith(".txt"):
+            metadata = cached_metadata.get(f"{candidate}.txt")
+        if isinstance(metadata, dict):
+            return bool(metadata.get("can_reset_to_builtin", False))
+
+        return False
+
     def _folder_scope_key(self) -> str:
         return self._config.folder_scope
 
@@ -2339,6 +2363,7 @@ class UserPresetsPageBase(BasePage):
             global_pos=global_pos,
             is_builtin_preset_file_fn=self._is_builtin_preset_file,
             is_selected_preset_file_fn=self._is_selected_source_preset_file,
+            can_reset_preset_to_builtin_fn=self._can_reset_preset_to_builtin,
             tr_fn=self._tr,
             make_menu_action=make_menu_action,
             fluent_icon=fluent_icon,

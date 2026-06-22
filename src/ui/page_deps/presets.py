@@ -209,6 +209,7 @@ def build_user_presets_page_kwargs(
             get_cached_preset_list_metadata=presets_feature.get_cached_preset_list_metadata,
             warm_preset_list_metadata_cache=presets_feature.warm_preset_list_metadata_cache,
             get_preset_source_path_by_file_name=presets_feature.get_preset_source_path_by_file_name,
+            preset_differs_from_builtin_by_file_name=presets_feature.preset_differs_from_builtin_by_file_name,
         ),
         "connect_preset_signals": presets_feature.connect_preset_signals,
         "create_user_presets_open_folder_worker": presets_feature.create_user_presets_open_folder_worker,

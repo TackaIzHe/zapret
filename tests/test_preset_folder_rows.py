@@ -28,7 +28,7 @@ class PresetFolderRowsTests(unittest.TestCase):
         plan = build_preset_rows_plan(
             all_presets={
                 "Default.txt": {"display_name": "Default", "is_builtin": True},
-                "Manual.txt": {"display_name": "Manual", "is_builtin": False},
+                "Manual.txt": {"display_name": "Manual", "is_builtin": False, "can_reset_to_builtin": True},
                 "Game.txt": {"display_name": "Game", "is_builtin": True},
                 "Pinned.txt": {"display_name": "Pinned", "is_builtin": False},
             },
@@ -55,6 +55,8 @@ class PresetFolderRowsTests(unittest.TestCase):
         self.assertEqual(common_items, ["Manual.txt", "Default.txt"])
         default_row = next(row for row in rows if row.get("file_name") == "Default.txt")
         self.assertEqual(default_row["folder_name"], "Общие")
+        manual_row = next(row for row in rows if row.get("file_name") == "Manual.txt")
+        self.assertTrue(manual_row["can_reset_to_builtin"])
 
     def test_search_shows_only_matching_folder_rows(self) -> None:
         folder_state = build_default_preset_folders()
