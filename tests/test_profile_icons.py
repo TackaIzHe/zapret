@@ -142,6 +142,18 @@ class ProfileIconTests(unittest.TestCase):
 
         self.assertEqual(icon.icon_name, "simple:speedtest:ST")
 
+    def test_game_service_hostlists_use_brand_icons(self) -> None:
+        cases = (
+            ("EpicGames & Fortnite", "--hostlist=lists/epicgames-fortnite.txt", "simple:epicgames:EG"),
+            ("Ubisoft", "--hostlist=lists/ubisoft.txt", "simple:ubisoft:UB"),
+        )
+
+        for display_name, list_line, expected_icon in cases:
+            with self.subTest(display_name=display_name):
+                icon = resolve_profile_icon(display_name, ("--filter-tcp=80,443-65535", list_line))
+
+                self.assertEqual(icon.icon_name, expected_icon)
+
     def test_7tv_profile_uses_tv_icon(self) -> None:
         icon = resolve_profile_icon(
             "7tv (10tv)",

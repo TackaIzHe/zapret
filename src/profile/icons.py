@@ -26,6 +26,8 @@ _KNOWN_ICONS: dict[str, ProfileIconSpec] = {
     "twitter": ProfileIconSpec("simple:x:X", "#000000"),
     "twimg": ProfileIconSpec("simple:x:X", "#000000"),
     "steam": ProfileIconSpec("simple:steam:ST", "#66C0F4"),
+    "epicgames": ProfileIconSpec("simple:epicgames:EG", "#313131"),
+    "ubisoft": ProfileIconSpec("simple:ubisoft:UB", "#006EF5"),
     "github": ProfileIconSpec("simple:github:GH", "#F0F3F6"),
     "twitch": ProfileIconSpec("simple:twitch:TW", "#9146FF"),
     "soundcloud": ProfileIconSpec("simple:soundcloud:SC", "#FF5500"),
@@ -87,6 +89,10 @@ _ICON_ALIASES: dict[str, str] = {
     "com-z-library": "z-library",
     "10tv": "7tv",
     "rbxcdn": "roblox",
+    "epicgames-fortnite": "epicgames",
+    "unrealengine": "epicgames",
+    "ubi": "ubisoft",
+    "uplay": "ubisoft",
 }
 
 _NAMED_COLORS: dict[str, str] = {

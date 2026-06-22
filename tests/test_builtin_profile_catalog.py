@@ -132,6 +132,48 @@ RUNTIME_ONLY_PROFILE_KEYS = {
 
 
 class BuiltinProfileCatalogTests(unittest.TestCase):
+    def test_service_hostlist_profiles_use_requested_domain_lists(self) -> None:
+        preset = parse_preset_text(
+            ALL_PROFILES_PATH.read_text(encoding="utf-8"),
+            engine="winws2",
+            source_name=ALL_PROFILES_PATH.name,
+        )
+        expected_profiles = {
+            "Cloudflare TCP": ("--filter-tcp=80,443-65535", "--hostlist=lists/cloudflare.txt"),
+            "EpicGames & Fortnite": ("--filter-tcp=80,443-65535", "--hostlist=lists/epicgames-fortnite.txt"),
+            "Ubisoft": ("--filter-tcp=80,443-65535", "--hostlist=lists/ubisoft.txt"),
+            "Amazon TCP": ("--filter-tcp=80,443-65535", "--hostlist=lists/amazon.txt"),
+        }
+
+        for name, match_lines in expected_profiles.items():
+            with self.subTest(profile=name):
+                profile = _find_profile(preset.profiles, name, match_lines)
+                self.assertIsNotNone(profile)
+                self.assertEqual(profile.strategy.strategy_lines, [])
+                self.assertEqual(profile.strategy.other_lines, [])
+
+        expected_lists = {
+            "cloudflare.txt": [
+                "cloudflare-ech.com",
+                "cloudflare.com",
+                "cloudflareportal.com",
+                "cloudflareok.com",
+                "cloudflareclient.com",
+                "cloudflarecp.com",
+                "cloudfront.net",
+                "cloudflareinsights.com",
+            ],
+            "epicgames-fortnite.txt": ["epicgames.com", "fortnite.com", "akamaized.net", "unrealengine.com"],
+            "ubisoft.txt": ["ubi.com", "ubisoft.com", "ubisoftconnect.com", "ubisoftclub.com", "uplay.com"],
+            "amazon.txt": ["amazonaws.com", "amazon.com", "awsapps.com"],
+        }
+        lists_root = PRIVATE_ROOT / "dist" / "lists"
+
+        for file_name, domains in expected_lists.items():
+            with self.subTest(list=file_name):
+                actual = (lists_root / file_name).read_text(encoding="utf-8").splitlines()
+                self.assertEqual(actual, domains)
+
     def test_builtin_profile_files_keep_new_separator_on_own_spaced_line(self) -> None:
         offenders: list[str] = []
         paths = [
@@ -614,6 +656,15 @@ def _all_profile_keys() -> set[str]:
         for profile in preset.profiles
         if build_profile_logical_key(profile.match_signature)
     }
+
+
+def _find_profile(profiles, name: str, match_lines: tuple[str, ...]):
+    for profile in profiles:
+        if str(profile.name or "").strip() != name:
+            continue
+        if profile.match.all_lines() == list(match_lines):
+            return profile
+    return None
 
 
 def _all_profile_catalog():

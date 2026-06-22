@@ -77,6 +77,8 @@ class FolderDefaultsTests(unittest.TestCase):
         self.assertEqual(classify_profile_folder("roblox --ipset=lists/ipset-roblox.txt"), "roblox")
         self.assertEqual(classify_profile_folder("tr.rbxcdn.com --hostlist=lists/tr-rbxcdn-com.txt"), "roblox")
         self.assertEqual(classify_profile_folder("Tanki X --hostlist=lists/tankix.txt"), "games")
+        self.assertEqual(classify_profile_folder("EpicGames & Fortnite --hostlist=lists/epicgames-fortnite.txt"), "games")
+        self.assertEqual(classify_profile_folder("Ubisoft --hostlist=lists/ubisoft.txt"), "games")
         self.assertEqual(classify_profile_folder("lol-ru --ipset=lists/ipset-lol-ru.txt"), "games")
         self.assertEqual(classify_profile_folder("cloudflare --ipset=lists/ipset-cloudflare.txt"), "hosters")
         self.assertEqual(classify_profile_folder("digitalocean --ipset=lists/ipset-digitalocean.txt"), "hosters")
