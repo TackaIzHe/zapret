@@ -10,7 +10,6 @@ PyQt6-sip
 requests
 urllib3
 PySocks
-cryptography
 
 # System and Process Management
 psutil

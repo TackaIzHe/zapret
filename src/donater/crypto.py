@@ -6,7 +6,7 @@ import base64
 import json
 from typing import Dict, Optional
 
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from donater.ed25519 import verify_ed25519_signature
 
 # kid -> base64(raw 32-byte Ed25519 public key)
 TRUSTED_PUBLIC_KEYS_B64: Dict[str, str] = {
@@ -71,8 +71,8 @@ def verify_signed_response(
         if len(sig_bytes) != 64:
             return None
 
-        pub = Ed25519PublicKey.from_public_bytes(pub_raw)
-        pub.verify(sig_bytes, canonical_json(signed))
+        if not verify_ed25519_signature(pub_raw, sig_bytes, canonical_json(signed)):
+            return None
 
         if str(signed.get("device_id") or "") != str(expected_device_id):
             return None
@@ -83,4 +83,3 @@ def verify_signed_response(
         return signed
     except Exception:
         return None
-

@@ -10,8 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from urllib.parse import urlencode
 
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-
+from telegram_proxy.proxy.aes_ctr import AesCtrStream, aes_ctr_crypt, aes_ctr_keystream
 from telegram_proxy.proxy.stats import ProxyStats
 from telegram_proxy.proxy.transport import RawWebSocket
 from telegram_proxy.proxy.fake_tls import build_fake_tls_secret
@@ -175,11 +174,11 @@ def build_mtproxy_link(host: str, port: int, secret: str, *, fake_tls_domain: st
 
 
 def _cipher(key: bytes, iv: bytes):
-    return Cipher(algorithms.AES(key), modes.CTR(iv)).encryptor()
+    return AesCtrStream(key, iv)
 
 
 def _keystream(key: bytes, iv: bytes, size: int = HANDSHAKE_LEN) -> bytes:
-    return _cipher(key, iv).update(b"\x00" * int(size))
+    return aes_ctr_keystream(key, iv, int(size))
 
 
 def generate_relay_init(proto_tag: bytes, dc: int, is_media: bool) -> bytes:
@@ -259,8 +258,7 @@ def parse_client_init(init: bytes, secret: str) -> MTProxyClientInit | None:
     iv = client_prekey_iv[PREKEY_LEN:]
     key = hashlib.sha256(prekey + secret_bytes).digest()
 
-    cipher = Cipher(algorithms.AES(key), modes.CTR(iv))
-    decrypted = cipher.encryptor().update(bytes(init[:HANDSHAKE_LEN]))
+    decrypted = aes_ctr_crypt(key, iv, bytes(init[:HANDSHAKE_LEN]))
 
     proto_tag = decrypted[PROTO_TAG_POS:PROTO_TAG_POS + 4]
     if proto_tag not in VALID_PROTO_TAGS:

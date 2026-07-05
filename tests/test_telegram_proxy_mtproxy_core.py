@@ -14,14 +14,13 @@ def _xor_bytes(left: bytes, right: bytes) -> bytes:
 
 
 def _build_mtproxy_init(*, secret_hex: str, dc: int, is_media: bool = False) -> bytes:
-    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    from telegram_proxy.proxy.aes_ctr import aes_ctr_keystream
 
     secret = bytes.fromhex(secret_hex)
     prekey = os.urandom(32)
     iv = os.urandom(16)
     key = hashlib.sha256(prekey + secret).digest()
-    cipher = Cipher(algorithms.AES(key), modes.CTR(iv))
-    keystream = cipher.encryptor().update(b"\x00" * 64)
+    keystream = aes_ctr_keystream(key, iv, 64)
 
     dc_idx = -int(dc) if is_media else int(dc)
     tail_plain = b"\xee\xee\xee\xee" + struct.pack("<h", dc_idx) + b"\x00\x00"
@@ -313,8 +312,7 @@ class TelegramProxyMTProxyCoreTests(unittest.TestCase):
         self.assertNotEqual(telegram_payload, client_payload)
 
     def test_mtproxy_msg_splitter_splits_intermediate_packets(self) -> None:
-        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-
+        from telegram_proxy.proxy.aes_ctr import AesCtrStream
         from telegram_proxy.proxy.mtproxy import (
             MTProxyMsgSplitter,
             PROTO_TAG_INTERMEDIATE,
@@ -322,10 +320,7 @@ class TelegramProxyMTProxyCoreTests(unittest.TestCase):
         )
 
         relay_init = generate_relay_init(PROTO_TAG_INTERMEDIATE, dc=4, is_media=False)
-        encryptor = Cipher(
-            algorithms.AES(relay_init[8:40]),
-            modes.CTR(relay_init[40:56]),
-        ).encryptor()
+        encryptor = AesCtrStream(relay_init[8:40], relay_init[40:56])
         encryptor.update(b"\x00" * 64)
 
         first_packet = struct.pack("<I", 8) + b"12345678"

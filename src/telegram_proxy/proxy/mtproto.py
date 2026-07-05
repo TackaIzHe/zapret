@@ -4,6 +4,7 @@ import logging
 import struct
 from typing import Optional
 
+from telegram_proxy.proxy.aes_ctr import AesCtrStream, aes_ctr_keystream
 
 log = logging.getLogger("tg_proxy")
 
@@ -14,12 +15,9 @@ def dc_from_init(data: bytes) -> tuple[Optional[int], bool]:
         return None, False
 
     try:
-        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
         key = bytes(data[8:40])
         iv = bytes(data[40:56])
-        cipher = Cipher(algorithms.AES(key), modes.CTR(iv))
-        encryptor = cipher.encryptor()
-        keystream = encryptor.update(b"\x00" * 64) + encryptor.finalize()
+        keystream = aes_ctr_keystream(key, iv, 64)
         plain = bytes(a ^ b for a, b in zip(data[56:64], keystream[56:64]))
 
         proto = struct.unpack("<I", plain[0:4])[0]
@@ -32,7 +30,7 @@ def dc_from_init(data: bytes) -> tuple[Optional[int], bool]:
             if 1 <= dc <= 1000:
                 return dc, (dc_raw < 0)
     except ImportError:
-        log.warning("cryptography library not installed -- cannot parse MTProto init")
+        log.warning("tgcrypto library not installed -- cannot parse MTProto init")
     except Exception as exc:
         log.debug("DC extraction failed: %s", exc)
 
@@ -44,13 +42,10 @@ def patch_init_dc(data: bytes, dc: int) -> bytes:
     if len(data) < 64:
         return data
     try:
-        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
         new_dc = struct.pack("<h", dc)
         key_raw = bytes(data[8:40])
         iv = bytes(data[40:56])
-        cipher = Cipher(algorithms.AES(key_raw), modes.CTR(iv))
-        enc = cipher.encryptor()
-        ks = enc.update(b"\x00" * 64) + enc.finalize()
+        ks = aes_ctr_keystream(key_raw, iv, 64)
         patched = bytearray(data[:64])
         patched[60] = ks[60] ^ new_dc[0]
         patched[61] = ks[61] ^ new_dc[1]
@@ -76,11 +71,9 @@ class MsgSplitter:
     """Split batched MTProto abridged messages into separate WS frames."""
 
     def __init__(self, init_data: bytes):
-        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
         key_raw = bytes(init_data[8:40])
         iv = bytes(init_data[40:56])
-        cipher = Cipher(algorithms.AES(key_raw), modes.CTR(iv))
-        self._dec = cipher.encryptor()
+        self._dec = AesCtrStream(key_raw, iv)
         self._dec.update(b"\x00" * 64)
 
     def split(self, chunk: bytes) -> list[bytes]:
