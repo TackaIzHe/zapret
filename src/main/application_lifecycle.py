@@ -58,6 +58,7 @@ class ApplicationLifecycle:
 
         log("Windows завершает сеанс: закрываем GUI без диалога", "INFO")
         self._window_port.persist_geometry(context="windows_session_end", level="DEBUG")
+        self._window_port.persist_sidebar_state(context="windows_session_end", level="DEBUG")
         self._tray_feature.hide_icon_for_exit()
         self._try_fast_dpi_stop_for_windows_session_end()
         self._quit_application()
@@ -75,6 +76,7 @@ class ApplicationLifecycle:
 
         detach_global_error_notifier()
         self._window_port.persist_geometry(context="закрытии", level="❌ ERROR")
+        self._window_port.persist_sidebar_state(context="закрытии", level="❌ ERROR")
 
         self._cleanup_before_close()
         self._finish_dpi_for_final_close()
@@ -85,6 +87,7 @@ class ApplicationLifecycle:
         self._close_state.closing_completely = True
 
         self._window_port.persist_geometry(context="request_exit", level="DEBUG")
+        self._window_port.persist_sidebar_state(context="request_exit", level="DEBUG")
         self._tray_feature.hide_icon_for_exit()
 
     def _start_async_stop_and_exit(self) -> bool:

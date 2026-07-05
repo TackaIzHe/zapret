@@ -174,6 +174,10 @@ class WindowLifecycleMixin:
             sync_titlebar_search_width(self)
         except Exception as e:
             log(f"Не удалось синхронизировать ширину поиска в заголовке: {e}", "DEBUG")
+        try:
+            reapply_sidebar_intent_on_resize(self)
+        except Exception as e:
+            log(f"Не удалось восстановить развёрнутый сайдбар после ресайза: {e}", "DEBUG")
         geometry_runtime = self._get_window_geometry_runtime()
         if geometry_runtime is not None:
             geometry_runtime.on_geometry_changed()
@@ -238,6 +242,14 @@ def sync_titlebar_search_width(window) -> None:
     from ui.window_adapter import sync_titlebar_search_width as _sync_titlebar_search_width
 
     _sync_titlebar_search_width(window)
+
+
+def reapply_sidebar_intent_on_resize(window) -> None:
+    from ui.navigation.sidebar_builder import (
+        reapply_sidebar_intent_on_resize as _reapply_sidebar_intent_on_resize,
+    )
+
+    _reapply_sidebar_intent_on_resize(window)
 
 
 def refresh_titlebar_layout(window) -> None:

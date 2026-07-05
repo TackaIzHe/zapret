@@ -21,6 +21,7 @@ from ui.startup_ui_metrics import pump_startup_ui
 from app.ui_texts import tr as tr_catalog
 from ui.window_ui_session import get_window_ui_session
 from ui.navigation.sidebar_state import peek_warmed_sidebar_expanded
+from ui.navigation.sidebar_intent import DEFAULT_EXPAND_THRESHOLD, SidebarIntentController
 from ui.latest_value_worker_state import LatestValueWorkerState
 from ui.one_shot_worker_runtime import OneShotWorkerRuntime
 from ui.accessibility import set_control_accessibility, set_state_text
@@ -61,15 +62,6 @@ def _ensure_page_in_stack(window, page: QWidget | None) -> None:
     page_host = _get_page_host(window)
     if page_host is not None:
         page_host.ensure_page_in_stacked_widget(page)
-
-
-def _is_expanded_display_mode(display_mode) -> bool | None:
-    mode_name = str(getattr(display_mode, "name", "") or "").upper()
-    if mode_name in {"EXPAND", "MENU"}:
-        return True
-    if mode_name in {"COMPACT", "MINIMAL"}:
-        return False
-    return None
 
 
 def _read_saved_sidebar_expanded() -> bool:
@@ -116,7 +108,7 @@ def _start_sidebar_expanded_save_worker(window, expanded: bool) -> None:
             state_key=SIDEBAR_EXPANDED_UI_STATE_KEY,
             parent=window,
         ),
-        on_loaded=lambda _request_id, _expanded: None,
+        on_loaded=lambda _request_id, saved_expanded, current_window=window: _on_sidebar_expanded_saved(current_window, saved_expanded),
         on_failed=lambda _request_id, error: log(f"Не удалось сохранить состояние сайдбара: {error}", "DEBUG"),
         on_finished=lambda worker, current_window=window: _on_sidebar_expanded_save_worker_finished(current_window, worker),
         signal_includes_request_id=False,
@@ -146,6 +138,12 @@ def _sidebar_expanded_save_state_obj(session) -> LatestValueWorkerState:
     elif getattr(state, "runtime", None) is None:
         state.runtime = runtime
     return state
+
+
+def _on_sidebar_expanded_saved(window, saved_expanded) -> None:
+    controller = get_sidebar_intent_controller(window)
+    if controller is not None:
+        controller.mark_saved(bool(saved_expanded))
 
 
 def _on_sidebar_expanded_save_worker_finished(window, worker=None) -> None:
@@ -186,21 +184,70 @@ def _run_scheduled_sidebar_expanded_save_worker_start(window) -> None:
     _start_sidebar_expanded_save_worker(window, bool(pending))
 
 
+def _ensure_sidebar_intent_controller(session) -> SidebarIntentController:
+    controller = getattr(session, "sidebar_intent_controller", None)
+    if controller is None:
+        controller = SidebarIntentController(
+            intent=_read_saved_sidebar_expanded(),
+            last_saved=peek_warmed_sidebar_expanded(),
+        )
+        session.sidebar_intent_controller = controller
+    return controller
+
+
+def get_sidebar_intent_controller(window) -> SidebarIntentController | None:
+    session = get_window_ui_session(window)
+    if session is None:
+        return None
+    return _ensure_sidebar_intent_controller(session)
+
+
+def _sidebar_expand_threshold(window) -> int:
+    nav = getattr(window, "navigationInterface", None)
+    panel = getattr(nav, "panel", None)
+    threshold = getattr(panel, "minimumExpandWidth", None)
+    try:
+        return int(threshold)
+    except (TypeError, ValueError):
+        return DEFAULT_EXPAND_THRESHOLD
+
+
+def _window_width(window) -> int:
+    width = getattr(window, "width", None)
+    try:
+        return int(width()) if callable(width) else 0
+    except Exception:
+        return 0
+
+
 def _restore_sidebar_expanded_state(window) -> None:
     nav = getattr(window, "navigationInterface", None)
     if nav is None:
         return
 
-    if _read_saved_sidebar_expanded():
-        expand = getattr(nav, "expand", None)
-        if callable(expand):
-            expand(False)
-        return
+    controller = get_sidebar_intent_controller(window)
 
-    panel = getattr(nav, "panel", None)
-    collapse = getattr(panel, "collapse", None)
-    if callable(collapse):
-        collapse()
+    if controller is not None:
+        controller.applying = True
+    try:
+        if _read_saved_sidebar_expanded():
+            # На узком окне expand() открыл бы MENU-оверлей поверх контента.
+            # Намерение остаётся в контроллере: панель развернётся через
+            # reapply_sidebar_intent_on_resize, когда окно станет шире порога.
+            if _window_width(window) < _sidebar_expand_threshold(window):
+                return
+            expand = getattr(nav, "expand", None)
+            if callable(expand):
+                expand(False)
+            return
+
+        panel = getattr(nav, "panel", None)
+        collapse = getattr(panel, "collapse", None)
+        if callable(collapse):
+            collapse()
+    finally:
+        if controller is not None:
+            controller.applying = False
 
 
 def _bind_sidebar_expanded_state(window) -> None:
@@ -211,11 +258,54 @@ def _bind_sidebar_expanded_state(window) -> None:
         return
 
     def _on_display_mode_changed(display_mode) -> None:
-        expanded = _is_expanded_display_mode(display_mode)
-        if expanded is not None:
-            _start_sidebar_expanded_save_worker(window, expanded)
+        controller = get_sidebar_intent_controller(window)
+        if controller is None:
+            return
+        new_intent = controller.classify_display_mode_change(
+            display_mode,
+            window_width=_window_width(window),
+            threshold=_sidebar_expand_threshold(window),
+        )
+        if new_intent is not None:
+            _start_sidebar_expanded_save_worker(window, new_intent)
 
     connect(_on_display_mode_changed)
+
+
+def reapply_sidebar_intent_on_resize(window) -> None:
+    """Разворачивает сайдбар обратно, когда окно снова стало шире порога.
+
+    qfluentwidgets сворачивает панель при сужении окна сам, а обратное
+    разворачивание при видимой кнопке-гамбургере у него отключено — без этого
+    вызова намерение «развёрнуто» терялось бы после любого сужения окна.
+    """
+    session = get_window_ui_session(window)
+    if session is None:
+        return
+
+    nav = getattr(window, "navigationInterface", None)
+    panel = getattr(nav, "panel", None)
+    expand = getattr(nav, "expand", None)
+    if panel is None or not callable(expand):
+        return
+
+    is_collapsed = getattr(panel, "isCollapsed", None)
+    try:
+        collapsed = bool(is_collapsed()) if callable(is_collapsed) else False
+    except Exception:
+        return
+
+    controller = _ensure_sidebar_intent_controller(session)
+    if controller.should_reapply_expand(
+        window_width=_window_width(window),
+        is_collapsed=collapsed,
+        threshold=_sidebar_expand_threshold(window),
+    ):
+        controller.applying = True
+        try:
+            expand(False)
+        finally:
+            controller.applying = False
 
 
 def _scroll_layout_index(window, widget) -> int:
@@ -711,6 +801,7 @@ def init_navigation(window) -> None:
             pump_startup_ui(window)
 
     window.navigationInterface.setMinimumExpandWidth(700)
+    _ensure_sidebar_intent_controller(session)
     _restore_sidebar_expanded_state(window)
     _bind_sidebar_expanded_state(window)
     _refresh_existing_nav_mode_visibility(window, current_method)
@@ -813,7 +904,9 @@ def apply_nav_visibility_filter(window, method: str | None = None) -> None:
 __all__ = [
     "add_nav_item",
     "apply_nav_visibility_filter",
+    "get_sidebar_intent_controller",
     "init_navigation",
+    "reapply_sidebar_intent_on_resize",
     "sync_existing_nav_visibility",
     "sync_nav_visibility",
 ]

@@ -13,6 +13,11 @@ class ApplicationLifecycleWindowPort:
 
         persist_window_geometry(self._window, context=context, level=level)
 
+    def persist_sidebar_state(self, *, context: str, level: str = "DEBUG") -> None:
+        from main.window_lifecycle_cleanup import persist_sidebar_state
+
+        persist_sidebar_state(self._window, context=context, level=level)
+
     def cleanup_theme(self) -> None:
         from main.window_lifecycle_cleanup import cleanup_theme_for_close
 

@@ -3560,7 +3560,7 @@ class WindowsSessionShutdownTests(unittest.TestCase):
             closing_completely=False,
             windows_session_ending=False,
         )
-        window_port = SimpleNamespace(persist_geometry=Mock())
+        window_port = SimpleNamespace(persist_geometry=Mock(), persist_sidebar_state=Mock())
         runtime_feature = SimpleNamespace(shutdown_sync=Mock())
         lifecycle = ApplicationLifecycle(
             window_port=window_port,
@@ -3579,6 +3579,10 @@ class WindowsSessionShutdownTests(unittest.TestCase):
         self.assertTrue(close_state.windows_session_ending)
         self.assertFalse(close_state.stop_dpi_on_exit)
         window_port.persist_geometry.assert_called_once_with(
+            context="windows_session_end",
+            level="DEBUG",
+        )
+        window_port.persist_sidebar_state.assert_called_once_with(
             context="windows_session_end",
             level="DEBUG",
         )
@@ -3603,6 +3607,7 @@ class WindowsSessionShutdownTests(unittest.TestCase):
         )
         window_port = SimpleNamespace(
             persist_geometry=Mock(),
+            persist_sidebar_state=Mock(),
             cleanup_theme=Mock(),
             cleanup_threaded_pages=Mock(),
             cleanup_visual_and_proxy_resources=Mock(),

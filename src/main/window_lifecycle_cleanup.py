@@ -24,6 +24,34 @@ def persist_window_geometry(window, *, context: str, level: str = "DEBUG") -> No
         log(f"Ошибка сохранения геометрии окна при {context}: {e}", level)
 
 
+def persist_sidebar_state(window, *, context: str, level: str = "DEBUG") -> None:
+    """Синхронно дозаписывает намерение сайдбара, не успевшее уйти через воркер.
+
+    Обычные сохранения идут асинхронно; при выходе Qt event loop уже не даст
+    воркеру и его reschedule-таймеру завершиться, поэтому pending-значение
+    пишется здесь напрямую — как и геометрия окна.
+    """
+    try:
+        from ui.navigation.sidebar_builder import (
+            SIDEBAR_EXPANDED_UI_STATE_KEY,
+            get_sidebar_intent_controller,
+        )
+
+        controller = get_sidebar_intent_controller(window)
+        if controller is None:
+            return
+        pending = controller.pending_flush()
+        if pending is None:
+            return
+
+        from program_settings.public import save_ui_state_settings
+
+        save_ui_state_settings({SIDEBAR_EXPANDED_UI_STATE_KEY: bool(pending)})
+        controller.mark_saved(bool(pending))
+    except Exception as e:
+        log(f"Ошибка сохранения состояния сайдбара при {context}: {e}", level)
+
+
 def release_input_interaction_states(window) -> None:
     """Сбрасывает drag/resize состояния при скрытии/потере фокуса окна."""
     try:

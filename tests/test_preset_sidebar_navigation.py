@@ -279,7 +279,7 @@ class PresetSidebarNavigationTests(unittest.TestCase):
         self.assertEqual(get_nav_page_label(PageName.HOSTS, language="ru"), "Редактор hosts")
         self.assertEqual(
             tr("page.network.subtitle", language="ru"),
-            "Здесь можно выбрать DNS-серверы, включить принудительный DNS и проверить, помогает ли настройка обходу блокировок.",
+            "Здесь можно посмотреть текущие DNS, выбрать другие серверы и проверить, помогает ли настройка обходу блокировок.",
         )
 
     def test_initial_sidebar_build_skips_secondary_and_hidden_other_mode_items(self) -> None:
@@ -503,6 +503,9 @@ class PresetSidebarNavigationTests(unittest.TestCase):
             ui_session=session,
             navigationInterface=nav,
             get_launch_method=lambda: ZAPRET2_MODE,
+            # шире порога 700: на узком окне восстановление не разворачивает
+            # панель, чтобы не открывать MENU-оверлей поверх контента
+            width=lambda: 900,
         )
         store_warmed_sidebar_expanded(True)
 
@@ -721,7 +724,15 @@ class PresetSidebarNavigationTests(unittest.TestCase):
             ui_session=session,
             navigationInterface=nav,
             get_launch_method=lambda: ZAPRET2_MODE,
+            # шире порога 700: только на широком окне COMPACT означает
+            # осознанное сворачивание, а не responsive-механику библиотеки
+            width=lambda: 900,
         )
+
+        from ui.navigation.sidebar_state import store_warmed_sidebar_expanded
+
+        store_warmed_sidebar_expanded(True)
+        self.addCleanup(store_warmed_sidebar_expanded, None)
 
         with (
             patch.object(
@@ -760,6 +771,90 @@ class PresetSidebarNavigationTests(unittest.TestCase):
         self.assertFalse(create_worker.call_args.kwargs["expanded"])
         worker.start.assert_called_once_with()
         save_ui_state.assert_not_called()
+
+    def test_sidebar_responsive_collapse_on_narrow_window_is_not_saved(self) -> None:
+        from settings.mode import ZAPRET2_MODE
+        import ui.navigation.sidebar_builder as sidebar_builder
+        from ui.navigation.sidebar_state import store_warmed_sidebar_expanded
+
+        class FakeSignal:
+            def __init__(self) -> None:
+                self.connected = []
+
+            def connect(self, callback) -> None:
+                self.connected.append(callback)
+
+            def emit(self, display_mode) -> None:
+                for callback in self.connected:
+                    callback(display_mode)
+
+        class FakeNavigationInterface:
+            def __init__(self) -> None:
+                self.headers = []
+                self.displayModeChanged = FakeSignal()
+
+            def addItemHeader(self, text, position):
+                header = SimpleNamespace(text=text, position=position)
+                self.headers.append(header)
+                return header
+
+            def setMinimumExpandWidth(self, width) -> None:
+                self.minimum_expand_width = width
+
+            def expand(self, useAni=True) -> None:
+                _ = useAni
+
+        session = SimpleNamespace(
+            nav_scroll_position=None,
+            ui_language="ru",
+            sidebar_search_widget_cls=None,
+            nav_items={},
+            nav_headers=[],
+            nav_header_by_group={},
+            nav_mode_visibility={},
+            nav_search_query="",
+            sidebar_search_nav_widget=None,
+            sidebar_search_model=None,
+            sidebar_search_completer=None,
+            sidebar_search_titlebar_attached=False,
+            pages={},
+        )
+        nav = FakeNavigationInterface()
+        window = SimpleNamespace(
+            ui_session=session,
+            navigationInterface=nav,
+            get_launch_method=lambda: ZAPRET2_MODE,
+            width=lambda: 680,
+        )
+
+        store_warmed_sidebar_expanded(True)
+        self.addCleanup(store_warmed_sidebar_expanded, None)
+
+        with (
+            patch.object(
+                sidebar_builder,
+                "_schedule_sidebar_search_after_interactive",
+                side_effect=lambda current_window: None,
+            ),
+            patch.object(
+                sidebar_builder,
+                "_schedule_hidden_mode_nav_items_after_interactive",
+                side_effect=lambda current_window: None,
+            ),
+            patch.object(
+                sidebar_builder,
+                "add_nav_item",
+                side_effect=lambda current_window, page_name, *_args, **_kwargs: None,
+            ),
+            patch("settings.store.get_ui_state_settings", return_value={"sidebar_expanded": True}),
+        ):
+            create_worker = Mock()
+            session.sidebar_expanded_save_worker_factory = create_worker
+            sidebar_builder.init_navigation(window)
+            nav.displayModeChanged.emit(SimpleNamespace(name="COMPACT"))
+
+        create_worker.assert_not_called()
+        self.assertTrue(session.sidebar_intent_controller.intent)
 
     def test_sidebar_display_mode_save_is_queued_while_worker_runs(self) -> None:
         import ui.navigation.sidebar_builder as sidebar_builder
