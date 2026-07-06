@@ -251,6 +251,18 @@ class StrategyScanner:
 
     def run(self) -> StrategyScanReport:
         """Run the scan. Blocking — call from a background thread."""
+        from winws_runtime.runtime.scan_guard import mark_external_winws_scan_active
+
+        # The scanner owns the winws lifecycle for the whole scan window:
+        # it pre-kills running winws and spawns temporary winws2 instances.
+        # The flag keeps GUI-side death diagnostics/auto-restart silent.
+        mark_external_winws_scan_active(True)
+        try:
+            return self._run_scan()
+        finally:
+            mark_external_winws_scan_active(False)
+
+    def _run_scan(self) -> StrategyScanReport:
         t0 = time.monotonic()
 
         strategies, start_index, total_available = self._select_strategies(self._mode, self._start_index)

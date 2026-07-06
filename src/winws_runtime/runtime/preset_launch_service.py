@@ -16,10 +16,10 @@ from winws_runtime.runtime.system_ops import force_kill_all_winws_processes
 STARTUP_AUTOSTART_STABLE_WINDOW_SECONDS = 0.35
 
 
-def ensure_required_files_fast() -> bool:
+def ensure_required_files_fast(*, active_preset_path: str = "") -> bool:
     from lists.file_manager import ensure_required_files_fast as _ensure_required_files_fast
 
-    return bool(_ensure_required_files_fast())
+    return bool(_ensure_required_files_fast(active_preset_path=active_preset_path))
 
 
 @dataclass(frozen=True)
@@ -106,11 +106,18 @@ class PresetLaunchService:
             except Exception:
                 return
 
+        def _publish_unexpected_process_exit() -> None:
+            try:
+                self._runtime_feature.events.publish_unexpected_process_exit()
+            except Exception:
+                return
+
         configurator(
             transition_in_progress=self._runtime_feature.objects.transition_pipeline_in_progress,
             runner_failure=_publish_runner_failure,
             launch_error=_notify_launch_error,
             active_preset_content_changed=_publish_active_preset_content_changed,
+            unexpected_process_exit=_publish_unexpected_process_exit,
         )
 
     def _extract_preset_launch_input(self) -> tuple[bool, str]:
@@ -390,7 +397,7 @@ class PresetLaunchService:
             previous_process_running = self._has_previous_process()
 
             if is_preset_file:
-                ensure_required_files_fast()
+                ensure_required_files_fast(active_preset_path=preset_path)
 
             if previous_process_running:
                 if not self._validate_preset_before_stop(

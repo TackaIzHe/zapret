@@ -50,6 +50,9 @@ from utils.atomic_text import atomic_write_text
 _SETTINGS_LOCK = RLock()
 _SETTINGS_CACHE: dict[str, Any] | None = None
 _SETTINGS_CACHE_SIGNATURE: tuple[str, int | None, int | None] | None = None
+# Кэш, заполненный чтением с materialize=False, не гарантирует, что файл на
+# диске починен/создан — materialize-чтение обязано пройти мимо такого кэша.
+_SETTINGS_CACHE_MATERIALIZED = False
 _DIRECT_PRESET_SELECTION_PATHS = {
     ENGINE_WINWS1: ("program", SELECTED_SOURCE_PRESET_FILE_NAME_KEY_WINWS1),
     ENGINE_WINWS2: ("program", SELECTED_SOURCE_PRESET_FILE_NAME_KEY_WINWS2),
@@ -81,7 +84,7 @@ def _format_settings_json(data: dict[str, Any]) -> str:
 
 
 def _write_settings_file_locked(data: dict[str, Any]) -> None:
-    global _SETTINGS_CACHE, _SETTINGS_CACHE_SIGNATURE
+    global _SETTINGS_CACHE, _SETTINGS_CACHE_SIGNATURE, _SETTINGS_CACHE_MATERIALIZED
 
     normalized = _normalize_settings(data)
     path = get_settings_path()
@@ -89,6 +92,7 @@ def _write_settings_file_locked(data: dict[str, Any]) -> None:
     atomic_write_text(path, _format_settings_json(normalized), encoding="utf-8")
     _SETTINGS_CACHE = copy.deepcopy(normalized)
     _SETTINGS_CACHE_SIGNATURE = _settings_file_signature(path)
+    _SETTINGS_CACHE_MATERIALIZED = True
 
 
 def _read_settings_file_locked(*, materialize: bool = True) -> dict[str, Any]:
@@ -102,7 +106,10 @@ def _read_settings_file_locked(*, materialize: bool = True) -> dict[str, Any]:
     try:
         raw_text = path.read_text(encoding="utf-8")
         raw = json.loads(raw_text)
-    except Exception:
+    except Exception as exc:
+        # Перезапись дефолтами стирает user_profiles и прочие пользовательские
+        # данные — повреждённый оригинал обязан сохраниться рядом.
+        _backup_corrupt_settings_locked(path, exc)
         if materialize:
             _write_settings_file_locked(defaults)
         return defaults
@@ -116,16 +123,38 @@ def _read_settings_file_locked(*, materialize: bool = True) -> dict[str, Any]:
     return normalized
 
 
+def _backup_corrupt_settings_locked(path: Path, error: Exception) -> None:
+    backup_path = path.with_name(path.name + ".corrupt.bak")
+    try:
+        backup_path.write_bytes(path.read_bytes())
+    except OSError:
+        backup_path = None
+    try:
+        from log.log import log
+
+        target = f", копия: {backup_path}" if backup_path is not None else ", копию сохранить не удалось"
+        log(f"settings.json не читается ({error}); файл будет перезаписан дефолтами{target}", "ERROR")
+    except Exception:
+        pass
+
+
 def _read_settings_cached_locked(*, materialize: bool = True) -> dict[str, Any]:
-    global _SETTINGS_CACHE, _SETTINGS_CACHE_SIGNATURE
+    global _SETTINGS_CACHE, _SETTINGS_CACHE_SIGNATURE, _SETTINGS_CACHE_MATERIALIZED
 
     signature = _settings_file_signature()
-    if _SETTINGS_CACHE is not None and _SETTINGS_CACHE_SIGNATURE == signature:
+    if (
+        _SETTINGS_CACHE is not None
+        and _SETTINGS_CACHE_SIGNATURE == signature
+        and (_SETTINGS_CACHE_MATERIALIZED or not materialize)
+    ):
         return _SETTINGS_CACHE
 
     data = _read_settings_file_locked(materialize=materialize)
     _SETTINGS_CACHE = copy.deepcopy(data)
     _SETTINGS_CACHE_SIGNATURE = _settings_file_signature()
+    # Флаг описывает ИМЕННО этот снапшот: после materialize-чтения файл на
+    # диске гарантированно нормализован, после обычного — гарантий нет.
+    _SETTINGS_CACHE_MATERIALIZED = materialize
     return _SETTINGS_CACHE
 
 
@@ -345,6 +374,19 @@ def get_user_profiles_settings() -> dict[str, Any]:
 def set_user_profiles_settings(values: dict[str, Any]) -> dict[str, Any]:
     updated = _update_settings(lambda data: _set_path_value(data, ("user_profiles",), _as_dict(values)))
     return copy.deepcopy(updated["user_profiles"])
+
+
+def get_user_profiles_revision() -> str:
+    """Детерминированный токен состояния user_profiles для ключей кэшей.
+
+    Кэши, производные от пользовательских профилей, обязаны включать этот токен
+    в ключ вместо ручной инвалидации: токен меняется при любой записи секции,
+    в том числе из другого экземпляра сервиса или другого процесса.
+    """
+    with _SETTINGS_LOCK:
+        data = _read_settings_cached_locked(materialize=False)
+        payload = data.get("user_profiles") if isinstance(data, dict) else None
+        return json.dumps(payload or {}, ensure_ascii=False, sort_keys=True)
 
 
 def get_updater_settings() -> dict[str, Any]:

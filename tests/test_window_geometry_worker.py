@@ -21,7 +21,6 @@ class WindowGeometryWorkerTests(unittest.TestCase):
         geometry_runtime._cleanup_in_progress = False
         geometry_runtime._geometry_save_runtime = SimpleNamespace(request_id=7)
         geometry_runtime._last_persisted_maximized = None
-        geometry_runtime._pending_window_maximized_state = None
         geometry_runtime._last_persisted_geometry = None
         geometry_runtime._geometry_save_runtime = SimpleNamespace(request_id=7)
 
@@ -34,14 +33,12 @@ class WindowGeometryWorkerTests(unittest.TestCase):
 
         self.assertEqual(geometry_runtime._last_persisted_geometry, (10, 20, 800, 600))
         self.assertTrue(geometry_runtime._last_persisted_maximized)
-        self.assertTrue(geometry_runtime._pending_window_maximized_state)
 
     def test_stale_geometry_save_loaded_callback_is_ignored(self) -> None:
         import ui.window_geometry_runtime as runtime
 
         geometry_runtime = runtime.WindowGeometryRuntime.__new__(runtime.WindowGeometryRuntime)
         geometry_runtime._last_persisted_maximized = False
-        geometry_runtime._pending_window_maximized_state = False
         geometry_runtime._last_persisted_geometry = (1, 2, 300, 200)
         geometry_runtime._geometry_save_runtime = SimpleNamespace(request_id=8)
 
@@ -54,7 +51,6 @@ class WindowGeometryWorkerTests(unittest.TestCase):
 
         self.assertEqual(geometry_runtime._last_persisted_geometry, (1, 2, 300, 200))
         self.assertFalse(geometry_runtime._last_persisted_maximized)
-        self.assertFalse(geometry_runtime._pending_window_maximized_state)
 
     def test_regular_window_geometry_saves_run_through_worker(self) -> None:
         import main.window_lifecycle_setup as lifecycle_setup
@@ -70,7 +66,7 @@ class WindowGeometryWorkerTests(unittest.TestCase):
         lifecycle_source = inspect.getsource(lifecycle_setup.attach_window_lifecycle)
         runtime_source = inspect.getsource(runtime.WindowGeometryRuntime)
         persist_source = inspect.getsource(runtime.WindowGeometryRuntime._persist_geometry_now)
-        max_source = inspect.getsource(runtime.WindowGeometryRuntime._persist_window_maximized_state_now)
+        state_change_source = inspect.getsource(runtime.WindowGeometryRuntime.on_window_state_change)
         sync_source = inspect.getsource(runtime.WindowGeometryRuntime._persist_geometry_sync)
         request_source = inspect.getsource(runtime.WindowGeometryRuntime._request_geometry_save)
         start_source = inspect.getsource(runtime.WindowGeometryRuntime._start_geometry_save_worker)
@@ -86,7 +82,7 @@ class WindowGeometryWorkerTests(unittest.TestCase):
         self.assertNotIn("settings_store", worker_source)
         self.assertIn("_persist_geometry_sync", persist_source)
         self.assertIn("_request_geometry_save", persist_source)
-        self.assertIn("_request_geometry_save", max_source)
+        self.assertIn("_schedule_geometry_save", state_change_source)
         self.assertIn("_stop_geometry_save_worker_for_sync", sync_source)
         self.assertIn("_geometry_save_state_obj", request_source)
         self.assertIn("_geometry_save_runtime", request_source)
@@ -94,7 +90,11 @@ class WindowGeometryWorkerTests(unittest.TestCase):
         self.assertNotIn("worker.start()", start_source)
         self.assertNotIn("worker.deleteLater()", runtime_source)
         self.assertNotIn("self.store.save_geometry", persist_source)
-        self.assertNotIn("self.store.save_maximized", max_source)
+        # синхронные записи в store разрешены только внутри _persist_geometry_sync
+        self.assertEqual(runtime_source.count("self.store.save_geometry"), 1)
+        self.assertEqual(runtime_source.count("self.store.save_maximized"), 1)
+        self.assertIn("self.store.save_geometry", sync_source)
+        self.assertIn("self.store.save_maximized", sync_source)
 
     def test_geometry_save_pending_uses_shared_latest_worker_state(self) -> None:
         import ui.window_geometry_runtime as runtime

@@ -134,10 +134,12 @@ class ProfileListPayloadTests(unittest.TestCase):
         self.assertEqual(store.save_count, 1)
 
     def test_profile_folder_order_keeps_zero_order_first(self) -> None:
+        # Ранг папки приходит из единого резолвера (сохранённое состояние),
+        # а не из зашитых дефолтов.
         grouped = {
-            "discord": [object()],
-            "youtube": [object()],
-            "messengers": [object()],
+            "discord": [SimpleNamespace(group_rank=1)],
+            "youtube": [SimpleNamespace(group_rank=0)],
+            "messengers": [SimpleNamespace(group_rank=3)],
         }
 
         self.assertEqual(ordered_group_keys(grouped), ["youtube", "discord", "messengers"])
@@ -438,7 +440,10 @@ class ProfileListPayloadTests(unittest.TestCase):
 
             with (
                 patch("settings.store.MAIN_DIRECTORY", str(root)),
-                patch("profile.service.load_strategy_catalogs", return_value={}) as catalogs_loader,
+                patch(
+                    "profile.service.load_strategy_catalogs_with_signature",
+                    return_value=(("catalogs", "signature"), {}),
+                ) as catalogs_loader,
             ):
                 service = ProfilePresetService(feature, "zapret2_mode")
                 first_payload = service.list_profiles()
@@ -473,7 +478,10 @@ class ProfileListPayloadTests(unittest.TestCase):
 
             with (
                 patch("settings.store.MAIN_DIRECTORY", str(root)),
-                patch("profile.service.load_strategy_catalogs", return_value={}) as catalogs_loader,
+                patch(
+                    "profile.service.load_strategy_catalogs_with_signature",
+                    return_value=(("catalogs", "signature"), {}),
+                ) as catalogs_loader,
             ):
                 service = ProfilePresetService(feature, "zapret2_mode")
                 first_payload = service.list_profiles()
@@ -539,7 +547,10 @@ class ProfileListPayloadTests(unittest.TestCase):
             with (
                 patch("settings.store.MAIN_DIRECTORY", str(root)),
                 patch("profile.service.PROFILE_LIST_PAYLOAD_CACHE_LIMIT", 2, create=True),
-                patch("profile.service.load_strategy_catalogs", return_value={}),
+                patch(
+                    "profile.service.load_strategy_catalogs_with_signature",
+                    return_value=(("catalogs", "signature"), {}),
+                ),
             ):
                 service = ProfilePresetService(feature, "zapret2_mode")
                 service.list_profiles()
@@ -1108,8 +1119,10 @@ class ProfileListPayloadTests(unittest.TestCase):
         self.assertEqual(moved, discord.key)
         self.assertEqual(store.text, source_text)
         moved_discord = next(item for item in moved_payload.items if "discord" in " ".join(item.match_lines).lower())
-        self.assertTrue(moved_discord.order_is_manual)
+        moved_youtube = next(item for item in moved_payload.items if "youtube" in " ".join(item.match_lines).lower())
         self.assertEqual(moved_discord.group, "youtube")
+        self.assertEqual(moved_discord.order, 0)
+        self.assertEqual(moved_youtube.order, 1)
 
     def test_profile_move_inside_folder_does_not_pull_other_default_groups(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -1453,7 +1466,10 @@ class ProfileListPayloadTests(unittest.TestCase):
         self.assertIsNone(moved)
         self.assertEqual(store.text, source_text)
 
-    def test_profile_raw_text_update_rejects_ambiguous_logical_key(self) -> None:
+    def test_profile_raw_text_update_targets_first_duplicate_deterministically(self) -> None:
+        """Дубликаты имён больше не дают неоднозначности: базовый ключ
+        детерминированно принадлежит первому профилю, у остальных — уникальные
+        суффиксы (см. _assign_profile_keys)."""
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             templates_dir = root / "profile" / "templates"
@@ -1482,6 +1498,7 @@ class ProfileListPayloadTests(unittest.TestCase):
 
             with patch("settings.store.MAIN_DIRECTORY", str(root)):
                 service = ProfilePresetService(feature, "zapret2_mode")
+                second_key_before = service.load_selected_preset()[0].profiles[1].persistent_key
                 updated = service.update_profile_raw_text(
                     "name:Same",
                     "\n".join(
@@ -1493,9 +1510,14 @@ class ProfileListPayloadTests(unittest.TestCase):
                         )
                     ),
                 )
+                preset_after, _manifest = service.load_selected_preset()
 
-        self.assertIsNone(updated)
-        self.assertEqual(store.text, source_text)
+        self.assertEqual(updated, "profile:0")
+        self.assertIn("--lua-desync=split", [segment.text for segment in preset_after.profiles[0].segments])
+        # Второй дубликат не тронут и сохранил свой уникальный ключ.
+        self.assertIn("--lua-desync=fake", [segment.text for segment in preset_after.profiles[1].segments])
+        self.assertEqual(preset_after.profiles[1].persistent_key, second_key_before)
+        self.assertNotEqual(preset_after.profiles[1].persistent_key, "name:Same")
 
     def test_profile_setup_reads_strategy_feedback_in_one_batch(self) -> None:
         class _StateStore:
@@ -1555,6 +1577,236 @@ class ProfileListPayloadTests(unittest.TestCase):
         self.assertEqual(len(payload.strategy_entries), 80)
         self.assertEqual(state_store.batch_calls, 1)
         self.assertLessEqual(state_store.single_calls, 1)
+
+
+class ProfileDerivedCacheTests(unittest.TestCase):
+    """Контентный кэш производных данных профиля: пересчёт только изменённого."""
+
+    @staticmethod
+    def _make_environment(root: Path, files: dict[str, str], selected: str):
+        templates_dir = root / "profile" / "templates"
+        templates_dir.mkdir(parents=True)
+        (templates_dir / "all_profiles.txt").write_text("", encoding="utf-8")
+        store = _SwitchableFileBackedPresetStore(root, files, selected=selected)
+        feature = SimpleNamespace(
+            _presets_feature=store,
+            _app_paths=AppPaths(user_root=root, local_root=root),
+        )
+        return store, feature
+
+    @staticmethod
+    def _profile_text(name: str, match_line: str) -> tuple[str, ...]:
+        return (
+            f"--name={name}",
+            match_line,
+            "--lua-desync=pass",
+            "",
+        )
+
+    def test_preset_switch_reuses_derived_cores_of_unchanged_profiles(self) -> None:
+        import profile.derived_cache as profile_derived_cache_module
+
+        real_entries = profile_derived_cache_module.basic_strategy_entries
+        computed_names: list[str] = []
+
+        def counting_entries(profile, catalogs):
+            computed_names.append(str(getattr(profile, "name", "") or ""))
+            return real_entries(profile, catalogs)
+
+        alpha = self._profile_text("Alpha", "--filter-tcp=80,443")
+        beta = self._profile_text("Beta", "--filter-udp=443")
+        gamma = self._profile_text("Gamma", "--filter-tcp=8443")
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            store, feature = self._make_environment(
+                root,
+                {
+                    "first.txt": "\n".join((*alpha, "--new", *beta)),
+                    "second.txt": "\n".join((*alpha, "--new", *gamma)),
+                },
+                selected="first.txt",
+            )
+
+            with (
+                patch("settings.store.MAIN_DIRECTORY", str(root)),
+                patch("profile.derived_cache.basic_strategy_entries", new=counting_entries),
+            ):
+                service = ProfilePresetService(feature, "zapret2_mode")
+                service.list_profiles()
+                first_computed = list(computed_names)
+
+                computed_names.clear()
+                store.selected = "second.txt"
+                service.list_profiles()
+                second_computed = list(computed_names)
+
+                computed_names.clear()
+                store.selected = "first.txt"
+                service.list_profiles()
+                back_computed = list(computed_names)
+
+        self.assertIn("Alpha", first_computed)
+        self.assertIn("Beta", first_computed)
+        self.assertIn("Gamma", second_computed)
+        self.assertNotIn("Alpha", second_computed, "неизменённый профиль не должен пересчитываться при смене пресета")
+        self.assertEqual(back_computed, [], "возврат на прогретый пресет не должен пересчитывать профили")
+
+    def test_profile_content_change_recomputes_only_changed_profile(self) -> None:
+        import profile.derived_cache as profile_derived_cache_module
+
+        real_entries = profile_derived_cache_module.basic_strategy_entries
+        computed_names: list[str] = []
+
+        def counting_entries(profile, catalogs):
+            computed_names.append(str(getattr(profile, "name", "") or ""))
+            return real_entries(profile, catalogs)
+
+        alpha = self._profile_text("Alpha", "--filter-tcp=80,443")
+        beta = self._profile_text("Beta", "--filter-udp=443")
+        beta_changed = self._profile_text("Beta", "--filter-udp=443,50000-50100")
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            store, feature = self._make_environment(
+                root,
+                {"selected.txt": "\n".join((*alpha, "--new", *beta))},
+                selected="selected.txt",
+            )
+
+            with (
+                patch("settings.store.MAIN_DIRECTORY", str(root)),
+                patch("profile.derived_cache.basic_strategy_entries", new=counting_entries),
+            ):
+                service = ProfilePresetService(feature, "zapret2_mode")
+                service.list_profiles()
+
+                computed_names.clear()
+                (root / "selected.txt").write_text("\n".join((*alpha, "--new", *beta_changed)), encoding="utf-8")
+                service.list_profiles()
+                recomputed = list(computed_names)
+
+        self.assertIn("Beta", recomputed)
+        self.assertNotIn("Alpha", recomputed, "изменение одного профиля не должно пересчитывать остальные")
+
+    def test_profile_setup_reuses_prepared_sources_and_cores(self) -> None:
+        import profile.derived_cache as profile_derived_cache_module
+
+        real_entries = profile_derived_cache_module.basic_strategy_entries
+        real_sources = profile_derived_cache_module.build_profile_list_sources
+        entries_calls: list[str] = []
+        sources_calls: list[int] = []
+
+        def counting_entries(profile, catalogs):
+            entries_calls.append(str(getattr(profile, "name", "") or ""))
+            return real_entries(profile, catalogs)
+
+        def counting_sources(profiles, templates):
+            sources_calls.append(len(tuple(profiles)))
+            return real_sources(profiles, templates)
+
+        alpha = self._profile_text("Alpha", "--filter-tcp=80,443")
+        beta = self._profile_text("Beta", "--filter-udp=443")
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            _store, feature = self._make_environment(
+                root,
+                {"selected.txt": "\n".join((*alpha, "--new", *beta))},
+                selected="selected.txt",
+            )
+
+            with (
+                patch("settings.store.MAIN_DIRECTORY", str(root)),
+                patch("profile.derived_cache.basic_strategy_entries", new=counting_entries),
+                patch("profile.derived_cache.build_profile_list_sources", new=counting_sources),
+            ):
+                service = ProfilePresetService(feature, "zapret2_mode")
+                payload = service.list_profiles()
+                profile_keys = tuple(item.key for item in payload.items)
+                sources_after_list = len(sources_calls)
+                entries_after_list = len(entries_calls)
+
+                for profile_key in profile_keys:
+                    self.assertIsNotNone(service.get_profile_setup(profile_key))
+
+        self.assertGreaterEqual(sources_after_list, 1)
+        self.assertEqual(
+            len(sources_calls),
+            sources_after_list,
+            "get_profile_setup не должен пересобирать sources после построения списка",
+        )
+        self.assertEqual(
+            len(entries_calls),
+            entries_after_list,
+            "get_profile_setup не должен пересчитывать контентное ядро после построения списка",
+        )
+
+
+class FolderStateHotPathTests(unittest.TestCase):
+    """Горячий цикл сборки списка не пере-нормализует состояние папок."""
+
+    def test_folder_helpers_trust_normalized_state(self) -> None:
+        import inspect
+
+        from profile.folders import profile_folder_collapsed, profile_folder_for_profile
+
+        for helper in (profile_folder_for_profile, profile_folder_collapsed):
+            source = inspect.getsource(helper)
+            self.assertNotIn(
+                "normalize_folder_state(",
+                source,
+                f"{helper.__name__} не должен нормализовать состояние на каждый вызов",
+            )
+
+    def test_folder_helper_loads_state_when_none(self) -> None:
+        from unittest.mock import patch as mock_patch
+
+        from profile import folders as folders_module
+
+        normalized = {"folders": {"youtube": {"name": "YouTube", "collapsed": True}}, "items": {}}
+        with mock_patch.object(folders_module, "load_profile_folder_state", return_value=normalized) as loader:
+            self.assertTrue(folders_module.profile_folder_collapsed("youtube", None))
+            loader.assert_called_once_with()
+        # переданный dict используется как есть, без загрузки
+        with mock_patch.object(folders_module, "load_profile_folder_state") as loader:
+            self.assertTrue(folders_module.profile_folder_collapsed("youtube", normalized))
+            loader.assert_not_called()
+
+
+class CatalogIdentityCacheTests(unittest.TestCase):
+    """Identity записей каталога считается один раз на запись, не профили×каталог."""
+
+    def test_catalog_identity_lines_computed_once_per_entry(self) -> None:
+        from types import SimpleNamespace
+
+        from profile.derived_cache import _entry_identity_lines, resolve_strategy
+        from profile.strategy_catalog import StrategyEntry
+        from settings.mode import ENGINE_WINWS2
+
+        entries = {
+            f"strategy_{i}": StrategyEntry(
+                strategy_id=f"strategy_{i}",
+                catalog_name="tcp",
+                name=f"Strategy {i}",
+                args=f"--lua-desync=multidisorder:pos={i}:repeats=10",
+                visual=None,
+            )
+            for i in range(5)
+        }
+        profiles = [
+            SimpleNamespace(
+                engine=ENGINE_WINWS2,
+                strategy=SimpleNamespace(strategy_lines=(f"--lua-desync=multidisorder:pos={i}:repeats=10",)),
+            )
+            for i in range(3)
+        ]
+
+        _entry_identity_lines.cache_clear()
+        for profile in profiles:
+            strategy_id, _name = resolve_strategy(profile, entries)
+            self.assertTrue(strategy_id.startswith("strategy_"))
+
+        info = _entry_identity_lines.cache_info()
+        self.assertEqual(info.misses, len(entries), "identity должен считаться один раз на запись каталога")
+        self.assertEqual(info.hits, len(entries) * (len(profiles) - 1))
 
 
 if __name__ == "__main__":

@@ -118,6 +118,14 @@ def ensure_qt_runtime() -> QApplication:
         "StartupQtInfoBarDuration",
         f"{(_time.perf_counter() - t_infobar_duration) * 1000:.0f}ms",
     )
+    t_infobar_layout = _time.perf_counter()
+    from ui.infobar_layout import install_infobar_adaptive_layout
+
+    install_infobar_adaptive_layout()
+    emit_startup_metric(
+        "StartupQtInfoBarLayout",
+        f"{(_time.perf_counter() - t_infobar_layout) * 1000:.0f}ms",
+    )
     t_combo_guard = _time.perf_counter()
     from ui.combo_popup_guard import install_global_combo_popup_closer
 
@@ -203,6 +211,30 @@ def application_bootstrap() -> QApplication:
     emit_startup_metric(
         "StartupQtThemeMode",
         f"{(_time.perf_counter() - t_theme) * 1000:.0f}ms",
+    )
+
+    t_round_menu_hairline = _time.perf_counter()
+    try:
+        from ui.popup_menu_style import install_global_round_menu_hairline_fix
+
+        install_global_round_menu_hairline_fix(app)
+    except Exception:
+        pass
+    emit_startup_metric(
+        "StartupQtRoundMenuHairlineFix",
+        f"{(_time.perf_counter() - t_round_menu_hairline) * 1000:.0f}ms",
+    )
+
+    t_smooth_scroll_policy = _time.perf_counter()
+    try:
+        from ui.smooth_scroll import install_global_smooth_scroll_policy
+
+        install_global_smooth_scroll_policy()
+    except Exception:
+        pass
+    emit_startup_metric(
+        "StartupQtSmoothScrollPolicy",
+        f"{(_time.perf_counter() - t_smooth_scroll_policy) * 1000:.0f}ms",
     )
 
     t_accent = _time.perf_counter()

@@ -26,6 +26,19 @@ class PresetProfileMoveResult:
         return False
 
 
+def profile_reference_key(item: Any) -> str:
+    """Стабильная ссылка на элемент списка профилей.
+
+    Для профиля пресета — persistent_key (переживает перестановки и удаления
+    соседей); для шаблона — его template-ключ. Позиционный "profile:N" как
+    ссылка опасен: после сдвига индексов он резолвится в чужой профиль."""
+    if bool(getattr(item, "in_preset", False)):
+        persistent = str(getattr(item, "persistent_key", "") or "").strip()
+        if persistent:
+            return persistent
+    return str(getattr(item, "key", "") or "").strip()
+
+
 def resolve_preset_profile_row_index(preset: Preset, profile_key: str) -> int | None:
     key = str(profile_key or "").strip()
     if not key:
@@ -178,6 +191,7 @@ __all__ = [
     "PresetProfileMoveResult",
     "build_preset_profile_key_map",
     "find_profile_list_source",
+    "profile_reference_key",
     "preset_profile_move_key_map",
     "preset_profile_move_result_key",
     "profile_order_row_identity",

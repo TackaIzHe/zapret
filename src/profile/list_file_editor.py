@@ -103,9 +103,14 @@ def read_profile_list_file_text_parts(lists_root: Path, reference: ProfileListFi
     paths = layered_list_file(lists_root, reference.file_name)
     user_text = read_profile_user_list_text(lists_root, reference.file_name)
     base_text = read_text_file_safe(str(paths.base_path)) or ""
-    final_text = read_text_file_safe(str(paths.final_path)) or ""
-    if not final_text and (base_text or user_text):
+    # Превью «итогового» текста собирается из живых слоёв: файл lists/<file>
+    # на диске может отставать (чтение больше не пересобирает его). Диск
+    # используется только когда слоёв нет вовсе — например, скачанный список
+    # без base/user.
+    if base_text or user_text:
         final_text = _join_visible_layers(base_text, user_text)
+    else:
+        final_text = read_text_file_safe(str(paths.final_path)) or ""
     return ProfileListFileText(
         final_text=final_text,
         base_text=base_text,

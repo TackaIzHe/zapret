@@ -40,10 +40,9 @@ class UserPresetsRuntimeAdapter:
     apply_rows_plan: Callable[[object, float | None], None]
 
 
-@dataclass(slots=True)
-class UserPresetsWatcherSyncPlan:
-    remove_paths: list[str]
-    add_paths: list[str]
+# Больше этого числа затронутых файлов за один батч событий — точечные
+# обновления теряют смысл, дешевле одна полная перезагрузка списка.
+_WATCH_EVENTS_FULL_RELOAD_THRESHOLD = 8
 
 
 class UserPresetsMetadataLoadWorker(QThread):
@@ -154,7 +153,14 @@ class UserPresetsRowsPlanWorker(QThread):
         self.loaded.emit(self._request_id, plan, self._started_at)
 
 
-class UserPresetsWatcherSyncPlanWorker(QThread):
+class UserPresetsDirDiffWorker(QThread):
+    """Считает diff каталога пресетов для fallback-режима QFileSystemWatcher.
+
+    QFSW сообщает только «каталог изменился» без имён, поэтому воркер сверяет
+    scandir-снапшот (имя → (mtime_ns, size)) с предыдущим и возвращает список
+    изменённых имён. Результат: (snapshot, changed_names, is_initial).
+    """
+
     loaded = pyqtSignal(int, object)
     failed = pyqtSignal(int, str)
 
@@ -163,36 +169,51 @@ class UserPresetsWatcherSyncPlanWorker(QThread):
         request_id: int,
         *,
         presets_dir: Path,
-        file_names: set[str],
-        current_paths: set[str],
+        previous_snapshot: dict[str, tuple[int, int]] | None,
         parent=None,
     ):
         super().__init__(parent)
         self._request_id = int(request_id)
         self._presets_dir = Path(presets_dir)
-        self._file_names = {
-            str(file_name or "").strip()
-            for file_name in (file_names or set())
-            if str(file_name or "").strip()
-        }
-        self._current_paths = {str(path or "").strip() for path in (current_paths or set()) if str(path or "").strip()}
+        self._previous_snapshot = dict(previous_snapshot) if previous_snapshot is not None else None
 
     def run(self) -> None:
+        import os
+
         try:
-            desired_paths = {
-                str(self._presets_dir / file_name)
-                for file_name in self._file_names
-                if file_name
-            }
-            current_paths = set(self._current_paths)
-            plan = UserPresetsWatcherSyncPlan(
-                remove_paths=sorted(current_paths - desired_paths),
-                add_paths=sorted(desired_paths - current_paths),
-            )
+            snapshot: dict[str, tuple[int, int]] = {}
+            try:
+                with os.scandir(self._presets_dir) as scanner:
+                    for entry in scanner:
+                        if not entry.is_file() or not entry.name.lower().endswith(".txt"):
+                            continue
+                        try:
+                            stat_result = entry.stat()
+                            snapshot[entry.name] = (
+                                int(getattr(stat_result, "st_mtime_ns", 0) or 0),
+                                int(getattr(stat_result, "st_size", 0) or 0),
+                            )
+                        except Exception:
+                            snapshot[entry.name] = (0, 0)
+            except FileNotFoundError:
+                snapshot = {}
+
+            previous = self._previous_snapshot
+            if previous is None:
+                changed_names: list[str] = []
+            else:
+                changed_names = sorted(
+                    (set(snapshot) ^ set(previous))
+                    | {
+                        name
+                        for name in set(snapshot) & set(previous)
+                        if snapshot[name] != previous[name]
+                    }
+                )
         except Exception as exc:
             self.failed.emit(self._request_id, str(exc))
             return
-        self.loaded.emit(self._request_id, plan)
+        self.loaded.emit(self._request_id, (snapshot, changed_names, self._previous_snapshot is None))
 
 
 class UserPresetsRuntimeService:
@@ -219,16 +240,15 @@ class UserPresetsRuntimeService:
         self._pending_rows_plan_apply: tuple[object, float | None, object] | None = None
         self._current_preset_index_scheduled = False
         self._pending_current_preset_index: tuple[str, object] | None = None
-        self._watched_preset_files_sync_state = LatestValueWorkerState(None, empty_value=None, pending=None)
-        self._watched_preset_files_sync_batch_state = LatestValueWorkerState(None, empty_value=None, pending=None)
-        self._watched_preset_files_sync_batch_size = 64
-        self._watched_preset_files_sync_plan_request_id = 0
-        self._watched_preset_files_sync_plan_runtime = OneShotWorkerRuntime()
-        self._watched_preset_files_sync_plan_state = LatestValueWorkerState(
-            self._watched_preset_files_sync_plan_runtime,
-            empty_value=None,
-            pending=None,
-        )
+        self._watcher_mode = ""
+        self._native_watcher = None
+        self._watch_flush_timer = None
+        self._pending_watch_event_names: set[str] = set()
+        self._pending_watch_overflow = False
+        self._user_dir_snapshot: dict[str, tuple[int, int]] | None = None
+        self._dir_diff_request_id = 0
+        self._dir_diff_runtime = OneShotWorkerRuntime()
+        self._dir_diff_state = LatestValueWorkerState(self._dir_diff_runtime, empty_value=None, pending=None)
 
     def is_ui_dirty(self) -> bool:
         return bool(self._ui_dirty)
@@ -282,7 +302,7 @@ class UserPresetsRuntimeService:
             current_page = None
 
         self._attached_adapter = adapter
-        if current_page is page and self._watcher_reload_timer is not None:
+        if current_page is page and self._watcher_reload_timer is not None and self._watch_flush_timer is not None:
             return
         self._attached_page_ref = self._make_page_ref(page)
         try:
@@ -294,6 +314,15 @@ class UserPresetsRuntimeService:
             self._watcher_reload_timer = timer
         except Exception:
             self._watcher_reload_timer = None
+        try:
+            from PyQt6.QtCore import QTimer
+
+            flush_timer = QTimer(page)
+            flush_timer.setSingleShot(True)
+            flush_timer.timeout.connect(lambda p=page: self._flush_pending_watch_events(p))
+            self._watch_flush_timer = flush_timer
+        except Exception:
+            self._watch_flush_timer = None
 
     def on_store_changed(self, page=None) -> None:
         page = self._resolve_page(page)
@@ -388,6 +417,10 @@ class UserPresetsRuntimeService:
         page = self._resolve_page(page)
         adapter = self._resolve_adapter()
         if refreshed is None:
+            # Файл исчез из обеих папок (user и builtin) — точечное удаление
+            # строки, полная перезагрузка только если модель его не знает.
+            if self.remove_deleted_preset_locally(file_name, page):
+                return
             self._ui_dirty = True
             if page.isVisible():
                 self.schedule_presets_reload(page, 0)
@@ -400,7 +433,6 @@ class UserPresetsRuntimeService:
         if had_cached_metadata and previous_metadata == metadata:
             return
         self._cached_presets_metadata[normalized_file_name] = metadata
-        self._schedule_watched_preset_files_sync(page)
         if page.isVisible():
             if self.try_apply_single_preset_metadata_update(
                 normalized_file_name,
@@ -691,43 +723,81 @@ class UserPresetsRuntimeService:
                 return
 
             presets_dir = adapter.presets_dir()
-
-            if not self._file_watcher:
-                from PyQt6.QtCore import QFileSystemWatcher
-
-                watcher = QFileSystemWatcher(page)
-                watcher.directoryChanged.connect(
-                    lambda path: self.on_presets_dir_changed(path)
-                )
-                watcher.fileChanged.connect(
-                    lambda path: self.on_preset_file_changed(path)
-                )
-                self._file_watcher = watcher
-
-            dir_path = str(presets_dir)
-            directory_watched = True
-            if dir_path not in self._file_watcher.directories():
-                directory_watched = bool(self._file_watcher.addPath(dir_path))
-            if not directory_watched:
-                self._ui_dirty = True
-                if (
-                    not self.__dict__.get("_watcher_directory_prepare_requested", False)
-                    and not self.__dict__.get("_watcher_directory_prepare_retry_from_metadata", False)
-                ):
-                    self._watcher_directory_prepare_requested = True
-                    self.load_presets(page)
+            if self._start_native_watcher(page, presets_dir):
+                self._watcher_mode = "native"
+                self._watcher_active = True
+                self._watcher_directory_prepare_requested = False
                 return
-
-            self.sync_watched_preset_files(page)
-            self._watcher_directory_prepare_requested = False
-            self._watcher_active = True
+            self._start_fallback_watcher(page, presets_dir)
         except Exception as e:
             log(f"Ошибка запуска мониторинга пресетов: {e}", "DEBUG")
+
+    def _start_native_watcher(self, page, presets_dir) -> bool:
+        try:
+            from presets.native_dir_watcher import NativePresetsDirWatcher
+        except Exception:
+            return False
+        try:
+            watcher = NativePresetsDirWatcher(presets_dir, page)
+            watcher.events.connect(lambda events, p=page: self._on_native_watch_events(events, p))
+            watcher.overflowed.connect(lambda p=page: self._on_native_watch_overflowed(p))
+            watcher.failed.connect(lambda error, p=page: self._on_native_watch_failed(error, p))
+            if not watcher.start_watching():
+                watcher.deleteLater()
+                return False
+        except Exception:
+            return False
+        self._native_watcher = watcher
+        return True
+
+    def _start_fallback_watcher(self, page, presets_dir) -> None:
+        # QFSW сообщает только «каталог изменился» — имена изменённых файлов
+        # восстанавливает UserPresetsDirDiffWorker по scandir-снапшоту.
+        if not self._file_watcher:
+            from PyQt6.QtCore import QFileSystemWatcher
+
+            watcher = QFileSystemWatcher(page)
+            watcher.directoryChanged.connect(
+                lambda path: self.on_presets_dir_changed(path)
+            )
+            self._file_watcher = watcher
+
+        dir_path = str(presets_dir)
+        directory_watched = True
+        if dir_path not in self._file_watcher.directories():
+            directory_watched = bool(self._file_watcher.addPath(dir_path))
+        if not directory_watched:
+            self._ui_dirty = True
+            if (
+                not self.__dict__.get("_watcher_directory_prepare_requested", False)
+                and not self.__dict__.get("_watcher_directory_prepare_retry_from_metadata", False)
+            ):
+                self._watcher_directory_prepare_requested = True
+                self.load_presets(page)
+            return
+
+        self._watcher_directory_prepare_requested = False
+        self._user_dir_snapshot = None
+        self._watcher_mode = "qfsw"
+        self._watcher_active = True
 
     def stop_watching_presets(self, page=None) -> None:
         _ = self._resolve_page(page)
         try:
             self._stop_metadata_workers()
+            self._pending_watch_event_names = set()
+            self._pending_watch_overflow = False
+            flush_timer = self._watch_flush_timer
+            if flush_timer is not None:
+                flush_timer.stop()
+            native_watcher = self._native_watcher
+            self._native_watcher = None
+            if native_watcher is not None:
+                try:
+                    native_watcher.stop_watching()
+                    native_watcher.deleteLater()
+                except Exception:
+                    pass
             if not self._watcher_active:
                 timer = self._watcher_reload_timer
                 if timer is not None:
@@ -745,9 +815,180 @@ class UserPresetsRuntimeService:
                 if files:
                     self._file_watcher.removePaths(files)
             self._watcher_active = False
+            self._watcher_mode = ""
             self._ui_dirty = True
         except Exception as e:
             log(f"Ошибка остановки мониторинга пресетов: {e}", "DEBUG")
+
+    def _on_native_watch_events(self, events, page=None) -> None:
+        page = self._resolve_page(page)
+        try:
+            for _action, name in list(events or []):
+                file_name = str(name or "").strip()
+                if not file_name.lower().endswith(".txt"):
+                    continue
+                if "\\" in file_name or "/" in file_name:
+                    continue
+                self._pending_watch_event_names.add(file_name)
+            if self._pending_watch_event_names or self._pending_watch_overflow:
+                self._restart_watch_flush_timer(page)
+        except Exception as e:
+            log(f"Ошибка обработки событий каталога пресетов: {e}", "DEBUG")
+
+    def _on_native_watch_overflowed(self, page=None) -> None:
+        page = self._resolve_page(page)
+        self._pending_watch_overflow = True
+        self._restart_watch_flush_timer(page)
+
+    def _on_native_watch_failed(self, error: str, page=None) -> None:
+        page = self._resolve_page(page)
+        log(f"Нативный мониторинг пресетов недоступен ({error}), переключаюсь на QFileSystemWatcher", "DEBUG")
+        watcher = self._native_watcher
+        self._native_watcher = None
+        if watcher is not None:
+            try:
+                watcher.deleteLater()
+            except Exception:
+                pass
+        self._watcher_active = False
+        self._watcher_mode = ""
+        try:
+            adapter = self._resolve_adapter()
+            self._start_fallback_watcher(page, adapter.presets_dir())
+        except Exception as e:
+            log(f"Ошибка запуска fallback-мониторинга пресетов: {e}", "DEBUG")
+        # Между падением и fallback-ом события могли потеряться.
+        self._ui_dirty = True
+        self.schedule_presets_reload(page, 0)
+
+    def _restart_watch_flush_timer(self, page=None, delay_ms: int = 300) -> None:
+        page = self._resolve_page(page)
+        try:
+            if self._watch_flush_timer is None:
+                self.attach_page(page, self._resolve_adapter())
+            if self._watch_flush_timer is None:
+                raise RuntimeError("watch flush timer not initialized")
+            self._watch_flush_timer.stop()
+            self._watch_flush_timer.start(delay_ms)
+        except Exception as e:
+            log(f"Ошибка планирования обработки событий пресетов: {e}", "DEBUG")
+
+    def _flush_pending_watch_events(self, page=None) -> None:
+        page = self._resolve_page(page)
+        overflow = bool(self._pending_watch_overflow)
+        names = set(self._pending_watch_event_names)
+        self._pending_watch_overflow = False
+        self._pending_watch_event_names = set()
+        if self._watcher_mode == "qfsw":
+            self._request_user_dir_diff(page)
+            return
+        self._apply_watch_event_names(names, overflow=overflow, page=page)
+
+    def _apply_watch_event_names(self, names: set[str], *, overflow: bool, page=None) -> None:
+        page = self._resolve_page(page)
+        adapter = self._resolve_adapter()
+        if adapter.bulk_reset_running():
+            self._ui_dirty = True
+            return
+        if overflow or len(names) > _WATCH_EVENTS_FULL_RELOAD_THRESHOLD:
+            log(
+                f"Изменений пресетов слишком много (overflow={overflow}, файлов={len(names)}) — полная перезагрузка",
+                "DEBUG",
+            )
+            self._ui_dirty = True
+            self.schedule_presets_reload(page, 0)
+            return
+        for file_name in sorted(names):
+            self._request_single_metadata_refresh(file_name, page)
+
+    def _request_user_dir_diff(self, page=None) -> None:
+        page = self._resolve_page(page)
+        adapter = self._resolve_adapter()
+        state = self._dir_diff_state_obj()
+        if state.is_busy():
+            state.pending = page
+            return
+
+        presets_dir = adapter.presets_dir()
+
+        def bind_worker(worker) -> None:
+            worker.loaded.connect(lambda rid, result, p=page: self._on_user_dir_diff_loaded(rid, result, p))
+            worker.failed.connect(lambda rid, error, p=page: self._on_user_dir_diff_failed(rid, error, p))
+
+        request_id, _worker = self._dir_diff_runtime.start_qthread_worker(
+            worker_factory=lambda request_id: UserPresetsDirDiffWorker(
+                request_id,
+                presets_dir=presets_dir,
+                previous_snapshot=self._user_dir_snapshot,
+                parent=page,
+            ),
+            bind_worker=bind_worker,
+            on_finished=self._on_user_dir_diff_worker_finished,
+        )
+        self._dir_diff_request_id = request_id
+
+    def _on_user_dir_diff_loaded(self, request_id: int, result, page=None) -> None:
+        if request_id != self._dir_diff_request_id:
+            return
+        if self._dir_diff_state_obj().has_pending():
+            return
+        page = self._resolve_page(page)
+        snapshot, changed_names, is_initial = result
+        self._user_dir_snapshot = dict(snapshot or {})
+        names = {str(name) for name in (changed_names or []) if str(name)}
+        if is_initial:
+            # Первый diff после (пере)загрузки: базы для сравнения mtime нет,
+            # но добавления/удаления восстанавливаются по кэшу метаданных.
+            cached_user = {
+                str(name)
+                for name, meta in self._cached_presets_metadata.items()
+                if isinstance(meta, dict) and not meta.get("is_builtin", False)
+            }
+            scan_by_key = {name.casefold(): name for name in (snapshot or {})}
+            cached_by_key = {name.casefold(): name for name in cached_user}
+            names |= {scan_by_key[key] for key in scan_by_key.keys() - cached_by_key.keys()}
+            names |= {cached_by_key[key] for key in cached_by_key.keys() - scan_by_key.keys()}
+        if not names:
+            return
+        self._apply_watch_event_names(names, overflow=False, page=page)
+
+    def _on_user_dir_diff_failed(self, request_id: int, error: str, page=None) -> None:
+        if request_id != self._dir_diff_request_id:
+            return
+        page = self._resolve_page(page)
+        log(f"Ошибка diff каталога пресетов: {error}", "DEBUG")
+        self._ui_dirty = True
+        self.schedule_presets_reload(page)
+
+    def _on_user_dir_diff_worker_finished(self, worker: UserPresetsDirDiffWorker) -> None:
+        self._dir_diff_state_obj().schedule_pending_after_finish(
+            worker,
+            is_current_worker_finish=lambda _runtime, finished_worker: self._is_current_worker_finish(
+                finished_worker,
+                "_dir_diff_request_id",
+            ),
+            single_shot=self._single_shot_or_run,
+            run_scheduled=self._run_scheduled_user_dir_diff,
+        )
+
+    def _run_scheduled_user_dir_diff(self) -> None:
+        pending_page = self._dir_diff_state_obj().take_pending_for_scheduled_start()
+        if pending_page is None:
+            return
+        self._request_user_dir_diff(pending_page)
+
+    def _dir_diff_state_obj(self) -> LatestValueWorkerState:
+        state = self.__dict__.get("_dir_diff_state")
+        runtime = self.__dict__.get("_dir_diff_runtime")
+        if state is None:
+            if runtime is None:
+                runtime = OneShotWorkerRuntime()
+                self._dir_diff_runtime = runtime
+            state = LatestValueWorkerState(runtime, empty_value=None, pending=None)
+            self.__dict__["_dir_diff_state"] = state
+        elif getattr(state, "runtime", None) is None and runtime is not None:
+            state.runtime = runtime
+        return state
 
     def _stop_metadata_workers(self) -> None:
         self._metadata_load_request_id += 1
@@ -758,15 +999,13 @@ class UserPresetsRuntimeService:
         self._rows_plan_state_obj().reset()
         self._rows_plan_apply_scheduled = False
         self._pending_rows_plan_apply = None
-        self._watched_preset_files_sync_plan_request_id += 1
-        self._watched_preset_files_sync_state_obj().reset()
-        self._watched_preset_files_sync_plan_state_obj().reset()
-        self._watched_preset_files_sync_batch_state_obj().reset()
+        self._dir_diff_request_id += 1
+        self._dir_diff_state_obj().reset()
         for attr, warning_prefix in (
             ("_metadata_load_runtime", "user presets metadata load worker"),
             ("_single_metadata_runtime", "user presets single metadata worker"),
             ("_rows_plan_runtime", "user presets rows plan worker"),
-            ("_watched_preset_files_sync_plan_runtime", "user presets watcher sync plan worker"),
+            ("_dir_diff_runtime", "user presets dir diff worker"),
         ):
             runtime = getattr(self, attr, None)
             if runtime is not None:
@@ -777,24 +1016,9 @@ class UserPresetsRuntimeService:
         page = self._resolve_page(page)
         try:
             log(f"Обнаружены изменения в папке пресетов: {path}", "DEBUG")
-            self.schedule_presets_reload(page)
+            self._restart_watch_flush_timer(page)
         except Exception as e:
             log(f"Ошибка обработки изменений папки пресетов: {e}", "DEBUG")
-
-    def on_preset_file_changed(self, path: str, page=None) -> None:
-        page = self._resolve_page(page)
-        try:
-            changed_path = Path(path)
-            if self._file_watcher is not None:
-                normalized_path = str(changed_path)
-                if normalized_path not in self._file_watcher.files():
-                    self._file_watcher.addPath(normalized_path)
-
-            file_name = changed_path.name
-            if file_name:
-                self.on_store_content_changed(file_name, page)
-        except Exception as e:
-            log(f"Ошибка обработки изменений файла пресета: {e}", "DEBUG")
 
     def schedule_presets_reload(self, page=None, delay_ms: int = 500) -> None:
         page = self._resolve_page(page)
@@ -814,183 +1038,6 @@ class UserPresetsRuntimeService:
             self._ui_dirty = True
             return
         self.load_presets(page)
-
-    def sync_watched_preset_files(self, page=None, file_names: set[str] | None = None) -> None:
-        page = self._resolve_page(page)
-        adapter = self._resolve_adapter()
-        watcher = self._file_watcher
-        if watcher is None:
-            return
-
-        try:
-            presets_dir = adapter.presets_dir()
-            if file_names is None:
-                file_names = {
-                    str(file_name or "").strip()
-                    for file_name in self._cached_presets_metadata.keys()
-                    if str(file_name or "").strip()
-                }
-
-            current_paths = set(watcher.files() or [])
-            self._request_watched_preset_files_sync_plan(
-                page,
-                presets_dir=presets_dir,
-                file_names=file_names,
-                current_paths=current_paths,
-            )
-        except Exception as e:
-            log(f"Ошибка синхронизации watcher файлов пресетов: {e}", "DEBUG")
-
-    def _request_watched_preset_files_sync_plan(
-        self,
-        page,
-        *,
-        presets_dir: Path,
-        file_names: set[str],
-        current_paths: set[str],
-    ) -> None:
-        plan_state = self._watched_preset_files_sync_plan_state_obj()
-        if plan_state.is_busy():
-            plan_state.pending = (page, set(file_names or set()))
-            return
-
-        def bind_worker(worker) -> None:
-            worker.loaded.connect(
-                lambda rid, plan, p=page: self._on_watched_preset_files_sync_plan_loaded(rid, plan, p)
-            )
-            worker.failed.connect(
-                lambda rid, error, p=page: self._on_watched_preset_files_sync_plan_failed(rid, error, p)
-            )
-
-        request_id, _worker = self._watched_preset_files_sync_plan_runtime.start_qthread_worker(
-            worker_factory=lambda request_id: UserPresetsWatcherSyncPlanWorker(
-                request_id,
-                presets_dir=presets_dir,
-                file_names=set(file_names or set()),
-                current_paths=set(current_paths or set()),
-                parent=page,
-            ),
-            bind_worker=bind_worker,
-            on_finished=self._on_watched_preset_files_sync_plan_worker_finished,
-        )
-        self._watched_preset_files_sync_plan_request_id = request_id
-
-    def _on_watched_preset_files_sync_plan_loaded(self, request_id: int, plan, page=None) -> None:
-        if request_id != self._watched_preset_files_sync_plan_request_id:
-            return
-        if self._watched_preset_files_sync_plan_state_obj().has_pending():
-            return
-        page = self._resolve_page(page)
-        self._start_watched_preset_files_sync_batches(
-            page,
-            list(getattr(plan, "remove_paths", []) or []),
-            list(getattr(plan, "add_paths", []) or []),
-        )
-
-    def _on_watched_preset_files_sync_plan_failed(self, request_id: int, error: str, _page=None) -> None:
-        if request_id != self._watched_preset_files_sync_plan_request_id:
-            return
-        log(f"Ошибка подготовки watcher файлов пресетов: {error}", "DEBUG")
-
-    def _on_watched_preset_files_sync_plan_worker_finished(self, worker: UserPresetsWatcherSyncPlanWorker) -> None:
-        self._watched_preset_files_sync_plan_state_obj().schedule_pending_after_finish(
-            worker,
-            is_current_worker_finish=lambda _runtime, finished_worker: self._is_current_worker_finish(
-                finished_worker,
-                "_watched_preset_files_sync_plan_request_id",
-            ),
-            single_shot=self._single_shot_or_run,
-            run_scheduled=self._run_scheduled_watched_preset_files_sync_plan,
-        )
-
-    def _run_scheduled_watched_preset_files_sync_plan(self) -> None:
-        pending = self._watched_preset_files_sync_plan_state_obj().take_pending_for_scheduled_start()
-        if pending is None:
-            return
-        page, file_names = pending
-        self._schedule_watched_preset_files_sync(page, file_names)
-
-    def _start_watched_preset_files_sync_batches(self, page, remove_paths: list[str], add_paths: list[str]) -> None:
-        batch_state = self._watched_preset_files_sync_batch_state_obj()
-        batch_state.pending = (page, list(remove_paths or []), list(add_paths or []))
-        batch_state.start_scheduled = False
-        self._run_next_watched_preset_files_sync_batch()
-
-    def _run_next_watched_preset_files_sync_batch(self) -> None:
-        batch_state = self._watched_preset_files_sync_batch_state_obj()
-        batch_state.start_scheduled = False
-        pending = batch_state.pending
-        if pending is None:
-            return
-        page, remove_paths, add_paths = pending
-        watcher = self.__dict__.get("_file_watcher")
-        if watcher is None:
-            batch_state.pending = batch_state.empty_value
-            return
-
-        try:
-            batch_size = int(self.__dict__.get("_watched_preset_files_sync_batch_size", 64) or 64)
-        except (TypeError, ValueError):
-            batch_size = 64
-        batch_size = max(1, batch_size)
-
-        slots = batch_size
-        remove_batch = remove_paths[:slots]
-        if remove_batch:
-            watcher.removePaths(remove_batch)
-            remove_paths = remove_paths[len(remove_batch):]
-            slots -= len(remove_batch)
-
-        add_batch = add_paths[:slots] if slots > 0 else []
-        if add_batch:
-            watcher.addPaths(add_batch)
-            add_paths = add_paths[len(add_batch):]
-
-        if remove_paths or add_paths:
-            batch_state.pending = (page, remove_paths, add_paths)
-            self._schedule_watched_preset_files_sync_batch()
-            return
-
-        batch_state.pending = batch_state.empty_value
-
-    def _schedule_watched_preset_files_sync_batch(self) -> None:
-        batch_state = self._watched_preset_files_sync_batch_state_obj()
-        if batch_state.start_scheduled:
-            return
-        batch_state.start_scheduled = True
-        self._single_shot_or_run(0, self._run_next_watched_preset_files_sync_batch)
-
-    def _schedule_watched_preset_files_sync(self, page=None, file_names: set[str] | None = None) -> None:
-        page = self._resolve_page(page)
-        sync_state = self._watched_preset_files_sync_state_obj()
-        normalized_file_names = (
-            {
-                str(file_name or "").strip()
-                for file_name in (file_names or set())
-                if str(file_name or "").strip()
-            }
-            if file_names is not None
-            else None
-        )
-        pending = sync_state.pending
-        if pending is not None:
-            _pending_page, pending_file_names = pending
-            if pending_file_names is None or normalized_file_names is None:
-                normalized_file_names = None
-            else:
-                normalized_file_names = set(pending_file_names) | set(normalized_file_names)
-        sync_state.pending = (page, normalized_file_names)
-        if sync_state.start_scheduled:
-            return
-        sync_state.start_scheduled = True
-        self._single_shot_or_run(0, self._run_scheduled_watched_preset_files_sync)
-
-    def _run_scheduled_watched_preset_files_sync(self) -> None:
-        pending = self._watched_preset_files_sync_state_obj().take_pending_for_scheduled_start()
-        if pending is None:
-            return
-        page, file_names = pending
-        self.sync_watched_preset_files(page, file_names)
 
     def load_presets(self, page=None) -> None:
         page = self._resolve_page(page)
@@ -1048,7 +1095,9 @@ class UserPresetsRuntimeService:
                 self.start_watching_presets(page)
             finally:
                 self._watcher_directory_prepare_retry_from_metadata = False
-        self._schedule_watched_preset_files_sync(page, set(all_presets.keys()))
+        # После полной загрузки прежний scandir-снапшот устарел; следующий diff
+        # (fallback-режим) построит новую базу сравнения.
+        self._user_dir_snapshot = None
         if not page.isVisible():
             self._ui_dirty = True
             return
@@ -1270,85 +1319,6 @@ class UserPresetsRuntimeService:
     def _rows_plan_pending(self, value) -> None:
         self._rows_plan_state_obj().pending = value
 
-    def _watched_preset_files_sync_state_obj(self) -> LatestValueWorkerState:
-        state = self.__dict__.get("_watched_preset_files_sync_state")
-        if state is None:
-            pending = self.__dict__.pop("_watched_preset_files_sync_pending", None)
-            start_scheduled = bool(self.__dict__.pop("_watched_preset_files_sync_scheduled", False))
-            state = LatestValueWorkerState(
-                None,
-                empty_value=None,
-                pending=pending,
-                start_scheduled=start_scheduled,
-            )
-            self.__dict__["_watched_preset_files_sync_state"] = state
-        return state
-
-    @property
-    def _watched_preset_files_sync_pending(self):
-        return self._watched_preset_files_sync_state_obj().pending
-
-    @_watched_preset_files_sync_pending.setter
-    def _watched_preset_files_sync_pending(self, value) -> None:
-        self._watched_preset_files_sync_state_obj().pending = value
-
-    @property
-    def _watched_preset_files_sync_scheduled(self) -> bool:
-        return bool(self._watched_preset_files_sync_state_obj().start_scheduled)
-
-    @_watched_preset_files_sync_scheduled.setter
-    def _watched_preset_files_sync_scheduled(self, value: bool) -> None:
-        self._watched_preset_files_sync_state_obj().start_scheduled = bool(value)
-
-    def _watched_preset_files_sync_plan_state_obj(self) -> LatestValueWorkerState:
-        state = self.__dict__.get("_watched_preset_files_sync_plan_state")
-        runtime = self.__dict__.get("_watched_preset_files_sync_plan_runtime")
-        if state is None:
-            pending = self.__dict__.pop("_watched_preset_files_sync_plan_pending", None)
-            state = LatestValueWorkerState(runtime, empty_value=None, pending=pending)
-            self.__dict__["_watched_preset_files_sync_plan_state"] = state
-        elif getattr(state, "runtime", None) is None and runtime is not None:
-            state.runtime = runtime
-        return state
-
-    @property
-    def _watched_preset_files_sync_plan_pending(self):
-        return self._watched_preset_files_sync_plan_state_obj().pending
-
-    @_watched_preset_files_sync_plan_pending.setter
-    def _watched_preset_files_sync_plan_pending(self, value) -> None:
-        self._watched_preset_files_sync_plan_state_obj().pending = value
-
-    def _watched_preset_files_sync_batch_state_obj(self) -> LatestValueWorkerState:
-        state = self.__dict__.get("_watched_preset_files_sync_batch_state")
-        if state is None:
-            pending = self.__dict__.pop("_watched_preset_files_sync_batch_pending", None)
-            start_scheduled = bool(self.__dict__.pop("_watched_preset_files_sync_batch_scheduled", False))
-            state = LatestValueWorkerState(
-                None,
-                empty_value=None,
-                pending=pending,
-                start_scheduled=start_scheduled,
-            )
-            self.__dict__["_watched_preset_files_sync_batch_state"] = state
-        return state
-
-    @property
-    def _watched_preset_files_sync_batch_pending(self):
-        return self._watched_preset_files_sync_batch_state_obj().pending
-
-    @_watched_preset_files_sync_batch_pending.setter
-    def _watched_preset_files_sync_batch_pending(self, value) -> None:
-        self._watched_preset_files_sync_batch_state_obj().pending = value
-
-    @property
-    def _watched_preset_files_sync_batch_scheduled(self) -> bool:
-        return bool(self._watched_preset_files_sync_batch_state_obj().start_scheduled)
-
-    @_watched_preset_files_sync_batch_scheduled.setter
-    def _watched_preset_files_sync_batch_scheduled(self, value: bool) -> None:
-        self._watched_preset_files_sync_batch_state_obj().start_scheduled = bool(value)
-
     def _single_shot_or_run(self, _delay: int, callback) -> None:
         try:
             QTimer.singleShot(0, callback)
@@ -1369,10 +1339,16 @@ class UserPresetsRuntimeService:
                 removed_metadata = True
 
         model = getattr(page, "_presets_model", None)
-        if model is None or not model.remove_preset(normalized_name):
+        if model is None:
+            return False
+        if model.find_preset_row(normalized_name) < 0:
+            # Строки нет в модели (например, отфильтрована поиском) —
+            # обновления кэша достаточно.
+            self._ui_dirty = not removed_metadata
+            return removed_metadata
+        if not model.remove_preset(normalized_name):
             return False
 
-        self._schedule_watched_preset_files_sync(page, set(self._cached_presets_metadata.keys()))
         self._ui_dirty = not removed_metadata
         return True
 
@@ -1408,7 +1384,6 @@ class UserPresetsRuntimeService:
                 {"folder_key": folder_key, "order": None, "rating": 0},
             )
 
-        self._schedule_watched_preset_files_sync(page, set(self._cached_presets_metadata.keys()))
         self._request_single_metadata_refresh(normalized_file_name, page)
 
         if query and query not in normalized_display_name.lower():
@@ -1446,7 +1421,7 @@ class UserPresetsRuntimeService:
                 "_metadata_load_request_id": "_metadata_load_runtime",
                 "_single_metadata_request_id": "_single_metadata_runtime",
                 "_rows_plan_request_id": "_rows_plan_runtime",
-                "_watched_preset_files_sync_plan_request_id": "_watched_preset_files_sync_plan_runtime",
+                "_dir_diff_request_id": "_dir_diff_runtime",
             }.get(str(request_attr or ""))
             current_runtime = getattr(self, str(runtime_attr or ""), None)
             current_worker = getattr(current_runtime, "worker", None)
@@ -1485,7 +1460,6 @@ class UserPresetsRuntimeService:
         metadata["file_name"] = new_file_name
         metadata["display_name"] = new_display_name or new_file_name
         self._cached_presets_metadata[new_file_name] = metadata
-        self._schedule_watched_preset_files_sync(page, set(self._cached_presets_metadata.keys()))
         self._ui_dirty = False
         return True
 

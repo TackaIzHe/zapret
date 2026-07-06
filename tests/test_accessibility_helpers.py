@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 import unittest
 
 
@@ -615,13 +616,101 @@ class AccessibilityHelpersTests(unittest.TestCase):
             menu.view.item(1).data(Qt.ItemDataRole.AccessibleTextRole),
             "Режим запуска: Ручной, выбран",
         )
+        menu.deleteLater()
+        self._app.processEvents()
 
-    def test_accessible_combo_menu_keeps_fluent_style_and_suppresses_hairline(self) -> None:
+    def test_global_round_menu_hairline_fix_patches_new_menus_once(self) -> None:
+        from unittest.mock import patch
+
+        from qfluentwidgets import Action, RoundMenu
+
+        from ui.popup_menu_style import install_global_round_menu_hairline_fix
+
+        with (
+            patch("ui.popup_menu_style._is_windows_11_or_newer", return_value=True),
+            patch(
+                "ui.popup_menu_style._round_menu_hairline_border_qss",
+                return_value="MenuActionListWidget { border-color: rgba(1, 2, 3, 0.40); }",
+            ),
+        ):
+            install_global_round_menu_hairline_fix()
+            install_global_round_menu_hairline_fix()
+            menu = RoundMenu(parent=None)
+
+        menu.addAction(Action("Пункт", menu))
+
+        self.assertIn("zapretgui-round-menu-hairline-begin", menu.styleSheet())
+        self.assertEqual(menu.styleSheet().count("zapretgui-round-menu-hairline-begin"), 1)
+        self.assertEqual(menu.styleSheet().count("rgba(1, 2, 3, 0.40)"), 1)
+        self.assertIn("border-radius", menu.styleSheet())
+        menu.deleteLater()
+        self._app.processEvents()
+
+    def test_global_round_menu_hairline_fix_refreshes_existing_menu_style(self) -> None:
+        from unittest.mock import patch
+
+        from qfluentwidgets import RoundMenu
+
+        from ui.popup_menu_style import _apply_round_menu_hairline_qss, install_global_round_menu_hairline_fix
+
+        with (
+            patch("ui.popup_menu_style._is_windows_11_or_newer", return_value=True),
+            patch(
+                "ui.popup_menu_style._round_menu_hairline_border_qss",
+                return_value="MenuActionListWidget { border-color: rgba(1, 2, 3, 0.40); }",
+            ),
+        ):
+            install_global_round_menu_hairline_fix()
+            menu = RoundMenu(parent=None)
+
+        self.assertIn("rgba(1, 2, 3, 0.40)", menu.styleSheet())
+        import qfluentwidgets.common.style_sheet as fluent_style_sheet
+
+        self.assertTrue(
+            bool(getattr(fluent_style_sheet.setStyleSheet, "_zapretgui_round_menu_hairline_patch_installed", False))
+        )
+
+        with (
+            patch("ui.popup_menu_style._is_windows_11_or_newer", return_value=True),
+            patch(
+                "ui.popup_menu_style._round_menu_hairline_border_qss",
+                return_value="MenuActionListWidget { border-color: rgba(4, 5, 6, 0.50); }",
+            ),
+        ):
+            _apply_round_menu_hairline_qss(menu)
+
+        self.assertNotIn("rgba(1, 2, 3, 0.40)", menu.styleSheet())
+        self.assertIn("rgba(4, 5, 6, 0.50)", menu.styleSheet())
+        self.assertEqual(menu.styleSheet().count("zapretgui-round-menu-hairline-begin"), 1)
+        menu.deleteLater()
+        self._app.processEvents()
+
+    def test_round_menu_hairline_fix_is_not_called_per_menu(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+
+        for relative_path in (
+            "src/hosts/ui/services_matrix.py",
+            "src/ui/combo_accessibility.py",
+            "src/tray.py",
+        ):
+            with self.subTest(path=relative_path):
+                source = (root / relative_path).read_text(encoding="utf-8")
+                self.assertNotIn("suppress_round_menu_hairline(", source)
+
+    def test_startup_installs_global_round_menu_hairline_fix(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "src/main/qt_runtime.py").read_text(encoding="utf-8")
+
+        self.assertIn("install_global_round_menu_hairline_fix(app)", source)
+        self.assertIn("StartupQtRoundMenuHairlineFix", source)
+
+    def test_accessible_combo_menu_uses_global_round_menu_hairline_fix(self) -> None:
         from unittest.mock import patch
 
         from qfluentwidgets import ComboBox
 
         from ui.combo_accessibility import set_combo_items_accessibility
+        from ui.popup_menu_style import install_global_round_menu_hairline_fix
 
         combo = ComboBox()
         self.addCleanup(combo.deleteLater)
@@ -629,14 +718,16 @@ class AccessibilityHelpersTests(unittest.TestCase):
         combo.addItem("Ручной")
 
         with patch("ui.popup_menu_style._is_windows_11_or_newer", return_value=True):
+            install_global_round_menu_hairline_fix()
             set_combo_items_accessibility(combo, name="Режим запуска")
             menu = combo._create_accessible_combo_menu()
 
         self.assertIn("MenuActionListWidget", menu.styleSheet())
         self.assertIn("border-color", menu.styleSheet())
-        self.assertIn("MenuActionListWidget", menu.view.styleSheet())
-        self.assertIn("border-color", menu.view.styleSheet())
-        self.assertNotIn("border-left", menu.view.styleSheet())
+        self.assertIn("zapretgui-round-menu-hairline-begin", menu.styleSheet())
+        self.assertNotIn("border-left", menu.styleSheet())
+        menu.deleteLater()
+        self._app.processEvents()
 
     def test_combo_widget_itself_reads_current_selection(self) -> None:
         from qfluentwidgets import ComboBox

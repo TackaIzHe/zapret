@@ -107,7 +107,7 @@
 
 --new
 
---name=Все сайты UDP (исключение)
+--name=Все сайты UDP (айпи)
 --filter-udp=443-65535
 --ipset-exclude=lists/ipset-ru.txt
 --ipset-exclude=lists/ipset-dns.txt

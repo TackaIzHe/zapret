@@ -703,6 +703,38 @@ class Winws2LaunchPresetValidationTests(unittest.TestCase):
             0.35,
         )
 
+    def test_winws2_retries_normal_start_once_after_dll_init_failure(self) -> None:
+        from unittest.mock import Mock
+
+        from winws_runtime.runners.zapret2_runner import Winws2StrategyRunner
+
+        runner = object.__new__(Winws2StrategyRunner)
+        runner._last_spawn_exit_code = 0xC0000142
+        runner._last_spawn_stderr = ""
+        runner._should_retry_transient_windivert_service_error = Mock(return_value=False)
+        runner._is_windivert_system_error = Mock(return_value=False)
+        runner._is_windivert_conflict_error = Mock(return_value=False)
+        runner._maybe_run_windivert_auto_fix_after_failed_spawn = Mock(return_value=False)
+        runner._start_from_preset_file_locked = Mock(return_value=True)
+
+        self.assertTrue(
+            runner._maybe_retry_after_failed_spawn_locked(
+                "preset.txt",
+                "Preset",
+                cleanup_required=False,
+                retry_count=0,
+                stable_start_window_seconds=0.35,
+            )
+        )
+
+        runner._start_from_preset_file_locked.assert_called_once_with(
+            "preset.txt",
+            "Preset",
+            force_cleanup=True,
+            retry_count=1,
+            stable_start_window_seconds=0.35,
+        )
+
     def test_winws2_does_not_retry_exit_87_when_stale_windivert_service_remains(self) -> None:
         from unittest.mock import Mock, patch
 

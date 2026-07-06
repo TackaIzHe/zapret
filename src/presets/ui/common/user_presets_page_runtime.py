@@ -18,6 +18,7 @@ class UserPresetsRuntimeActions:
     warm_preset_list_metadata_cache: Callable[..., object]
     get_preset_source_path_by_file_name: Callable[..., object]
     preset_differs_from_builtin_by_file_name: Callable[..., object] | None = None
+    read_single_preset_list_metadata: Callable[..., object] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -293,6 +294,15 @@ class UserPresetsPageRuntime:
             return None
 
         candidate_file_name = candidate if candidate.lower().endswith(".txt") else f"{candidate}.txt"
+        fast_reader = getattr(self._preset_actions(), "read_single_preset_list_metadata", None)
+        if callable(fast_reader):
+            try:
+                refreshed = fast_reader(self._config.launch_method, candidate_file_name)
+            except Exception:
+                refreshed = None
+            if refreshed is not None:
+                return refreshed
+
         matched_entry = None
         for entry in self.list_preset_entries_light():
             entry_file_name = str(entry.get("file_name") or "").strip()
@@ -326,6 +336,7 @@ class UserPresetsPageRuntime:
             kind=kind,
             is_builtin=is_builtin,
             can_reset_to_builtin=can_reset,
+            read_headers=False,
         )
 
         return candidate_file_name, metadata

@@ -260,8 +260,8 @@
 
 --new
 
---name=SpeedTest
---filter-tcp=80,443,1080,2053,2083,2087,2096,8443
+--name=Speedtest
+--filter-tcp=443,8080
 --hostlist=lists/speedtest.txt
 --out-range=-d10
 --lua-desync=send:repeats=2
@@ -365,7 +365,7 @@
 
 --new
 
---name=Все сайты UDP (исключение)
+--name=Все сайты UDP (айпи)
 --filter-udp=443-65535
 --ipset-exclude=lists/ipset-ru.txt
 --ipset-exclude=lists/ipset-dns.txt

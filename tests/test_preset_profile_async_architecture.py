@@ -150,7 +150,7 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
 
         page._schedule_profiles_payload_request.assert_not_called()
 
-    def test_preset_setup_clean_activation_restores_heavy_list_after_show(self) -> None:
+    def test_preset_setup_clean_activation_keeps_ready_list_attached(self) -> None:
         class _List:
             def __init__(self) -> None:
                 self.visible_calls: list[bool] = []
@@ -165,25 +165,17 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         page._profile_payload_dirty = False
         page._profiles_list_show_scheduled = False
         page._cleanup_in_progress = False
+        page._mark_profiles_list_ready_after_page_switch = Mock()
         page._schedule_profiles_payload_request = Mock(
             side_effect=AssertionError("clean activation must not reload profile payload")
         )
-        scheduled: list[object] = []
 
-        with patch(
-            "profile.ui.preset_setup_page.QTimer.singleShot",
-            side_effect=lambda _delay, callback: scheduled.append(callback),
-        ):
-            PresetSetupPageBase.on_page_hidden(page)
-            PresetSetupPageBase.on_page_activated(page)
+        PresetSetupPageBase.on_page_hidden(page)
+        PresetSetupPageBase.on_page_activated(page)
 
-        self.assertEqual(profile_list.visible_calls, [False])
+        self.assertEqual(profile_list.visible_calls, [])
         page._schedule_profiles_payload_request.assert_not_called()
-        self.assertEqual(len(scheduled), 1)
-
-        scheduled[0]()
-
-        self.assertEqual(profile_list.visible_calls, [False, True])
+        page._mark_profiles_list_ready_after_page_switch.assert_called_once_with()
 
     def test_preset_setup_page_refreshes_after_active_preset_content_change_signal(self) -> None:
         init_source = inspect.getsource(PresetSetupPageBase.__init__)
@@ -353,15 +345,19 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertEqual(model.index(0, 0).data(ProfileSetupListModel.GroupNameRole), "Новая папка")
 
     def test_raw_preset_editor_saves_without_runtime_publish_until_editor_is_left(self) -> None:
+        from presets.ui.common.raw_preset_text_editor import RawPresetTextEditor
+
         save_source = inspect.getsource(PresetRawEditorPage._save_file)
-        text_changed_source = inspect.getsource(PresetRawEditorPage._on_text_changed)
-        commit_source = inspect.getsource(PresetRawEditorPage._commit_pending_content_change)
-        event_source = inspect.getsource(PresetRawEditorPage.eventFilter)
-        controller_source = inspect.getsource(PresetRawEditorPage.__init__)
+        text_changed_source = inspect.getsource(RawPresetTextEditor.on_text_changed)
+        commit_source = inspect.getsource(RawPresetTextEditor.commit_pending_content_change)
+        event_source = inspect.getsource(RawPresetTextEditor.handle_event)
+        controller_source = inspect.getsource(PresetRawEditorPage.__init__) + inspect.getsource(
+            RawPresetTextEditor.__init__
+        )
 
         self.assertIn("publish_content_changed: bool = False", save_source)
         self.assertIn("publish_content_changed", save_source)
-        self.assertIn("_content_publish_pending", text_changed_source)
+        self.assertIn("content_publish_pending", text_changed_source)
         self.assertIn("publish_content_changed=True", commit_source)
         self.assertIn("QEvent.Type.FocusOut", event_source)
         self.assertIn("QEvent.Type.Leave", event_source)
@@ -369,16 +365,22 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("installEventFilter", controller_source)
 
     def test_raw_preset_editor_has_inline_text_search(self) -> None:
-        build_source = inspect.getsource(PresetRawEditorPage._build_ui)
+        from presets.ui.common.raw_preset_text_editor import RawPresetTextEditor
 
-        self.assertTrue(hasattr(PresetRawEditorPage, "_search_preset_text"))
-        search_source = inspect.getsource(PresetRawEditorPage._search_preset_text)
-        self.assertIn("SearchLineEdit", build_source)
-        self.assertIn("self.searchInput.setPlaceholderText", build_source)
+        build_source = inspect.getsource(PresetRawEditorPage._build_ui)
+        editor_init_source = inspect.getsource(RawPresetTextEditor.__init__)
+        search_source = inspect.getsource(RawPresetTextEditor.search_text)
+        find_source = inspect.getsource(RawPresetTextEditor.find_next)
+
+        self.assertTrue(hasattr(RawPresetTextEditor, "search_text"))
+        self.assertTrue(hasattr(RawPresetTextEditor, "find_next"))
+        self.assertIn("SearchLineEdit", editor_init_source)
+        self.assertIn("self.search_input.setPlaceholderText", editor_init_source)
         self.assertIn("actions_layout.addStretch(1)", build_source)
         self.assertIn("actions_layout.addWidget(self.searchInput, 1)", build_source)
-        self.assertIn(".find(query", search_source)
-        self.assertIn("QTextDocument.FindFlag(0)", search_source)
+        self.assertIn(".find(query", find_source)
+        self.assertIn("QTextDocument.FindFlag(0)", find_source)
+        self.assertIn("FindBackward", find_source)
 
     def test_refresh_after_switch_uses_profile_snapshot_not_full_list(self) -> None:
         source = inspect.getsource(display_state.resolve_profile_strategy_display_state)
@@ -2009,33 +2011,29 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("build_profile_list_view_state", worker_source)
         self.assertIn("folder_state", worker_source)
 
-    def test_profile_feature_warms_profile_list_worker_result(self) -> None:
+    def test_profile_feature_warms_profile_list_without_mass_setup_warm(self) -> None:
         source = inspect.getsource(ProfileFeature.warm_profile_list)
-        remember_source = inspect.getsource(ProfileFeature._remember_profile_list_load_result)
+        class_source = inspect.getsource(ProfileFeature)
 
         self.assertIn("service.list_profiles", source)
         self.assertIn("build_profile_list_view_state", source)
         self.assertIn("ProfileListLoadResult", source)
-        self.assertIn("_remember_profile_list_load_result", source)
         self.assertIn("profile_warmup.list_profiles", source)
         self.assertIn("profile_warmup.view_state", source)
-        self.assertIn("profile_warmup.setup_payloads", source)
-        self.assertIn("profile_warmup.cache_store", source)
-        self.assertIn("_profile_list_load_result_cache", remember_source)
-        self.assertIn("move_to_end", remember_source)
+        self.assertNotIn("warm_profile_setups", source)
+        self.assertNotIn("profile_warmup.setup_payloads", source)
+        self.assertNotIn("_profile_list_load_result_cache", class_source)
 
-    def test_profile_feature_profile_list_worker_uses_warm_cache_first(self) -> None:
+    def test_profile_feature_profile_list_worker_reads_service_cache(self) -> None:
         source = inspect.getsource(ProfileFeature.create_profile_list_load_worker)
-        helper_source = inspect.getsource(ProfileFeature._profile_list_load_result)
 
-        self.assertIn("_profile_list_load_result", source)
         self.assertIn("view_state_options", source)
         self.assertIn("active_profile_types", source)
         self.assertIn("search_query", source)
         self.assertIn("group_expanded", source)
         self.assertIn("build_profile_list_view_state", source)
-        self.assertIn("service.get_cached_profile_list_entry", helper_source)
-        self.assertLess(source.index("_profile_list_load_result"), source.index("service.list_profiles"))
+        self.assertIn("service.list_profiles()", source)
+        self.assertNotIn("_profile_list_load_result", source)
 
     def test_profile_service_logs_profile_payload_stages(self) -> None:
         source = inspect.getsource(ProfilePresetService._list_profiles_locked)
@@ -2222,7 +2220,7 @@ class PresetProfileAsyncArchitectureTests(unittest.TestCase):
         self.assertIn("start_or_queue", request_source)
         self.assertNotIn("_appearance_save_pending.append", page_source)
         self.assertIn("_schedule_appearance_save_worker_start", finished_source)
-        self.assertIn("_coalesce_appearance_save_pending", run_scheduled_source)
+        self.assertIn("_coalesce_pending_appearance_saves", run_scheduled_source)
         self.assertIn("state.pop_next()", run_scheduled_source)
         self.assertIn("save_display_mode", worker_init_source)
         self.assertIn("save_ui_language", worker_init_source)

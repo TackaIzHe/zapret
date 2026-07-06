@@ -1,55 +1,51 @@
-# requirements.txt - Всегда последние версии
+# requirements.txt — Zapret GUI
 # "C:\Program Files\Python312\Scripts\pip.exe" install -r requirements.txt
 # python.exe -m pip install --upgrade pip
+
+# ════════════════════════════════════════════════════════════
+# Runtime (попадает в exe — это же ставит CI в windows-release.yml)
+# ════════════════════════════════════════════════════════════
+
 # GUI Framework
 PyQt6
 PyQt6-Qt6
 PyQt6-sip
+PyQt6-Fluent-Widgets
+qtawesome
 
 # Network and HTTP
 requests
 urllib3
 PySocks
+httpx>=0.28.1  # blockcheck (isp_page_detector, dns_integrity, tcp_test)
 
-# System and Process Management
-psutil
-
-# requirements.txt
-# Zapret - Обход блокировок + Build Tools
-
-# ════════════════════════════════════════════════════════════
-# Windows System Integration  
-# ════════════════════════════════════════════════════════════
+# Windows System Integration
 pywin32
 psutil
+wmi  # dns_core: список сетевых адаптеров
+
+# Misc
+packaging  # updater: сравнение версий
+tgcrypto   # ускоритель AES-CTR для MTProxy (telegram_proxy/proxy/aes_ctr.py)
 
 # ════════════════════════════════════════════════════════════
-# Network and HTTPpython -m pip install -r requirements.txt
-# ════════════════════════════════════════════════════════════
-requests
-urllib3
-PySocks
-
-# ════════════════════════════════════════════════════════════
-# Build Tools (для build_release_gui.py)
+# Build Tools (только для сборки exe, в рантайм не попадают)
 # ════════════════════════════════════════════════════════════
 PyInstaller
 Nuitka
 
 # ════════════════════════════════════════════════════════════
-# GitHub Integration (для публикации релизов)
+# Publish Tools (только для публикации релизов)
 # ════════════════════════════════════════════════════════════
-PyGithub
+PyGithub   # публикация релизов на GitHub
+paramiko   # деплой на VPS по SSH
+pyrogram   # публикация в Telegram-канал
+telethon   # приватный publish-тулинг (build_zapret: telegram_auth_telethon, telegram_uploader_telethon_fixed)
 
 # ════════════════════════════════════════════════════════════
-# SSH Deployment (для деплоя на VPS)
+# Dev Tools (генераторы, не нужны ни в рантайме, ни в CI)
 # ════════════════════════════════════════════════════════════
-paramiko
-
-# ════════════════════════════════════════════════════════════
-# Telegram Integration (для публикации в канал и обновлений)
-# ════════════════════════════════════════════════════════════
-pyrogram
+simplepycons  # только tools/generate_profile_icon_bundle.py; рантайм использует сгенерированный бандл
 
 # ════════════════════════════════════════════════════════════
 # Примечания:
@@ -58,18 +54,3 @@ pyrogram
 # - Inno Setup нужно установить отдельно для Windows
 # - PyInstaller и Nuitka опциональны (нужны только для сборки exe)
 # - PyGithub, paramiko, pyrogram опциональны (нужны только для публикации)
-
-httpx>=0.28.1
-
-aiohttp
-telethon
-PySocks
-python-telegram
-python-telegram-bot
-qtawesome
-simplepycons
-pytz
-PyQt6-Fluent-Widgets
-wmi
-websockets
-tgcrypto  # Ускоритель шифрования для Pyrogram

@@ -97,12 +97,29 @@ def apply_process_animation_fallback(enabled: bool) -> None:
 
 def apply_window_smooth_scroll_policy(window, enabled: bool) -> None:
     """Переключает плавную прокрутку страниц, списков и деревьев, но не редакторов."""
+    _apply_smooth_scroll_policy_to_targets(window, bool(enabled), editors=False)
+
+
+def apply_window_editor_smooth_scroll_policy(window, enabled: bool) -> None:
+    """Переключает плавную прокрутку только у текстовых редакторов."""
+    try:
+        from ui.smooth_scroll import get_effective_editor_smooth_scroll_enabled
+
+        effective_enabled = get_effective_editor_smooth_scroll_enabled(enabled)
+    except Exception:
+        return
+
+    _apply_smooth_scroll_policy_to_targets(window, effective_enabled, editors=True)
+
+
+def _apply_smooth_scroll_policy_to_targets(window, enabled: bool, *, editors: bool) -> None:
+    """Применяет режим прокрутки к редакторам или ко всем остальным виджетам."""
     try:
         from ui.smooth_scroll import apply_smooth_scroll_mode, is_editor_smooth_scroll_target
 
-        def _apply_smooth_mode(target) -> None:
-            if is_editor_smooth_scroll_target(target):
-                return
+        for target in _iter_smooth_scroll_targets(window):
+            if bool(is_editor_smooth_scroll_target(target)) != editors:
+                continue
 
             apply_smooth_scroll_mode(target, enabled)
             custom_setter = getattr(target, "set_smooth_scroll_enabled", None)
@@ -111,41 +128,36 @@ def apply_window_smooth_scroll_policy(window, enabled: bool) -> None:
                     custom_setter(enabled)
                 except Exception:
                     pass
-
-        for target in _iter_window_pages_and_children(window):
-            _apply_smooth_mode(target)
     except Exception:
         pass
 
 
-def apply_window_editor_smooth_scroll_policy(window, enabled: bool) -> None:
-    """Переключает плавную прокрутку только у текстовых редакторов."""
+def _iter_smooth_scroll_targets(window):
+    """Объединяет обход страниц окна с глобальным реестром smooth-scroll виджетов.
+
+    Реестр закрывает лениво созданные страницы и диалоги, которых нет
+    в session.pages на момент переключения настройки.
+    """
+    seen_ids = set()
+
+    for target in _iter_window_pages_and_children(window):
+        if id(target) in seen_ids:
+            continue
+        seen_ids.add(id(target))
+        yield target
+
     try:
-        from ui.smooth_scroll import (
-            apply_smooth_scroll_mode,
-            get_effective_editor_smooth_scroll_enabled,
-            is_editor_smooth_scroll_target,
-        )
+        from ui.smooth_scroll import iter_managed_smooth_scroll_widgets
 
-        effective_enabled = get_effective_editor_smooth_scroll_enabled(enabled)
-
-        def _apply_editor_smooth_mode(target) -> None:
-            if not is_editor_smooth_scroll_target(target):
-                return
-
-            apply_smooth_scroll_mode(target, effective_enabled)
-
-            custom_setter = getattr(target, "set_smooth_scroll_enabled", None)
-            if callable(custom_setter):
-                try:
-                    custom_setter(effective_enabled)
-                except Exception:
-                    pass
-
-        for target in _iter_window_pages_and_children(window):
-            _apply_editor_smooth_mode(target)
+        managed = iter_managed_smooth_scroll_widgets()
     except Exception:
-        pass
+        managed = ()
+
+    for target in managed:
+        if id(target) in seen_ids:
+            continue
+        seen_ids.add(id(target))
+        yield target
 
 
 def _iter_window_pages_and_children(window):

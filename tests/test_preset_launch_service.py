@@ -84,7 +84,7 @@ class PresetLaunchServiceTests(unittest.TestCase):
     def test_service_prepares_lists_before_validating_preset_with_running_process(self) -> None:
         from winws_runtime.runtime.preset_launch_service import PresetLaunchService
 
-        events: list[str] = []
+        events: list[object] = []
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             preset_path = Path(tmp_dir) / "ready.txt"
@@ -110,7 +110,9 @@ class PresetLaunchServiceTests(unittest.TestCase):
             with (
                 patch(
                     "winws_runtime.runtime.preset_launch_service.ensure_required_files_fast",
-                    side_effect=lambda: events.append("prepare") or True,
+                    side_effect=lambda *, active_preset_path="": (
+                        events.append(("prepare", active_preset_path)) or True
+                    ),
                 ),
                 patch("winws_runtime.runners.runner_factory.get_strategy_runner", return_value=runner),
                 patch(
@@ -121,7 +123,7 @@ class PresetLaunchServiceTests(unittest.TestCase):
                 result = service.run()
 
         self.assertTrue(result.success)
-        self.assertEqual(events[:2], ["prepare", "validate"])
+        self.assertEqual(events[:2], [("prepare", str(preset_path)), "validate"])
 
     def test_service_uses_short_stable_window_for_startup_autostart(self) -> None:
         from winws_runtime.runtime.preset_launch_service import (
@@ -153,7 +155,6 @@ class PresetLaunchServiceTests(unittest.TestCase):
             "Пресет",
             _stable_start_window_seconds=STARTUP_AUTOSTART_STABLE_WINDOW_SECONDS,
         )
-
 
 if __name__ == "__main__":
     unittest.main()

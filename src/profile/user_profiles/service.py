@@ -8,8 +8,8 @@ from settings.mode import ENGINE_WINWS1, ENGINE_WINWS2
 from settings.store import get_user_profiles_settings, set_user_profiles_settings
 
 from lists.core.layered_files import (
+    create_profile_user_list_file,
     delete_profile_user_list_file,
-    ensure_profile_user_list_file,
     rename_profile_user_list_file,
     safe_list_file_name,
     write_profile_user_list_text,
@@ -43,9 +43,11 @@ def create_user_profile(paths: AppPaths, *, name: str, protocol: str, ports: str
     ipset = f"lists/ipset-{profile_id}.txt"
 
     lists_root = Path(paths.user_root) / "lists"
-    ensure_profile_user_list_file(lists_root, f"{profile_id}.txt")
-    ensure_profile_user_list_file(lists_root, f"ipset-{profile_id}.txt")
-    write_profile_user_list_text(lists_root, f"{profile_id}.txt", _DEFAULT_HOSTLIST_TEXT)
+    hostlist_had_entries = _user_list_file_has_entries(lists_root, f"{profile_id}.txt")
+    create_profile_user_list_file(lists_root, f"{profile_id}.txt")
+    create_profile_user_list_file(lists_root, f"ipset-{profile_id}.txt")
+    if not hostlist_had_entries:
+        write_profile_user_list_text(lists_root, f"{profile_id}.txt", _DEFAULT_HOSTLIST_TEXT)
 
     settings = get_user_profiles_settings()
     profiles = dict(settings.get("profiles") or {})
@@ -319,6 +321,25 @@ def _system_profile_names(paths: AppPaths) -> set[str]:
 
 def _name_key(value: object) -> str:
     return str(value or "").strip().casefold()
+
+
+def _user_list_file_has_entries(lists_root: Path, file_name: str) -> bool:
+    """Осиротевший файл с доменами (профиль потерян, файл остался) не должен
+    перезаписываться дефолтом при повторном создании профиля с тем же именем."""
+    path = lists_root / "user" / file_name
+    try:
+        if not path.is_file():
+            return False
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        # Файл есть, но не читается (антивирус/индексатор): считаем, что записи
+        # там ЕСТЬ — перезапись дефолтом при ошибке чтения была бы потерей.
+        return True
+    placeholder = _DEFAULT_HOSTLIST_TEXT.strip().casefold()
+    return any(
+        line.strip() and not line.strip().startswith("#") and line.strip().casefold() != placeholder
+        for line in text.splitlines()
+    )
 
 
 def _rename_user_list_file(paths: AppPaths, old_value: str, new_value: str) -> None:

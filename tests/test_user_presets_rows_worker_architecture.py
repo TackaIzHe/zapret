@@ -1,10 +1,53 @@
 from __future__ import annotations
 
 import inspect
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 
 class UserPresetsRowsWorkerArchitectureTests(unittest.TestCase):
+    def test_list_metadata_snapshot_uses_file_names_without_reading_preset_headers(self) -> None:
+        from app.feature_facades.presets import PresetsFeature
+        from core.paths import AppPaths
+        from settings.mode import ENGINE_WINWS2, ZAPRET2_MODE
+
+        class _Feature(PresetsFeature):
+            def __init__(self, app_paths: AppPaths) -> None:
+                super().__init__(_services=SimpleNamespace(app_paths=app_paths))
+
+            def list_preset_manifests(self, _launch_method: str):
+                raise AssertionError("list metadata must not read preset manifests")
+
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            app_paths = AppPaths(user_root=root, local_root=root)
+            engine_paths = app_paths.engine_paths(ENGINE_WINWS2).ensure_directories()
+            (engine_paths.builtin_presets_dir / "Slow Header Name.txt").write_text(
+                "# Preset: Pretty name from inside\n"
+                "# Description: expensive description\n"
+                "# IconColor: #ff00ff\n"
+                "--new\n",
+                encoding="utf-8",
+            )
+            feature = _Feature(app_paths)
+
+            with patch(
+                "presets.lightweight_metadata.read_preset_list_metadata",
+                side_effect=AssertionError("list metadata must not read preset headers"),
+            ), patch(
+                "presets.lightweight_metadata.read_preset_stat_metadata",
+                side_effect=AssertionError("list metadata must reuse directory stat data"),
+            ):
+                _signature, metadata = feature._build_preset_list_metadata_snapshot(ZAPRET2_MODE)
+
+        self.assertEqual(metadata["Slow Header Name.txt"]["display_name"], "Slow Header Name")
+        self.assertEqual(metadata["Slow Header Name.txt"]["description"], "")
+        self.assertEqual(metadata["Slow Header Name.txt"]["icon_color"], "")
+        self.assertNotEqual(metadata["Slow Header Name.txt"]["modified_display"], "")
+
     def test_runtime_starts_metadata_workers_through_shared_runtime(self) -> None:
         import presets.user_presets_runtime_service as runtime_service
 
@@ -87,14 +130,14 @@ class UserPresetsRowsWorkerArchitectureTests(unittest.TestCase):
         single_source = inspect.getsource(runtime_service.UserPresetsRuntimeService._on_single_metadata_worker_finished)
         metadata_source = inspect.getsource(runtime_service.UserPresetsRuntimeService._on_metadata_worker_finished)
         rows_source = inspect.getsource(runtime_service.UserPresetsRuntimeService._on_rows_plan_worker_finished)
-        watcher_source = inspect.getsource(
-            runtime_service.UserPresetsRuntimeService._on_watched_preset_files_sync_plan_worker_finished
+        dir_diff_source = inspect.getsource(
+            runtime_service.UserPresetsRuntimeService._on_user_dir_diff_worker_finished
         )
 
         self.assertIn("schedule_next_after_finish", single_source)
-        for source in (metadata_source, rows_source, watcher_source):
+        for source in (metadata_source, rows_source, dir_diff_source):
             self.assertIn("schedule_pending_after_finish", source)
-        for source in (single_source, metadata_source, rows_source, watcher_source):
+        for source in (single_source, metadata_source, rows_source, dir_diff_source):
             self.assertNotIn("if self._", source)
 
     def test_runtime_refresh_requests_rows_plan_worker_instead_of_building_rows_in_gui(self) -> None:
@@ -158,73 +201,53 @@ class UserPresetsRowsWorkerArchitectureTests(unittest.TestCase):
         self.assertIn("active_preset_file_name", source)
         self.assertNotIn("adapter.selected_source_file_name()", source)
 
-    def test_watcher_sync_does_not_stat_every_preset_file_on_gui_thread(self) -> None:
+    def test_watcher_has_no_per_file_watch_sync_machinery(self) -> None:
         import presets.user_presets_runtime_service as runtime_service
 
-        source = inspect.getsource(runtime_service.UserPresetsRuntimeService.sync_watched_preset_files)
+        service_cls = runtime_service.UserPresetsRuntimeService
+        self.assertFalse(hasattr(runtime_service, "UserPresetsWatcherSyncPlanWorker"))
+        self.assertFalse(hasattr(service_cls, "sync_watched_preset_files"))
+        self.assertFalse(hasattr(service_cls, "_schedule_watched_preset_files_sync"))
+        self.assertFalse(hasattr(service_cls, "on_preset_file_changed"))
+        start_source = inspect.getsource(service_cls._start_fallback_watcher)
+        self.assertNotIn("fileChanged", start_source)
 
-        self.assertNotIn("Path(path).exists()", source)
-
-    def test_watcher_sync_builds_path_plan_in_worker(self) -> None:
+    def test_native_watcher_is_preferred_with_qfsw_fallback(self) -> None:
         import presets.user_presets_runtime_service as runtime_service
 
-        self.assertTrue(hasattr(runtime_service, "UserPresetsWatcherSyncPlanWorker"))
-        sync_source = inspect.getsource(runtime_service.UserPresetsRuntimeService.sync_watched_preset_files)
-        request_source = inspect.getsource(runtime_service.UserPresetsRuntimeService._request_watched_preset_files_sync_plan)
-        worker_source = inspect.getsource(runtime_service.UserPresetsWatcherSyncPlanWorker.run)
+        start_source = inspect.getsource(runtime_service.UserPresetsRuntimeService.start_watching_presets)
 
-        self.assertIn("_request_watched_preset_files_sync_plan", sync_source)
-        self.assertIn("UserPresetsWatcherSyncPlanWorker", request_source)
+        self.assertIn("_start_native_watcher", start_source)
+        self.assertIn("_start_fallback_watcher", start_source)
+
+    def test_dir_diff_scans_directory_in_worker_not_gui_thread(self) -> None:
+        import presets.user_presets_runtime_service as runtime_service
+
+        request_source = inspect.getsource(runtime_service.UserPresetsRuntimeService._request_user_dir_diff)
+        worker_source = inspect.getsource(runtime_service.UserPresetsDirDiffWorker.run)
+
+        self.assertIn("UserPresetsDirDiffWorker", request_source)
         self.assertIn("start_qthread_worker", request_source)
-        self.assertNotIn("current_paths - desired_paths", sync_source)
-        self.assertNotIn("desired_paths - current_paths", sync_source)
-        self.assertIn("current_paths - desired_paths", worker_source)
-        self.assertIn("desired_paths - current_paths", worker_source)
+        self.assertNotIn("os.scandir", request_source)
+        self.assertIn("os.scandir", worker_source)
 
-    def test_watcher_sync_uses_shared_worker_state_helpers(self) -> None:
+    def test_dir_diff_uses_shared_worker_state_helpers(self) -> None:
         import presets.user_presets_runtime_service as runtime_service
         from ui.latest_value_worker_state import LatestValueWorkerState
 
         service = runtime_service.UserPresetsRuntimeService()
         init_source = inspect.getsource(runtime_service.UserPresetsRuntimeService.__init__)
-        schedule_source = inspect.getsource(
-            runtime_service.UserPresetsRuntimeService._schedule_watched_preset_files_sync
-        )
-        run_scheduled_source = inspect.getsource(
-            runtime_service.UserPresetsRuntimeService._run_scheduled_watched_preset_files_sync
-        )
-        plan_request_source = inspect.getsource(
-            runtime_service.UserPresetsRuntimeService._request_watched_preset_files_sync_plan
-        )
-        plan_finished_source = inspect.getsource(
-            runtime_service.UserPresetsRuntimeService._on_watched_preset_files_sync_plan_worker_finished
-        )
-        batch_source = "\n".join(
-            (
-                inspect.getsource(runtime_service.UserPresetsRuntimeService._start_watched_preset_files_sync_batches),
-                inspect.getsource(runtime_service.UserPresetsRuntimeService._run_next_watched_preset_files_sync_batch),
-                inspect.getsource(runtime_service.UserPresetsRuntimeService._schedule_watched_preset_files_sync_batch),
-            )
+        request_source = inspect.getsource(runtime_service.UserPresetsRuntimeService._request_user_dir_diff)
+        finished_source = inspect.getsource(
+            runtime_service.UserPresetsRuntimeService._on_user_dir_diff_worker_finished
         )
         cleanup_source = inspect.getsource(runtime_service.UserPresetsRuntimeService._stop_metadata_workers)
 
-        self.assertTrue(hasattr(service, "_watched_preset_files_sync_state_obj"))
-        self.assertTrue(hasattr(service, "_watched_preset_files_sync_plan_state_obj"))
-        self.assertTrue(hasattr(service, "_watched_preset_files_sync_batch_state_obj"))
-        self.assertIsInstance(service._watched_preset_files_sync_state_obj(), LatestValueWorkerState)
-        self.assertIsInstance(service._watched_preset_files_sync_plan_state_obj(), LatestValueWorkerState)
-        self.assertIsInstance(service._watched_preset_files_sync_batch_state_obj(), LatestValueWorkerState)
-        self.assertIn("_watched_preset_files_sync_state = LatestValueWorkerState", init_source)
-        self.assertIn("_watched_preset_files_sync_plan_state = LatestValueWorkerState", init_source)
-        self.assertIn("_watched_preset_files_sync_batch_state = LatestValueWorkerState", init_source)
-        self.assertIn("_watched_preset_files_sync_state_obj()", schedule_source)
-        self.assertIn("_watched_preset_files_sync_state_obj()", run_scheduled_source)
-        self.assertIn("_watched_preset_files_sync_plan_state_obj()", plan_request_source)
-        self.assertIn("_watched_preset_files_sync_plan_state_obj()", plan_finished_source)
-        self.assertIn("_watched_preset_files_sync_batch_state_obj()", batch_source)
-        self.assertIn("_watched_preset_files_sync_state_obj().reset()", cleanup_source)
-        self.assertIn("_watched_preset_files_sync_plan_state_obj().reset()", cleanup_source)
-        self.assertIn("_watched_preset_files_sync_batch_state_obj().reset()", cleanup_source)
+        self.assertIsInstance(service._dir_diff_state_obj(), LatestValueWorkerState)
+        self.assertIn("_dir_diff_state = LatestValueWorkerState", init_source)
+        self.assertIn("_dir_diff_state_obj()", request_source)
+        self.assertIn("_dir_diff_state_obj()", finished_source)
+        self.assertIn("_dir_diff_state_obj().reset()", cleanup_source)
 
     def test_watcher_start_does_not_create_preset_dirs_on_gui_thread(self) -> None:
         import presets.commands as commands
@@ -239,17 +262,73 @@ class UserPresetsRowsWorkerArchitectureTests(unittest.TestCase):
         self.assertNotIn("ensure_directories()", path_source)
         self.assertIn("ensure_directories()", metadata_source)
 
+    def test_preset_list_metadata_uses_fast_directory_enumeration(self) -> None:
+        from app.feature_facades.presets import PresetsFeature
+
+        metadata_source = inspect.getsource(PresetsFeature._preset_list_metadata_entries)
+
+        self.assertIn("os.scandir", metadata_source)
+        self.assertNotIn(".glob(", metadata_source)
+
+    def test_single_metadata_refresh_uses_fast_feature_reader(self) -> None:
+        from presets.ui.common.user_presets_page_runtime import (
+            UserPresetsPageRuntime,
+            UserPresetsPageRuntimeConfig,
+            UserPresetsRuntimeActions,
+        )
+
+        actions = UserPresetsRuntimeActions(
+            get_selected_source_preset_file_name=lambda _method: "",
+            list_preset_manifests=lambda _method: (_ for _ in ()).throw(
+                AssertionError("single metadata refresh must not list all manifests")
+            ),
+            get_user_presets_dir=lambda _method: "",
+            get_cached_preset_list_metadata=lambda _method: None,
+            warm_preset_list_metadata_cache=lambda _method: {},
+            get_preset_source_path_by_file_name=lambda _method, _file_name: (_ for _ in ()).throw(
+                AssertionError("single metadata refresh must not resolve source path through manifests")
+            ),
+            read_single_preset_list_metadata=lambda _method, file_name: (
+                str(file_name or ""),
+                {
+                    "display_name": "One",
+                    "kind": "user",
+                    "is_builtin": False,
+                    "can_reset_to_builtin": False,
+                },
+            ),
+        )
+        runtime = UserPresetsPageRuntime(
+            UserPresetsPageRuntimeConfig(
+                launch_method="zapret2_mode",
+                folder_scope="winws2",
+                empty_not_found_key="empty.not_found",
+                empty_none_key="empty.none",
+                list_log_prefix="TestUserPresets",
+                activate_error_level="ERROR",
+                activate_error_mode="log",
+                preset_runtime_actions=actions,
+            )
+        )
+
+        result = runtime.build_page_api().listing.read_single_preset_list_metadata_light("One.txt")
+
+        self.assertEqual(result[0], "One.txt")
+        self.assertEqual(result[1]["display_name"], "One")
+
     def test_runtime_service_does_not_keep_legacy_active_marker_settings_read_api(self) -> None:
         import presets.user_presets_runtime_service as runtime_service
 
         self.assertFalse(hasattr(runtime_service.UserPresetsRuntimeService, "apply_active_preset_marker"))
 
-    def test_file_watcher_change_handler_does_not_stat_changed_preset_on_gui_thread(self) -> None:
+    def test_native_watch_event_handler_does_not_stat_changed_preset_on_gui_thread(self) -> None:
         import presets.user_presets_runtime_service as runtime_service
 
-        source = inspect.getsource(runtime_service.UserPresetsRuntimeService.on_preset_file_changed)
+        source = inspect.getsource(runtime_service.UserPresetsRuntimeService._on_native_watch_events)
 
         self.assertNotIn(".exists()", source)
+        self.assertNotIn(".stat()", source)
+        self.assertNotIn("os.scandir", source)
 
     def test_user_presets_page_has_no_legacy_gui_rows_rebuild_entrypoint(self) -> None:
         from presets.ui.common.user_presets_page import UserPresetsPageBase

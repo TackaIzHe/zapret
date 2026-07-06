@@ -9,7 +9,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 class ProfileStatusWordingTests(unittest.TestCase):
     def test_profile_code_does_not_use_old_disabled_wording(self) -> None:
-        forbidden = ("Отклю" + "чено", "от" + "ключ")
+        # Запрещаем только старую формулировку статуса "Отключено/отключено".
+        # Глагольные формы ("отключает" в accessibility-описаниях) — допустимы.
+        forbidden = ("Отклю" + "чено", "отклю" + "чено")
         files = [
             path
             for root in (PROJECT_ROOT / "src" / "profile",)

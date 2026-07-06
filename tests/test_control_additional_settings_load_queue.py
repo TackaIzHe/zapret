@@ -5,6 +5,30 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 
+class _FakePresetSwitchTimer:
+    """Замена QTimer из refresh_runtime_state: копит start()/timeout-колбэки."""
+
+    def __init__(self, parent=None) -> None:
+        self.parent = parent
+        self.single_shot = False
+        self.start_calls: list[int] = []
+        self._callbacks: list = []
+        self.timeout = SimpleNamespace(connect=self._callbacks.append)
+
+    def setSingleShot(self, value) -> None:
+        self.single_shot = bool(value)
+
+    def start(self, delay_ms) -> None:
+        self.start_calls.append(int(delay_ms))
+
+    def stop(self) -> None:
+        pass
+
+    def fire(self) -> None:
+        for callback in list(self._callbacks):
+            callback()
+
+
 class _LoadRuntime:
     def __init__(self, *, running: bool) -> None:
         self.running = bool(running)
@@ -256,10 +280,7 @@ class ControlAdditionalSettingsLoadQueueTests(unittest.TestCase):
         from presets.ui.control.zapret1.page import Zapret1ModeControlPage
         from presets.ui.control.zapret2.page import Zapret2ModeControlPage
 
-        for page_cls, module_name in (
-            (Zapret1ModeControlPage, "presets.ui.control.zapret1.page"),
-            (Zapret2ModeControlPage, "presets.ui.control.zapret2.page"),
-        ):
+        for page_cls in (Zapret1ModeControlPage, Zapret2ModeControlPage):
             with self.subTest(page_cls=page_cls.__name__):
                 runtime, _load_runtime = _make_refresh_runtime(running=False)
                 page = page_cls.__new__(page_cls)
@@ -278,10 +299,16 @@ class ControlAdditionalSettingsLoadQueueTests(unittest.TestCase):
                 page.update_strategy = Mock()
                 page._refresh_last_status_message = Mock()
 
-                callbacks = []
+                timers: list[_FakePresetSwitchTimer] = []
+
+                def _timer_factory(parent=None):
+                    timer = _FakePresetSwitchTimer(parent)
+                    timers.append(timer)
+                    return timer
+
                 with patch(
-                    f"{module_name}.QTimer.singleShot",
-                    side_effect=lambda delay_ms, callback: callbacks.append((delay_ms, callback)),
+                    "presets.ui.control.refresh_runtime_state.QTimer",
+                    new=_timer_factory,
                 ):
                     page_cls._on_ui_state_changed(
                         page,
@@ -297,9 +324,10 @@ class ControlAdditionalSettingsLoadQueueTests(unittest.TestCase):
                 page._schedule_additional_settings_reload.assert_not_called()
                 self.assertTrue(runtime.additional_settings_dirty)
                 self.assertTrue(getattr(runtime, "additional_settings_reload_after_preset_switch_scheduled", False))
-                self.assertEqual(len(callbacks), 1)
+                self.assertEqual(len(timers), 1)
+                self.assertEqual(len(timers[0].start_calls), 2)
 
-                callbacks[0][1]()
+                timers[0].fire()
 
                 self.assertFalse(getattr(runtime, "additional_settings_reload_after_preset_switch_scheduled", False))
                 page._schedule_additional_settings_reload.assert_called_once_with(force=True)
@@ -309,10 +337,7 @@ class ControlAdditionalSettingsLoadQueueTests(unittest.TestCase):
         from presets.ui.control.zapret1.page import Zapret1ModeControlPage
         from presets.ui.control.zapret2.page import Zapret2ModeControlPage
 
-        for page_cls, module_name in (
-            (Zapret1ModeControlPage, "presets.ui.control.zapret1.page"),
-            (Zapret2ModeControlPage, "presets.ui.control.zapret2.page"),
-        ):
+        for page_cls in (Zapret1ModeControlPage, Zapret2ModeControlPage):
             with self.subTest(page_cls=page_cls.__name__):
                 runtime, _load_runtime = _make_refresh_runtime(running=False)
                 page = page_cls.__new__(page_cls)
@@ -331,10 +356,16 @@ class ControlAdditionalSettingsLoadQueueTests(unittest.TestCase):
                 page.update_strategy = Mock()
                 page._refresh_last_status_message = Mock()
 
-                callbacks = []
+                timers: list[_FakePresetSwitchTimer] = []
+
+                def _timer_factory(parent=None):
+                    timer = _FakePresetSwitchTimer(parent)
+                    timers.append(timer)
+                    return timer
+
                 with patch(
-                    f"{module_name}.QTimer.singleShot",
-                    side_effect=lambda delay_ms, callback: callbacks.append((delay_ms, callback)),
+                    "presets.ui.control.refresh_runtime_state.QTimer",
+                    new=_timer_factory,
                 ):
                     page_cls._on_ui_state_changed(
                         page,
@@ -347,12 +378,12 @@ class ControlAdditionalSettingsLoadQueueTests(unittest.TestCase):
                     )
 
                 page._schedule_additional_settings_reload.assert_not_called()
-                self.assertEqual(callbacks, [])
+                self.assertEqual(timers, [])
                 self.assertTrue(runtime.additional_settings_preset_apply_reload_state.has_pending())
 
                 with patch(
-                    f"{module_name}.QTimer.singleShot",
-                    side_effect=lambda delay_ms, callback: callbacks.append((delay_ms, callback)),
+                    "presets.ui.control.refresh_runtime_state.QTimer",
+                    new=_timer_factory,
                 ):
                     page_cls._on_ui_state_changed(
                         page,
@@ -361,8 +392,8 @@ class ControlAdditionalSettingsLoadQueueTests(unittest.TestCase):
                     )
 
                 self.assertFalse(runtime.additional_settings_preset_apply_reload_state.has_pending())
-                self.assertEqual(len(callbacks), 1)
-                callbacks[0][1]()
+                self.assertEqual(len(timers), 1)
+                timers[0].fire()
                 page._schedule_additional_settings_reload.assert_called_once_with(force=True)
 
 

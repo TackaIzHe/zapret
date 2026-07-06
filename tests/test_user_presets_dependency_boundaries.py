@@ -47,6 +47,44 @@ class UserPresetsDependencyBoundaryTests(unittest.TestCase):
             parent=parent,
         )
 
+    def test_user_presets_activation_error_uses_shared_notification_center(self) -> None:
+        from presets.ui.common import user_presets_page as page_module
+        from presets.ui.common.user_presets_page import UserPresetsPageBase
+
+        notify = Mock()
+        page = UserPresetsPageBase.__new__(UserPresetsPageBase)
+        page._preset_activate_request_id = 5
+        page._pending_preset_activation = None
+        page._notify = notify
+        page._runtime_service = SimpleNamespace(apply_active_preset_marker_for_file=Mock())
+        page._restore_preset_activation_marker_file_name = ""
+        page._tr = lambda _key, default, **_kwargs: default
+
+        result = SimpleNamespace(
+            ok=False,
+            log_message="Ошибка активации пресета: long details",
+            log_level="ERROR",
+            infobar_level="error",
+            infobar_title="Ошибка",
+            infobar_content="Preset содержит ссылки на отсутствующие файлы (2), например: --hostlist=lists/example.txt",
+            activated_file_name=None,
+        )
+
+        with (
+            patch.object(page_module, "log"),
+            patch.object(page_module.InfoBar, "error") as direct_error,
+        ):
+            UserPresetsPageBase._on_preset_activation_finished(page, 5, result)
+
+        direct_error.assert_not_called()
+        notify.assert_called_once()
+        payload = notify.call_args.args[0]
+        self.assertEqual(payload["level"], "error")
+        self.assertEqual(payload["source"], "presets.user.activation")
+        self.assertEqual(payload["title"], "Ошибка")
+        self.assertIn("hostlist=lists/example.txt", payload["content"])
+        self.assertGreaterEqual(int(payload["dedupe_window_ms"]), 10000)
+
     def test_user_presets_page_receives_concrete_preset_actions_instead_of_feature(self) -> None:
         from app.page_names import PageName
         from presets.ui.common.user_presets_page import UserPresetsPageBase

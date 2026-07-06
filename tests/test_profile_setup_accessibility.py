@@ -165,11 +165,8 @@ class ProfileSetupAccessibilityTests(unittest.TestCase):
             page._list_file_text.property("screenReaderStateText"),
             "Ваши записи списка profile",
         )
-        self.assertEqual(page._list_file_save_button.accessibleName(), "Сохранить список profile")
-        self.assertEqual(
-            page._list_file_save_button.property("screenReaderStateText"),
-            "Сохранить список profile",
-        )
+        # Кнопки «Сохранить список» больше нет: список сохраняется автоматически.
+        self.assertIsNone(page._list_file_save_button)
         self.assertEqual(page._match_text.accessibleName(), "Условия применения profile")
         self.assertEqual(
             page._match_text.property("screenReaderStateText"),

@@ -6,15 +6,12 @@ import unittest
 from unittest.mock import patch
 
 from folders.defaults import COMMON_FOLDER_KEY
+from folders.ordering import plan_item_move
 from profile.folders import (
     create_profile_folder,
     delete_profile_folder,
     load_profile_folder_state,
-    move_profile_before_in_folder_state,
-    move_profile_after_in_folder_state,
     move_profile_folder_by_step,
-    move_profile_to_end_in_folder_state,
-    move_profile_to_folder_in_folder_state,
     rename_profile_folder,
     reset_profile_folders,
     set_profile_folder,
@@ -23,6 +20,10 @@ from profile.folders import (
     set_profile_folder_order,
     save_profile_folder_state,
 )
+
+
+def _live_items(*keys: str) -> list[dict]:
+    return [{"key": key, "name": key} for key in keys]
 
 
 class ProfileFolderActionTests(unittest.TestCase):
@@ -150,7 +151,7 @@ class ProfileFolderActionTests(unittest.TestCase):
                     self.assertFalse(set_profile_folder("profile-a", "youtube"))
                     self.assertFalse(set_profile_folder_order("profile-a", 3))
 
-    def test_profile_reorder_saves_folder_state_once(self) -> None:
+    def test_profile_reorder_renumbers_folder_from_display_order(self) -> None:
         with TemporaryDirectory() as temp_dir:
             with patch("settings.store.MAIN_DIRECTORY", str(Path(temp_dir))):
                 state = load_profile_folder_state()
@@ -158,18 +159,21 @@ class ProfileFolderActionTests(unittest.TestCase):
                     state["items"][key] = {"folder_key": COMMON_FOLDER_KEY, "order": index, "rating": 0}
                 save_profile_folder_state(state)
 
-                save_calls = 0
-                original_save = save_profile_folder_state
+                planned = plan_item_move(
+                    load_profile_folder_state(),
+                    _live_items("a", "b", "c", "d"),
+                    action="before",
+                    source_key="d",
+                    destination_key="a",
+                )
+                self.assertIsNotNone(planned)
+                save_profile_folder_state(planned)
+                state = load_profile_folder_state()
 
-                def _counting_save(next_state):
-                    nonlocal save_calls
-                    save_calls += 1
-                    return original_save(next_state)
-
-                with patch("profile.folders.save_profile_folder_state", side_effect=_counting_save):
-                    move_profile_before_in_folder_state("d", "a", ["a", "b", "c", "d"])
-
-        self.assertEqual(save_calls, 1)
+        self.assertEqual(state["items"]["d"]["order"], 0)
+        self.assertEqual(state["items"]["a"]["order"], 1)
+        self.assertEqual(state["items"]["b"]["order"], 2)
+        self.assertEqual(state["items"]["c"]["order"], 3)
 
     def test_profile_move_after_matches_lower_drop_marker(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -179,7 +183,15 @@ class ProfileFolderActionTests(unittest.TestCase):
                     state["items"][key] = {"folder_key": COMMON_FOLDER_KEY, "order": index, "rating": 0}
                 save_profile_folder_state(state)
 
-                move_profile_after_in_folder_state("a", "b", ["a", "b", "c"])
+                planned = plan_item_move(
+                    load_profile_folder_state(),
+                    _live_items("a", "b", "c"),
+                    action="after",
+                    source_key="a",
+                    destination_key="b",
+                )
+                self.assertIsNotNone(planned)
+                save_profile_folder_state(planned)
                 state = load_profile_folder_state()
 
         self.assertEqual(state["items"]["b"]["order"], 0)
@@ -194,12 +206,25 @@ class ProfileFolderActionTests(unittest.TestCase):
                     state["items"][key] = {"folder_key": COMMON_FOLDER_KEY, "order": index, "rating": 0}
                 save_profile_folder_state(state)
 
-                move_profile_after_in_folder_state("a", "b", ["a", "b", "c"])
-                with patch(
-                    "profile.folders.save_profile_folder_state",
-                    side_effect=AssertionError("unchanged profile folder order must not be saved"),
-                ):
-                    self.assertFalse(move_profile_after_in_folder_state("a", "b", ["b", "a", "c"]))
+                first = plan_item_move(
+                    load_profile_folder_state(),
+                    _live_items("a", "b", "c"),
+                    action="after",
+                    source_key="a",
+                    destination_key="b",
+                )
+                self.assertIsNotNone(first)
+                save_profile_folder_state(first)
+                # Повторное «a после b» уже не меняет отображаемый порядок — no-op.
+                self.assertIsNone(
+                    plan_item_move(
+                        load_profile_folder_state(),
+                        _live_items("a", "b", "c"),
+                        action="after",
+                        source_key="a",
+                        destination_key="b",
+                    )
+                )
 
     def test_duplicate_profile_move_to_end_skips_folder_state_save(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -209,12 +234,23 @@ class ProfileFolderActionTests(unittest.TestCase):
                     state["items"][key] = {"folder_key": COMMON_FOLDER_KEY, "order": index, "rating": 0}
                 save_profile_folder_state(state)
 
-                move_profile_to_end_in_folder_state("a", ["a", "b", "c"])
-                with patch(
-                    "profile.folders.save_profile_folder_state",
-                    side_effect=AssertionError("unchanged profile move-to-end must not be saved"),
-                ):
-                    self.assertFalse(move_profile_to_end_in_folder_state("a", ["b", "c", "a"]))
+                first = plan_item_move(
+                    load_profile_folder_state(),
+                    _live_items("a", "b", "c"),
+                    action="end",
+                    source_key="a",
+                )
+                self.assertIsNotNone(first)
+                save_profile_folder_state(first)
+                # Профиль уже в конце папки — повторный move-to-end это no-op.
+                self.assertIsNone(
+                    plan_item_move(
+                        load_profile_folder_state(),
+                        _live_items("a", "b", "c"),
+                        action="end",
+                        source_key="a",
+                    )
+                )
 
     def test_duplicate_profile_move_to_folder_skips_folder_state_save(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -224,11 +260,16 @@ class ProfileFolderActionTests(unittest.TestCase):
                 state["items"]["b"] = {"folder_key": "youtube", "order": 1, "rating": 0}
                 save_profile_folder_state(state)
 
-                with patch(
-                    "profile.folders.save_profile_folder_state",
-                    side_effect=AssertionError("unchanged profile move-to-folder must not be saved"),
-                ):
-                    self.assertFalse(move_profile_to_folder_in_folder_state("b", "youtube", ["a", "b"]))
+                # «b» уже последний в youtube — перенос в ту же папку это no-op.
+                self.assertIsNone(
+                    plan_item_move(
+                        load_profile_folder_state(),
+                        _live_items("a", "b"),
+                        action="folder",
+                        source_key="b",
+                        destination_folder_key="youtube",
+                    )
+                )
 
 
 if __name__ == "__main__":

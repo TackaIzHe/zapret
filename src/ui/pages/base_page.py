@@ -209,6 +209,14 @@ class BasePage(_FluentScrollArea):
         extra: str = "",
         started_at: float | None = None,
     ) -> None:
+        # Метрика измеряет готовность ВИДИМОЙ страницы. Если готовность пришла
+        # после ухода со страницы (поздний worker), замер бессмыслен и даёт
+        # артефакты вида "content.ready 28067ms".
+        try:
+            if not self.isVisible():
+                return
+        except Exception:
+            return
         if started_at is None:
             started_at = float(self.__dict__.get("_page_open_metric_started_at", 0.0) or 0.0)
         if started_at <= 0:

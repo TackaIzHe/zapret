@@ -599,6 +599,11 @@ class WinDivertServiceRecoveryTests(unittest.TestCase):
             ),
             patch.object(
                 system_ops,
+                "find_stale_windivert_delete_pending_services_runtime",
+                return_value=[],
+            ),
+            patch.object(
+                system_ops,
                 "find_blocking_windivert_registry_services_runtime",
                 return_value=["Monkey"],
             ),
@@ -626,6 +631,11 @@ class WinDivertServiceRecoveryTests(unittest.TestCase):
 
         with (
             patch.object(system_ops, "probe_windivert_state_runtime", return_value=disabled_probe),
+            patch.object(
+                system_ops,
+                "find_stale_windivert_delete_pending_services_runtime",
+                return_value=[],
+            ),
             patch.object(
                 system_ops,
                 "find_blocking_windivert_registry_services_runtime",
@@ -687,6 +697,16 @@ class WinDivertServiceRecoveryTests(unittest.TestCase):
             ) as restore_start,
             patch.object(
                 system_ops,
+                "find_stale_windivert_delete_pending_services_runtime",
+                return_value=[],
+            ),
+            patch.object(
+                system_ops,
+                "unload_known_windivert_drivers_runtime",
+                return_value=True,
+            ),
+            patch.object(
+                system_ops,
                 "find_blocking_windivert_registry_services_runtime",
                 return_value=[],
             ),
@@ -719,6 +739,16 @@ class WinDivertServiceRecoveryTests(unittest.TestCase):
             patch.object(system_ops, "probe_windivert_state_runtime", return_value=missing_driver_probe),
             patch.object(
                 system_ops,
+                "find_stale_windivert_delete_pending_services_runtime",
+                return_value=[],
+            ),
+            patch.object(
+                system_ops,
+                "unload_known_windivert_drivers_runtime",
+                return_value=True,
+            ),
+            patch.object(
+                system_ops,
                 "find_blocking_windivert_registry_services_runtime",
                 return_value=[],
             ),
@@ -734,6 +764,60 @@ class WinDivertServiceRecoveryTests(unittest.TestCase):
         self.assertTrue(result.ready)
         self.assertEqual(result.stage, "network_open_probe_bypassed:registry_clean")
         restore_start.assert_not_called()
+
+    def test_spawn_readiness_unloads_zombie_driver_before_registry_clean_bypass(self) -> None:
+        """Зомби-драйвер после недавнего stop: registry чист, но open падает.
+
+        Один unload + повторная проба должны дать честный ready вместо bypass,
+        чтобы первый запуск winws2 не умирал с 0xC0000142.
+        """
+        from winws_runtime.runtime import system_ops
+
+        zombie_probe = system_ops.WinDivertRuntimeProbeResult(
+            installed=False,
+            ready=False,
+            error_code=1060,
+            stage="network_open",
+        )
+        ready_probe = system_ops.WinDivertRuntimeProbeResult(
+            installed=True,
+            ready=True,
+            error_code=None,
+            stage="network_open",
+        )
+
+        with (
+            patch.object(
+                system_ops,
+                "probe_windivert_state_runtime",
+                side_effect=[zombie_probe, ready_probe],
+            ),
+            patch.object(
+                system_ops,
+                "find_stale_windivert_delete_pending_services_runtime",
+                return_value=[],
+            ),
+            patch.object(
+                system_ops,
+                "unload_known_windivert_drivers_runtime",
+                return_value=True,
+            ) as unload_drivers,
+            patch.object(
+                system_ops,
+                "find_blocking_windivert_registry_services_runtime",
+                return_value=[],
+            ),
+            patch.object(system_ops.time, "sleep"),
+            patch.object(system_ops, "log"),
+        ):
+            result = system_ops.wait_for_windivert_spawn_ready_runtime(
+                max_wait_seconds=1.0,
+                poll_interval=0.001,
+            )
+
+        self.assertTrue(result.ready)
+        self.assertEqual(result.stage, "network_open")
+        unload_drivers.assert_called_once_with()
 
     def test_running_disabled_delete_pending_monkey_is_detected_as_stale(self) -> None:
         from winws_runtime.runtime import system_ops

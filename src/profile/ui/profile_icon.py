@@ -14,6 +14,28 @@ _SIMPLE_PREFIX = "simple:"
 _PROFILE_PIXMAP_CACHE_MAX = 256
 _PROFILE_PIXMAP_CACHE: OrderedDict[tuple[str, str, str, int], QPixmap] = OrderedDict()
 
+_simple_icons_bundle: dict[str, tuple[str, str]] | None = None
+
+
+def _bundled_simple_icons() -> dict[str, tuple[str, str]]:
+    """Возвращает сгенерированный бандл slug -> (primary_color, raw_svg).
+
+    Бандл содержит только иконки из каталога profile/icons.py и импортируется
+    за миллисекунды. Раньше здесь лениво импортировался simplepycons целиком
+    (~3400 модулей, ~2.6с в GUI-потоке при первой отрисовке списка профилей).
+    """
+    global _simple_icons_bundle
+    bundle = _simple_icons_bundle
+    if bundle is None:
+        try:
+            from profile.ui.simple_icons_bundle import SIMPLE_ICON_SVGS
+
+            bundle = dict(SIMPLE_ICON_SVGS)
+        except Exception:
+            bundle = {}
+        _simple_icons_bundle = bundle
+    return bundle
+
 
 def profile_icon_pixmap(icon_name: str, *, color: str, size: int, theme_name: str = "") -> QPixmap:
     name = str(icon_name or "").strip()
@@ -94,26 +116,13 @@ def _simple_icon_svg(slug: str, *, color: str) -> str:
     clean_slug = str(slug or "").strip().lower().replace("-", "")
     if not clean_slug:
         return ""
-    try:
-        from simplepycons import all_icons  # type: ignore
-    except Exception:
+    entry = _bundled_simple_icons().get(clean_slug)
+    if entry is None:
         return ""
-
-    try:
-        icon = all_icons[clean_slug]
-    except Exception:
-        getter = getattr(all_icons, f"get_{clean_slug}_icon", None)
-        if not callable(getter):
-            return ""
-        try:
-            icon = getter()
-        except Exception:
-            return ""
-
-    raw_svg = str(getattr(icon, "raw_svg", "") or "")
+    primary_color_raw, raw_svg = entry
     if not raw_svg:
         return ""
-    primary_color = _valid_hex_color(f"#{str(getattr(icon, 'primary_color', '') or '').lstrip('#')}")
+    primary_color = _valid_hex_color(primary_color_raw)
     fill_color = _valid_hex_color(color) or primary_color or "#3B82F6"
     if "<svg" in raw_svg and "fill=" not in raw_svg.split(">", 1)[0]:
         raw_svg = raw_svg.replace("<svg", f'<svg fill="{fill_color}"', 1)

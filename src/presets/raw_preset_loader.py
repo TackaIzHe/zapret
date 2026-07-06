@@ -82,6 +82,7 @@ class RawPresetActionWorker(QThread):
         *,
         action: str,
         payload: dict | None = None,
+        load_preset=None,
         parent=None,
     ):
         super().__init__(parent)
@@ -93,8 +94,16 @@ class RawPresetActionWorker(QThread):
         self._reset_to_builtin = reset_to_builtin
         self._delete_preset = delete_preset
         self._source_path = source_path
+        self._load_preset = load_preset
         self._action = str(action or "").strip()
         self._payload = dict(payload or {})
+
+    def _load_result_after_action(self, file_name: str):
+        """Итоговое содержимое читается здесь же, в фоновом потоке: страница
+        применяет его напрямую, без второго цикла load-worker-а."""
+        if not callable(self._load_preset):
+            return None
+        return self._load_preset(file_name)
 
     def run(self) -> None:
         action = self._action
@@ -107,13 +116,13 @@ class RawPresetActionWorker(QThread):
                     file_name=str(payload.get("file_name") or ""),
                     new_name=str(payload.get("new_name") or ""),
                 )
-                result = (updated, self._source_path(updated.file_name))
+                result = (updated, self._source_path(updated.file_name), self._load_result_after_action(updated.file_name))
             elif action == "duplicate":
                 updated = self._duplicate_preset(
                     file_name=str(payload.get("file_name") or ""),
                     new_name=str(payload.get("new_name") or ""),
                 )
-                result = (updated, self._source_path(updated.file_name))
+                result = (updated, self._source_path(updated.file_name), self._load_result_after_action(updated.file_name))
             elif action == "export":
                 target_path = str(payload.get("target_path") or "")
                 self._export_preset(
@@ -125,7 +134,7 @@ class RawPresetActionWorker(QThread):
                 updated = self._reset_to_builtin(
                     file_name=str(payload.get("file_name") or ""),
                 )
-                result = (updated, self._source_path(updated.file_name))
+                result = (updated, self._source_path(updated.file_name), self._load_result_after_action(updated.file_name))
             elif action == "delete":
                 result = self._delete_preset(
                     file_name=str(payload.get("file_name") or ""),

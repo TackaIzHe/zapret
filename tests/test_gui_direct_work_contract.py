@@ -44,7 +44,18 @@ ALLOWED_PROCESS_EVENTS_FILES = {
     "ui/startup_ui_metrics.py",
 }
 
-ALLOWED_EDITOR_TEXT_READS = set()
+# Единственные легальные точки чтения текста редактора в GUI: мемоизированные
+# аксессоры «документ — источник правды». Читают целиком, лениво (по dirty-флагу),
+# не чаще одного раза на дебаунс-цикл валидации / запрос сохранения.
+# Инкрементальный кэш по contentsChange запрещён: Qt учитывает финальный
+# разделитель блока в charsAdded/charsRemoved, позиционный патчинг терял
+# вставленный из буфера текст (фантомные ошибки валидации, потеря данных).
+ALLOWED_EDITOR_TEXT_READS = {
+    "presets/ui/common/preset_subpage_base.py:_current_raw_editor_text:toPlainText()",
+    "presets/ui/common/raw_preset_text_editor.py:current_text:toPlainText()",
+    "profile/ui/profile_setup_page.py:_current_list_file_text:toPlainText()",
+    "profile/ui/profile_setup_page.py:_current_raw_profile_text:toPlainText()",
+}
 
 FORBIDDEN_IMPORT_ROOTS = {
     "requests",
@@ -217,6 +228,10 @@ class GuiDirectWorkContractTests(unittest.TestCase):
                     offenders.append(f"{rel_path}:{node.lineno}:{owner_name}.{node.func.attr}()")
                     continue
                 if node.func.attr in FORBIDDEN_IO_METHODS and self._looks_like_path_io(node.func.value):
+                    if node.func.attr == "replace" and len(node.args) >= 2:
+                        # str.replace(old, new) on a *path*-named string is not
+                        # filesystem IO; Path.replace(target) takes one argument.
+                        continue
                     offenders.append(f"{rel_path}:{node.lineno}:path.{node.func.attr}()")
         return offenders
 

@@ -23,8 +23,13 @@ class PROCESSENTRY32W(ctypes.Structure):
     ]
 
 
-if hasattr(ctypes, "windll"):
-    _kernel32 = ctypes.windll.kernel32
+if hasattr(ctypes, "WinDLL"):
+    # Приватный экземпляр WinDLL, а не глобальный ctypes.windll.kernel32:
+    # windll кэширует функции процессно-глобально, и argtypes на них может
+    # перезаписать любой другой модуль со СВОИМ классом PROCESSENTRY32W —
+    # тогда byref(наша структура) падает с TypeError
+    # ("expected LP_PROCESSENTRY32W instance instead of pointer to PROCESSENTRY32W").
+    _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 
     _CreateToolhelp32Snapshot = _kernel32.CreateToolhelp32Snapshot
     _CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]

@@ -997,6 +997,7 @@ class ProfileSetupUiGuardTests(unittest.TestCase):
         page._list_file_text = _PlainTextWidget("user.example", read_only=False)
         page._list_file_base_text_snapshot = "base.example"
         page._list_file_text_snapshot = "user.example"
+        page._list_file_text_dirty = False
         page._list_file_save_button = _BoolWidget(enabled=True)
         page._list_file_status_label = _TextWidget("Записей всего: 2 • ваших: 1")
         page._render_list_file_validation = Mock()
@@ -1302,6 +1303,7 @@ class ProfileSetupUiGuardTests(unittest.TestCase):
         page._list_file_save_button = _BoolWidget(enabled=False)
         page._list_file_status_label = _TextWidget("")
         page._list_file_text_snapshot = "user.example\nsecond.example"
+        page._list_file_text_dirty = False
         page._list_file_user_entries_count = 2
         page._list_file_base_entries_count = 1
         page._render_list_file_validation = Mock()
@@ -1433,35 +1435,35 @@ class ProfileSetupUiGuardTests(unittest.TestCase):
         })
         self.assertEqual(page._list_file_text.plain_text_read_calls, [])
 
-    def test_list_file_validation_after_text_change_uses_cached_snapshot(self) -> None:
+    def test_list_file_validation_after_text_change_reads_editor_once(self) -> None:
         from unittest.mock import Mock
 
         from profile.ui.profile_setup_page import ProfileSetupPageBase
 
+        # Документ — единственный источник правды: после правки (dirty) запуск
+        # валидации перечитывает текст из редактора целиком и ровно один раз.
+        # Инкрементального кэша по contentsChange больше нет — он терял
+        # вставленный из буфера текст (Qt учитывает финальный разделитель
+        # блока в charsAdded) и валидация ругалась на фантомные строки.
         worker = _ValidationWorker()
         page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
         page._loading = False
         page._list_file_kind = "hostlist"
         page._list_file_text = _PlainTextWidget("new.example\nsecond.example")
         page._list_file_text_snapshot = "old.example"
-        page._list_file_text_dirty = False
+        page._list_file_text_dirty = True
         page._list_file_validation_request_id = 0
         page.create_profile_list_file_validation_worker = Mock(return_value=worker)
-        page._list_file_inserted_text = Mock(return_value="new.example\nsecond.example")
 
-        ProfileSetupPageBase._on_list_file_text_contents_changed(
-            page,
-            0,
-            len("old.example"),
-            len("new.example\nsecond.example"),
-        )
-        page._list_file_text.plain_text_read_calls.clear()
         ProfileSetupPageBase._start_list_file_validation_worker(page, {
             "kind": "hostlist",
             "text": None,
         })
 
-        self.assertEqual(page._list_file_text.plain_text_read_calls, [])
+        self.assertEqual(
+            page._list_file_text.plain_text_read_calls,
+            ["new.example\nsecond.example"],
+        )
         page.create_profile_list_file_validation_worker.assert_called_once_with(
             1,
             kind="hostlist",
@@ -1469,6 +1471,15 @@ class ProfileSetupUiGuardTests(unittest.TestCase):
             parent=page,
         )
         self.assertEqual(worker.start_calls, 1)
+        # Мемо обновлено — повторное обращение без правок не читает редактор.
+        self.assertEqual(
+            ProfileSetupPageBase._current_list_file_text(page),
+            "new.example\nsecond.example",
+        )
+        self.assertEqual(
+            page._list_file_text.plain_text_read_calls,
+            ["new.example\nsecond.example"],
+        )
 
     def test_list_file_validation_result_updates_entries_count_from_worker(self) -> None:
         from unittest.mock import Mock
@@ -1584,6 +1595,7 @@ class ProfileSetupUiGuardTests(unittest.TestCase):
         page._profile_key = "profile-1"
         page._list_file_text = _PlainTextWidget("user.example\nsecond.example")
         page._list_file_text_snapshot = "user.example\nsecond.example"
+        page._list_file_text_dirty = False
         page._list_file_save_worker = None
         page._list_file_save_request_id = 0
         page._list_file_status_label = _TextWidget("")
@@ -1924,11 +1936,14 @@ class ProfileSetupUiGuardTests(unittest.TestCase):
         self.assertEqual(text, raw_text)
         self.assertEqual(page._raw_profile_text.plain_text_read_calls, [])
 
-    def test_raw_profile_save_after_text_change_uses_cache_without_worker_start_read(self) -> None:
+    def test_raw_profile_save_after_text_change_reads_editor_once(self) -> None:
         from unittest.mock import Mock
 
         from profile.ui.profile_setup_page import ProfileSetupPageBase
 
+        # После правки (textChanged инвалидирует мемо) сохранение перечитывает
+        # живой текст из редактора ровно один раз — инкрементального кэша по
+        # contentsChange больше нет, он молча терял вставленный текст.
         raw_text = "--new\n--lua-desync=fake"
         worker = _SaveWorker()
         page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
@@ -1939,13 +1954,11 @@ class ProfileSetupUiGuardTests(unittest.TestCase):
         page._raw_profile_save_request_id = 0
         page._raw_profile_save_button = None
         page.create_profile_raw_text_save_worker = Mock(return_value=worker)
-        page._raw_profile_inserted_text = Mock(return_value=raw_text)
 
-        ProfileSetupPageBase._on_raw_profile_text_contents_changed(page, 0, len("--old\n"), len(raw_text))
-        page._raw_profile_text.plain_text_read_calls.clear()
+        ProfileSetupPageBase._on_raw_profile_text_changed(page)
         ProfileSetupPageBase._on_raw_profile_save_clicked(page)
 
-        self.assertEqual(page._raw_profile_text.plain_text_read_calls, [])
+        self.assertEqual(page._raw_profile_text.plain_text_read_calls, [raw_text])
         page.create_profile_raw_text_save_worker.assert_called_once_with(
             1,
             "profile-1",
@@ -1953,6 +1966,7 @@ class ProfileSetupUiGuardTests(unittest.TestCase):
             parent=page,
         )
         self.assertEqual(worker.start_calls, 1)
+        self.assertEqual(page._raw_profile_text_cache, raw_text)
 
     def test_raw_profile_save_skips_duplicate_button_disable(self) -> None:
         from unittest.mock import Mock

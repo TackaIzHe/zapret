@@ -16,9 +16,16 @@ PRIVATE_ROOT = PUBLIC_ROOT.parent / "private_zapretgui"
 ALL_PROFILES_PATH = PRIVATE_ROOT / "resources" / "profile" / "templates" / "all_profiles.txt"
 WIDE_DISCORD_TCP_FILTER = "--filter-tcp=80,443,1080,2053,2083,2087,2096,8443"
 WIDE_DISCORD_PRIMARY_LINES = {
+    "--hostlist=lists/discord-images.txt",
     "--hostlist=lists/discord-media.txt",
     "--hostlist=lists/discord.txt",
     "--ipset=lists/ipset-discord.txt",
+}
+# Default v1 намеренно вернул legacy Cloudflare ipset-профили (commit 634649d3).
+ACCEPTED_LEGACY_CLOUDFLARE_TCP_PROFILES = {
+    ("Default v1 (game filter).txt", "Cloudflare legacy TCP"),
+    ("Default v1 (game filter).txt", "Cloudflare IPv6 legacy TCP"),
+    ("Default v1 (game filter).txt", "Cloudflare alt TCP"),
 }
 ACCEPTED_WIDER_PROFILE_KEYS = {
     "winws2|hostlist=discord.txt|tcp=80,443-65535",
@@ -224,6 +231,8 @@ class BuiltinProfileCatalogTests(unittest.TestCase):
                 if name == "EpicGames & Fortnite":
                     has_epicgames = True
                 if name.startswith("Cloudflare") and "TCP" in name:
+                    if (path.name, name) in ACCEPTED_LEGACY_CLOUDFLARE_TCP_PROFILES:
+                        continue
                     cloudflare_tcp_profiles += 1
                     if name != "Cloudflare TCP":
                         offenders.append(f"{path.name} profile {profile.index}: старый Cloudflare TCP variant {name!r}")

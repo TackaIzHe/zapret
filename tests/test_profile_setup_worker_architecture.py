@@ -80,10 +80,12 @@ class ProfileSetupWorkerArchitectureTests(unittest.TestCase):
         self.assertNotIn("_controller.create_load_worker", start_source)
         self.assertIn("_create_profile_setup_load_worker_fn", create_source)
         self.assertIn("create_profile_setup_load_worker", feature_source)
-        self.assertIn("_profile_setup_payload_cache", service_init_source)
+        self.assertIn("ProfileDerivedCache()", service_init_source)
+        self.assertNotIn("_profile_setup_payload_cache", service_init_source)
         self.assertIn("_profile_list_lock", setup_source)
-        self.assertIn("_profile_setup_cache_key", setup_locked_source)
-        self.assertIn("_remember_profile_setup_payload", setup_locked_source)
+        self.assertIn("_profile_derived_cache.core_for", setup_locked_source)
+        self.assertIn("_profile_sources_cache.sources_for", setup_locked_source)
+        self.assertNotIn("_remember_profile_setup_payload", setup_locked_source)
 
         profile_feature = Mock()
         kwargs = build_profile_setup_page_kwargs(
@@ -99,17 +101,14 @@ class ProfileSetupWorkerArchitectureTests(unittest.TestCase):
         )
         self.assertNotIn("profile_feature", kwargs)
 
-    def test_profile_list_warmup_prepares_profile_setup_payloads(self) -> None:
+    def test_profile_list_warmup_does_not_precompute_setup_payloads(self) -> None:
         from app.feature_facades.profile import ProfileFeature
         from profile.service import ProfilePresetService
 
         warm_source = inspect.getsource(ProfileFeature.warm_profile_list)
-        service_source = inspect.getsource(ProfilePresetService.warm_profile_setups)
 
-        self.assertIn("service.warm_profile_setups", warm_source)
-        self.assertIn('getattr(payload, "items"', warm_source)
-        self.assertIn("get_profile_setup", service_source)
-        self.assertIn("_yield_profile_payload_worker", service_source)
+        self.assertNotIn("warm_profile_setups", warm_source)
+        self.assertFalse(hasattr(ProfilePresetService, "warm_profile_setups"))
 
     def test_profile_setup_reload_waits_while_load_worker_runs(self) -> None:
         from profile.ui.profile_setup_page import ProfileSetupPageBase

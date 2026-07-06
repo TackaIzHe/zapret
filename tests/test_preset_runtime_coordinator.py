@@ -16,6 +16,38 @@ class PresetRuntimeCoordinatorTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls._app = QApplication.instance() or QApplication([])
 
+    def setUp(self) -> None:
+        # Координаторы в тестах живут меньше, чем их watch-QThread'ы. Если
+        # Python соберёт координатора, пока поток ещё работает, Qt делает
+        # fail-fast (0xC0000409). Отслеживаем каждый реальный worker и в
+        # tearDown дожидаемся его завершения до сборки мусора.
+        from core.runtime import preset_runtime_coordinator as prc
+
+        self._live_watch_workers: list = []
+        original_worker = prc.PresetWatchPathResolveWorker
+        test_case = self
+
+        class _TrackedWatchWorker(original_worker):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                test_case._live_watch_workers.append(self)
+
+        self._watch_worker_patch = patch.object(
+            prc, "PresetWatchPathResolveWorker", _TrackedWatchWorker
+        )
+        self._watch_worker_patch.start()
+
+    def tearDown(self) -> None:
+        self._watch_worker_patch.stop()
+        for worker in self._live_watch_workers:
+            try:
+                worker.wait(2000)
+            except (RuntimeError, AttributeError):
+                pass
+        for _ in range(3):
+            self._app.processEvents()
+        self._live_watch_workers.clear()
+
     def _process_events_until(self, predicate, *, timeout_s: float = 0.5) -> bool:
         deadline = time.monotonic() + timeout_s
         while time.monotonic() < deadline:
@@ -331,7 +363,9 @@ class PresetRuntimeCoordinatorTests(unittest.TestCase):
             )
 
             coordinator.handle_preset_switched(ZAPRET2_MODE, "Default v5.txt")
-            self._app.processEvents()
+            # Резолвер вызывается в фоновом QThread — ждём его, а не гадаем
+            # по одному processEvents().
+            self.assertTrue(self._process_events_until(lambda: bool(path_calls)))
 
         self.assertEqual(path_calls, [(ZAPRET2_MODE, "Default v5.txt")])
 

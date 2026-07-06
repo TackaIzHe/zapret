@@ -81,29 +81,14 @@ class WindowGeometryRuntime:
         self._last_normal_geometry: tuple[int, int, int, int] | None = None
         self._last_persisted_geometry: tuple[int, int, int, int] | None = None
         self._last_persisted_maximized: bool | None = None
-        self._pending_window_maximized_state: bool | None = None
         self._geometry_save_runtime = OneShotWorkerRuntime()
         self._geometry_save_state = LatestValueWorkerState(self._geometry_save_runtime, empty_value=None)
-        self._window_fsm_active = False
-        self._window_fsm_target_mode: str | None = None
-        self._window_fsm_retry_count = 0
         self._last_non_minimized_zoomed = False
-        self._window_zoom_visual_state: bool | None = None
 
         self._geometry_save_timer = QTimer(host)
         self._geometry_save_timer.setSingleShot(True)
         self._geometry_save_timer.setInterval(450)
         self._geometry_save_timer.timeout.connect(self._persist_geometry_now)
-
-        self._window_state_settle_timer = QTimer(host)
-        self._window_state_settle_timer.setSingleShot(True)
-        self._window_state_settle_timer.setInterval(180)
-        self._window_state_settle_timer.timeout.connect(self._on_window_state_settle_timeout)
-
-        self._window_maximized_persist_timer = QTimer(host)
-        self._window_maximized_persist_timer.setSingleShot(True)
-        self._window_maximized_persist_timer.setInterval(140)
-        self._window_maximized_persist_timer.timeout.connect(self._persist_window_maximized_state_now)
 
     def restore_geometry(self) -> None:
         """Восстанавливает сохранённую позицию, размер и maximized-флаг окна."""
@@ -146,19 +131,7 @@ class WindowGeometryRuntime:
 
             if saved.position:
                 x, y = saved.position
-                is_visible = False
-                for screen in screens:
-                    screen_rect = screen.availableGeometry()
-                    if (
-                        x + 100 > screen_rect.left()
-                        and x < screen_rect.right()
-                        and y + 100 > screen_rect.top()
-                        and y < screen_rect.bottom()
-                    ):
-                        is_visible = True
-                        break
-
-                if is_visible:
+                if self._position_visible_on_any_screen(x, y):
                     self.host.move(x, y)
                     log(f"Восстановлена позиция окна: ({x}, {y})", "DEBUG")
                 else:
@@ -187,6 +160,76 @@ class WindowGeometryRuntime:
             self.host.resize(self.default_width, self.default_height)
         finally:
             self._restore_in_progress = False
+
+    def show_from_hidden(self) -> None:
+        """Единственная точка показа окна, скрытого в трей.
+
+        Qt на Windows откладывает setWindowState() для скрытых окон, а
+        resize()/move() пересинхронизируют Qt-состояние из нативного HWND
+        (у него остаётся WS_MAXIMIZE) — поэтому скрытое maximized-окно нельзя
+        ни «чистить», ни двигать: showMaximized() станет no-op и окно
+        покажется с maximized-флагом при normal-геометрии (обрезание).
+
+        Правильная последовательность: целевой режим берётся из памяти ДО
+        любых мутаций, maximized-окно показывается как есть (Windows хранит
+        его геометрию корректно), normal-геометрия применяется только когда
+        окно скрыто без maximized-состояния. Затем один запрос режима через
+        FSM — showMaximized()/showNormal() сами показывают скрытое окно и
+        снимают stale-флаг Minimized после minimize-в-трей.
+        """
+        try:
+            if self.host.isVisible():
+                self.request_zoom_state(self.remembered_zoom_state())
+                return
+        except Exception:
+            pass
+
+        target_zoomed = bool(self._last_non_minimized_zoomed)
+
+        if not target_zoomed and not self.is_zoomed():
+            self._restore_in_progress = True
+            try:
+                self._apply_remembered_normal_geometry()
+            finally:
+                self._restore_in_progress = False
+
+        self.request_zoom_state(target_zoomed)
+
+    def _apply_remembered_normal_geometry(self) -> None:
+        geometry = self._last_normal_geometry
+        if geometry is None:
+            return
+
+        try:
+            x, y, width, height = geometry
+            width = max(int(width), self.min_width)
+            height = max(int(height), self.min_height)
+            self.host.resize(width, height)
+
+            if self._position_visible_on_any_screen(int(x), int(y)):
+                self.host.move(int(x), int(y))
+            else:
+                screen_geometry = QApplication.primaryScreen().availableGeometry()
+                self.host.move(
+                    screen_geometry.center().x() - self.host.width() // 2,
+                    screen_geometry.center().y() - self.host.height() // 2,
+                )
+                log("Запомненная позиция за пределами экранов, окно отцентрировано", "WARNING")
+        except Exception as e:
+            log(f"Ошибка применения запомненной геометрии окна: {e}", "ERROR")
+
+    @staticmethod
+    def _position_visible_on_any_screen(x: int, y: int) -> bool:
+        for screen in QApplication.screens():
+            screen_rect = screen.availableGeometry()
+            if (
+                x + 100 > screen_rect.left()
+                and x < screen_rect.right()
+                and y + 100 > screen_rect.top()
+                and y < screen_rect.bottom()
+            ):
+                return True
+        return False
 
     def enable_persistence(self) -> None:
         self._persistence_enabled = True
@@ -226,49 +269,31 @@ class WindowGeometryRuntime:
         return "normal"
 
     def request_zoom_state(self, maximize: bool) -> bool:
+        """Переводит окно в maximized/normal одной командой.
+
+        Кнопки заголовка и перетаскивание обрабатывает qframelesswindow
+        нативно — runtime лишь наблюдает их через on_window_state_change().
+        Этот метод вызывают только show_from_hidden() и стартовое
+        восстановление, поэтому команда применяется напрямую, без FSM.
+        Для скрытого окна команда выполняется даже при совпадении режима:
+        showMaximized()/showNormal() заодно показывают окно.
+        """
         self._pending_restore_maximized = False
         target_mode = "maximized" if bool(maximize) else "normal"
-        resulting_mode = self._request_window_mode(target_mode)
-        if resulting_mode == "minimized":
-            return bool(self._last_non_minimized_zoomed)
-        return bool(resulting_mode == "maximized")
 
-    def request_minimize(self) -> bool:
-        resulting_mode = self._request_window_mode("minimized")
-        return bool(resulting_mode == "minimized" or self._is_window_minimized_state())
+        try:
+            host_visible = bool(self.host.isVisible())
+        except Exception:
+            host_visible = True
 
-    def restore_from_zoom_for_drag(self) -> bool:
-        current_mode = self.detect_mode()
-        current_zoomed = current_mode == "maximized"
-
-        if not current_zoomed and not (
-            self._window_fsm_active and self._window_fsm_target_mode == "maximized"
-        ):
-            return False
-
-        self.request_zoom_state(False)
-
-        if self.is_zoomed():
-            if not self._apply_window_mode_command("normal"):
-                return False
+        if not host_visible or self.detect_mode() != target_mode:
+            self._apply_window_mode_command(target_mode)
 
         actual_mode = self.detect_mode()
-        if actual_mode != "maximized":
-            self._finish_window_fsm_transition(actual_mode)
-
-        return bool(actual_mode != "maximized")
-
-    def toggle_maximize_restore(self) -> bool:
-        if self._window_fsm_active and self._window_fsm_target_mode in ("normal", "maximized"):
-            current_zoomed = bool(self._window_fsm_target_mode == "maximized")
-        else:
-            current_mode = self.detect_mode()
-            if current_mode == "minimized":
-                current_zoomed = bool(self._last_non_minimized_zoomed)
-            else:
-                current_zoomed = bool(current_mode == "maximized")
-
-        return bool(self.request_zoom_state(not current_zoomed))
+        if actual_mode != "minimized":
+            self._last_non_minimized_zoomed = actual_mode == "maximized"
+            self._schedule_geometry_save()
+        return bool(actual_mode == "maximized")
 
     def on_geometry_changed(self) -> None:
         if self._restore_in_progress:
@@ -290,18 +315,11 @@ class WindowGeometryRuntime:
 
     def on_window_state_change(self) -> None:
         current_mode = self.detect_mode()
+        if current_mode == "minimized":
+            return
 
-        if self._window_fsm_active and self._window_fsm_target_mode is not None:
-            target_mode = str(self._window_fsm_target_mode)
-            if current_mode == target_mode:
-                self._finish_window_fsm_transition(current_mode)
-            elif target_mode != "minimized":
-                self._apply_window_zoom_visual_state(target_mode == "maximized")
-        elif current_mode != "minimized":
-            zoomed = bool(current_mode == "maximized")
-            self._last_non_minimized_zoomed = zoomed
-            self._apply_window_zoom_visual_state(zoomed)
-            self._schedule_window_maximized_persist(zoomed)
+        self._last_non_minimized_zoomed = current_mode == "maximized"
+        self._schedule_geometry_save()
 
     def apply_saved_maximized_state_if_needed(self) -> None:
         if self._applied_saved_maximize_state:
@@ -330,45 +348,13 @@ class WindowGeometryRuntime:
             return bool(self._last_non_minimized_zoomed)
         return bool(current_mode == "maximized")
 
-    def _apply_window_zoom_visual_state(self, is_zoomed: bool) -> None:
-        zoomed = bool(is_zoomed)
-        if self._window_zoom_visual_state is zoomed:
-            return
-
-        self._window_zoom_visual_state = zoomed
-        self._last_non_minimized_zoomed = zoomed
-
-    def _schedule_window_maximized_persist(self, is_zoomed: bool) -> None:
-        self._pending_window_maximized_state = bool(is_zoomed)
-        try:
-            self._window_maximized_persist_timer.start()
-        except Exception:
-            self._persist_window_maximized_state_now()
-
-    def _persist_window_maximized_state_now(self) -> None:
-        state = self._pending_window_maximized_state
-        if state is None:
-            return
-
-        self._pending_window_maximized_state = None
-        state_bool = bool(state)
-
-        try:
-            if self._last_persisted_maximized != state_bool:
-                self._request_geometry_save(geometry=None, maximized=state_bool)
-        except Exception as e:
-            log(f"Ошибка сохранения состояния maximized: {e}", "DEBUG")
 
     def _apply_window_mode_command(self, mode: str) -> bool:
-        mode_str = str(mode)
-
         try:
-            if mode_str == "maximized":
+            if mode == "maximized":
                 self.host.showMaximized()
-            elif mode_str == "normal":
+            elif mode == "normal":
                 self.host.showNormal()
-            elif mode_str == "minimized":
-                self.host.showMinimized()
             else:
                 return False
             return True
@@ -381,104 +367,17 @@ class WindowGeometryRuntime:
             state = Qt.WindowState.WindowNoState
 
         try:
-            if mode_str == "maximized":
-                state = state & ~Qt.WindowState.WindowMinimized
-                state = state & ~Qt.WindowState.WindowFullScreen
+            state = state & ~Qt.WindowState.WindowMinimized
+            state = state & ~Qt.WindowState.WindowFullScreen
+            if mode == "maximized":
                 state = state | Qt.WindowState.WindowMaximized
-            elif mode_str == "normal":
-                state = state & ~Qt.WindowState.WindowMinimized
-                state = state & ~Qt.WindowState.WindowMaximized
-                state = state & ~Qt.WindowState.WindowFullScreen
-            elif mode_str == "minimized":
-                state = state & ~Qt.WindowState.WindowFullScreen
-                state = state | Qt.WindowState.WindowMinimized
             else:
-                return False
+                state = state & ~Qt.WindowState.WindowMaximized
 
             self.host.setWindowState(state)
             return True
         except Exception:
             return False
-
-    def _start_window_fsm_transition(self, target_mode: str) -> None:
-        self._window_fsm_active = True
-        self._window_fsm_target_mode = str(target_mode)
-        self._window_fsm_retry_count = 0
-
-        if self._window_fsm_target_mode != "minimized":
-            self._apply_window_zoom_visual_state(self._window_fsm_target_mode == "maximized")
-
-        self._apply_window_mode_command(self._window_fsm_target_mode)
-
-        try:
-            self._window_state_settle_timer.start()
-        except Exception:
-            pass
-
-    def _finish_window_fsm_transition(self, actual_mode: str | None = None) -> None:
-        mode = str(actual_mode) if actual_mode is not None else str(self.detect_mode())
-
-        self._window_fsm_active = False
-        self._window_fsm_target_mode = None
-        self._window_fsm_retry_count = 0
-
-        try:
-            self._window_state_settle_timer.stop()
-        except Exception:
-            pass
-
-        if mode == "minimized":
-            return
-
-        zoomed = mode == "maximized"
-        self._last_non_minimized_zoomed = zoomed
-        self._apply_window_zoom_visual_state(zoomed)
-        self._schedule_window_maximized_persist(zoomed)
-
-    def _on_window_state_settle_timeout(self) -> None:
-        if not self._window_fsm_active:
-            return
-
-        target_mode = self._window_fsm_target_mode
-        if target_mode is None:
-            return
-
-        actual_mode = self.detect_mode()
-        if actual_mode == target_mode:
-            self._finish_window_fsm_transition(actual_mode)
-            return
-
-        if self._window_fsm_retry_count < 2:
-            self._window_fsm_retry_count += 1
-            self._apply_window_mode_command(target_mode)
-            try:
-                self._window_state_settle_timer.start()
-            except Exception:
-                pass
-            return
-
-        self._finish_window_fsm_transition(actual_mode)
-
-    def _request_window_mode(self, target_mode: str) -> str:
-        mode = str(target_mode)
-        if mode not in ("normal", "maximized", "minimized"):
-            return self.detect_mode()
-
-        if self._window_fsm_active and self._window_fsm_target_mode == mode:
-            return mode
-
-        current_mode = self.detect_mode()
-        if not self._window_fsm_active and current_mode == mode:
-            try:
-                if not self.host.isVisible():
-                    self._apply_window_mode_command(mode)
-            except Exception:
-                pass
-            self._finish_window_fsm_transition(current_mode)
-            return current_mode
-
-        self._start_window_fsm_transition(mode)
-        return mode
 
     def _is_window_minimized_state(self) -> bool:
         try:
@@ -560,11 +459,6 @@ class WindowGeometryRuntime:
             normalized = (int(x), int(y), int(width), int(height))
 
             if maximized_changed or self._last_persisted_geometry != normalized:
-                self._pending_window_maximized_state = is_maximized
-                try:
-                    self._window_maximized_persist_timer.stop()
-                except Exception:
-                    pass
                 self._request_geometry_save(geometry=normalized, maximized=is_maximized)
         except Exception as e:
             log(f"Ошибка сохранения геометрии окна: {e}", "DEBUG")
@@ -659,7 +553,6 @@ class WindowGeometryRuntime:
         if not self._is_current_worker_request_id(runtime, _request_id):
             return
         self._last_persisted_maximized = bool(maximized)
-        self._pending_window_maximized_state = bool(maximized)
         if geometry is not None:
             self._last_persisted_geometry = tuple(int(value) for value in geometry)
 

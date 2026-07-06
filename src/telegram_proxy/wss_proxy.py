@@ -94,6 +94,7 @@ _RECV_ZERO_TIMEOUT = 8.0
 
 # How many empty upstream relays are enough to try the next bundled proxy first
 _UPSTREAM_ZERO_RECV_FAILS = 2
+_UPSTREAM_PARALLEL_ZERO_RECV_FAILS = 6
 _UPSTREAM_PENALTY_SECONDS = 60.0
 _UPSTREAM_PARALLEL_CONNECT_FAILS = 2
 _UPSTREAM_CONNECT_FAILURE_PENALTIES = (60.0, 180.0, 300.0)
@@ -446,12 +447,10 @@ class TelegramWSProxy:
                 group = 0
             elif not penalty:
                 group = 1
-            elif index == 0:
-                group = 2
             elif endpoint.tls:
-                group = 3
+                group = 2
             else:
-                group = 4
+                group = 3
             key = self._upstream_endpoint_key(endpoint)
             failures = self._upstream_connect_failure_counts.get(key, 0)
             active = 0 if index == 0 else self._upstream_active_counts.get(key, 0)
@@ -513,16 +512,19 @@ class TelegramWSProxy:
 
     def _mark_upstream_zero_recv(self, endpoint: UpstreamProxyEndpoint, label: str) -> None:
         key = self._upstream_endpoint_key(endpoint)
-        if self._selected_primary_parallel_active(endpoint):
-            return
         count = self._upstream_zero_recv_counts.get(key, 0) + 1
         self._upstream_zero_recv_counts[key] = count
-        if count < _UPSTREAM_ZERO_RECV_FAILS:
+        threshold = (
+            _UPSTREAM_PARALLEL_ZERO_RECV_FAILS
+            if self._selected_primary_parallel_active(endpoint)
+            else _UPSTREAM_ZERO_RECV_FAILS
+        )
+        if count < threshold:
             return
         self._upstream_penalty_until[key] = time.monotonic() + _UPSTREAM_PENALTY_SECONDS
         self._log(
             f"[{label}] upstream {endpoint.host}:{endpoint.port} temporarily deprioritized "
-            f"after recv=0 ({count}/{_UPSTREAM_ZERO_RECV_FAILS})"
+            f"after recv=0 ({count}/{threshold})"
         )
 
     def _mark_upstream_recv_ok(self, endpoint: UpstreamProxyEndpoint) -> None:
@@ -2285,7 +2287,7 @@ class TelegramWSProxy:
                     if not upstream_notified:
                         self._mark_upstream_recv_ok(endpoint)
                         self._notify_working_upstream(endpoint, label)
-                elif not fallback_mode:
+                else:
                     self._mark_upstream_zero_recv(endpoint, label)
             finally:
                 self._unmark_upstream_active(endpoint)

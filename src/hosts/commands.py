@@ -159,6 +159,32 @@ def read_active_domains_map(hosts_manager) -> dict[str, str]:
         return {}
 
 
+def read_active_domain_ip_map(hosts_manager) -> dict[str, list[str]]:
+    if hosts_manager is None:
+        return {}
+    try:
+        get_active_domain_ip_map = getattr(hosts_manager, "get_active_domain_ip_map", None)
+        if callable(get_active_domain_ip_map):
+            active_ip_map = get_active_domain_ip_map() or {}
+            return {
+                str(domain or "").strip().casefold(): [
+                    str(ip or "").strip()
+                    for ip in (ips if isinstance(ips, (list, tuple, set, frozenset)) else [ips])
+                    if str(ip or "").strip()
+                ]
+                for domain, ips in active_ip_map.items()
+                if str(domain or "").strip()
+            }
+    except Exception:
+        pass
+
+    return {
+        domain: [ip]
+        for domain, ip in read_active_domains_map(hosts_manager).items()
+        if domain and ip
+    }
+
+
 def build_services_catalog_plan(
     *,
     hosts_runtime,
@@ -169,7 +195,7 @@ def build_services_catalog_plan(
 ):
     import hosts.page_plans as hosts_page_plans
 
-    active_domains_map = read_active_domains_map(hosts_runtime)
+    active_domains_map = read_active_domain_ip_map(hosts_runtime)
     return hosts_page_plans.build_services_catalog_plan(
         current_selection=current_selection,
         active_domains_map=active_domains_map,

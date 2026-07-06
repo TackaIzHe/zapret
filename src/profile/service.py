@@ -11,20 +11,18 @@ import time
 
 from log.log import log
 from presets.cache_signatures import path_cache_signature
-from settings.mode import DEFAULT_LAUNCH_METHOD, ENGINE_WINWS2, PRESET_LAUNCH_METHODS, engine_for_launch_method, normalize_launch_method
+from settings.mode import DEFAULT_LAUNCH_METHOD, PRESET_LAUNCH_METHODS, engine_for_launch_method, normalize_launch_method
+from settings.store import get_user_profiles_revision
 from ui.performance_metrics import log_ui_timing_since
 
-from .match_filters import ports_label_from_match_lines, protocol_label_from_match_lines, strategy_catalog_from_match_lines
+from .derived_cache import PresetSourcesCache, ProfileDerivedCache, profile_raw_text
 from .folders import (
     load_profile_folder_state,
-    move_profile_after_in_folder_state,
-    move_profile_before_in_folder_state,
-    move_profile_to_end_in_folder_state,
-    move_profile_to_folder_in_folder_state,
-    profile_folder_collapsed,
-    profile_folder_for_profile,
+    profile_folder_state_lock,
+    save_profile_folder_state,
 )
 from .list_interpreter import build_profile_list_sources
+from .ordering import live_items_from_sources, plan_profile_move, resolve_profile_order_view
 from .key_resolution import (
     PresetProfileMoveResult,
     build_preset_profile_key_map,
@@ -39,7 +37,11 @@ from .list_file_editor import (
     validate_profile_list_file_text,
     write_profile_list_file_text,
 )
-from .filter_switch import resolve_filter_kind_switch
+from .filter_switch import (
+    filter_kind_switch_creates_preset_duplicate,
+    filter_kinds_without_preset_duplicates,
+    resolve_filter_kind_switch,
+)
 from .models import EngineName, Preset, Profile, ProfileSegment
 from .normalizer import normalize_preset_profiles
 from .parser import parse_preset_text
@@ -56,13 +58,12 @@ from .serializer import (
 )
 from .setup_match_text import build_profile_setup_match_tab_text
 from .strategy_state import ProfileStrategyState, ProfileStrategyStateStore
-from .strategy_catalog import StrategyEntry, load_strategy_catalogs
+from .strategy_catalog import StrategyEntry, load_strategy_catalogs_with_signature
 from .state import (
     ProfileListFileEditorState,
     ProfileListItem,
     ProfileListPayload,
     ProfileSetupPayload,
-    ProfileStrategyBranch,
     StrategyApplyResult,
 )
 from .template_library import load_profile_template_library
@@ -78,7 +79,6 @@ from .editable_settings import (
 
 
 PROFILE_LIST_PAYLOAD_CACHE_LIMIT = 24
-PROFILE_SETUP_PAYLOAD_CACHE_LIMIT = 128
 
 
 @dataclass(slots=True)
@@ -103,10 +103,8 @@ class ProfilePresetService:
             tuple[object, ...],
             ProfileListPayload,
         ] = OrderedDict()
-        self._profile_setup_payload_cache: OrderedDict[
-            tuple[object, ...],
-            ProfileSetupPayload | None,
-        ] = OrderedDict()
+        self._profile_derived_cache = ProfileDerivedCache()
+        self._profile_sources_cache = PresetSourcesCache()
         self._profile_list_lock = threading.RLock()
 
     @property
@@ -221,18 +219,21 @@ class ProfilePresetService:
             self._profile_list_lock.release()
 
     def list_preset_order_profiles(self) -> ProfileListPayload:
-        preset, manifest = self.load_selected_preset()
-        catalogs = load_strategy_catalogs(self._app_paths, self._engine)
-        items = [
-            self._item_for_profile(
-                profile,
-                catalogs=catalogs,
-                in_preset=True,
-                key=profile.key,
-                order=profile.index,
-            )
-            for profile in tuple(preset.profiles)
-        ]
+        # Под общим локом: сборка item-ов читает и пополняет _profile_derived_cache.
+        with self._profile_list_lock:
+            preset, manifest = self.load_selected_preset()
+            catalogs_signature, catalogs = load_strategy_catalogs_with_signature(self._app_paths, self._engine)
+            items = [
+                self._item_for_profile(
+                    profile,
+                    catalogs=catalogs,
+                    catalogs_signature=catalogs_signature,
+                    in_preset=True,
+                    key=profile.key,
+                    order=profile.index,
+                )
+                for profile in tuple(preset.profiles)
+            ]
         items.sort(key=lambda item: int(getattr(item, "profile_index", 0) or 0))
         return ProfileListPayload(
             items=tuple(items),
@@ -245,7 +246,18 @@ class ProfilePresetService:
         folder_state_started_at = time.perf_counter()
         folder_state = load_profile_folder_state()
         self._log_timing("profile_feature.folder_state.load", folder_state_started_at)
-        return (*preset_revision, ("profile_folders", _profile_folder_state_revision(folder_state)))
+        return self._compose_profile_list_revision(preset_revision, folder_state)
+
+    @staticmethod
+    def _compose_profile_list_revision(
+        preset_revision: tuple[object, ...],
+        folder_state: dict[str, Any],
+    ) -> tuple[object, ...]:
+        return (
+            *preset_revision,
+            ("profile_folders", _profile_folder_state_revision(folder_state)),
+            ("user_profiles", get_user_profiles_revision()),
+        )
 
     def _list_profiles_locked(self) -> ProfileListPayload:
         total_started_at = time.perf_counter()
@@ -253,7 +265,7 @@ class ProfilePresetService:
         folder_state_started_at = time.perf_counter()
         folder_state = load_profile_folder_state()
         self._log_timing("profile_feature.folder_state.load", folder_state_started_at)
-        list_revision = (*preset_revision, ("profile_folders", _profile_folder_state_revision(folder_state)))
+        list_revision = self._compose_profile_list_revision(preset_revision, folder_state)
         snapshot = self._profile_list_snapshot
         if snapshot is not None and self._profile_list_snapshot_revision == list_revision:
             self._log_timing("profile_feature.list_profiles.cached", total_started_at)
@@ -286,14 +298,18 @@ class ProfilePresetService:
             )
 
         catalogs_started_at = time.perf_counter()
-        catalogs = load_strategy_catalogs(self._app_paths, self._engine)
+        catalogs_signature, catalogs = load_strategy_catalogs_with_signature(self._app_paths, self._engine)
         self._log_timing("profile_feature.strategy_catalogs.load", catalogs_started_at)
 
         items: list[ProfileListItem] = []
 
         sources_started_at = time.perf_counter()
-        sources = build_profile_list_sources(tuple(preset.profiles), templates)
+        sources = self._profile_sources_cache.sources_for(preset_revision, preset, templates)
         self._log_timing("profile_feature.sources.build", sources_started_at)
+
+        order_view = _ProfileOrderViewAdapter(
+            resolve_profile_order_view(live_items_from_sources(sources), folder_state)
+        )
 
         items_started_at = time.perf_counter()
         for index, source in enumerate(sources):
@@ -301,10 +317,11 @@ class ProfilePresetService:
             item = self._item_for_profile(
                 source.profile,
                 catalogs=catalogs,
+                catalogs_signature=catalogs_signature,
                 in_preset=source.in_preset,
                 key=source.key,
                 order=source.order,
-                folder_state=folder_state,
+                order_view=order_view,
                 user_template_key=getattr(source, "user_template_key", ""),
                 resolved_display_name=getattr(source, "resolved_display_name", ""),
             )
@@ -419,47 +436,39 @@ class ProfilePresetService:
         with self._profile_list_lock:
             return self._get_profile_setup_locked(profile_key)
 
-    def warm_profile_setups(self, profile_keys: tuple[str, ...]) -> None:
-        for index, profile_key in enumerate(tuple(profile_keys or ())):
-            self._yield_profile_payload_worker(index)
-            self.get_profile_setup(profile_key)
-
     def _get_profile_setup_locked(self, profile_key: str) -> ProfileSetupPayload | None:
-        cache_key = self._profile_setup_cache_key(profile_key)
-        if cache_key is None:
+        key = str(profile_key or "").strip()
+        if not key:
             return None
-        cached = self._profile_setup_payload_cache.get(cache_key)
-        if cache_key in self._profile_setup_payload_cache:
-            self._profile_setup_payload_cache.move_to_end(cache_key)
-            return cached
 
         preset_revision, manifest, source_text = self._selected_preset_revision()
         preset, _manifest = self._load_selected_preset_for_revision(preset_revision, manifest, source_text)
-        catalogs = load_strategy_catalogs(self._app_paths, self._engine)
+        catalogs_signature, catalogs = load_strategy_catalogs_with_signature(self._app_paths, self._engine)
         templates = self._load_profile_templates()
         source = find_profile_list_source(
-            build_profile_list_sources(tuple(preset.profiles), templates),
-            profile_key,
+            self._profile_sources_cache.sources_for(preset_revision, preset, templates),
+            key,
         )
         if source is None:
-            self._remember_profile_setup_payload(cache_key, None)
             return None
         profile = source.profile
+        core = self._profile_derived_cache.core_for(
+            profile,
+            catalogs=catalogs,
+            catalogs_signature=catalogs_signature,
+            app_paths=self._app_paths,
+        )
         item = self._item_for_profile(
             profile,
             catalogs=catalogs,
+            catalogs_signature=catalogs_signature,
             in_preset=source.in_preset,
             key=source.key,
             order=source.order,
             user_template_key=getattr(source, "user_template_key", ""),
             resolved_display_name=getattr(source, "resolved_display_name", ""),
         )
-        strategy_entries = dict(_basic_strategy_entries(profile, catalogs))
-        match_summary = _match_summary(profile, list_type=item.list_type)
-        strategy_branches = _strategy_branches_with_match_text(
-            _strategy_branches_for_profile(profile, strategy_entries),
-            match_summary=match_summary,
-        )
+        strategy_branches = core.strategy_branches_with_match
         current_branch = strategy_branches[0] if strategy_branches else None
         current_strategy_id = (
             str(current_branch.strategy_id or "").strip()
@@ -471,23 +480,23 @@ class ProfilePresetService:
             if current_branch is not None
             else "\n".join(getattr(profile.strategy, "strategy_lines", ()) or ())
         )
-        editable = read_editable_profile_settings(profile)
+        editable = core.editable
         strategy_states = self._state_store.get_strategy_states(
             profile.persistent_key,
-            tuple(strategy_entries),
+            tuple(core.strategy_entries),
         )
-        payload = ProfileSetupPayload(
+        return ProfileSetupPayload(
             item=item,
-            strategy_entries=strategy_entries,
+            strategy_entries=dict(core.strategy_entries),
             strategy_states=strategy_states,
-            raw_profile_text=_profile_raw_text(profile),
+            raw_profile_text=core.raw_profile_text,
             raw_strategy_text=raw_strategy_text,
-            match_summary=match_summary,
+            match_summary=core.match_summary,
             match_tab_text=(
                 str(current_branch.match_tab_text or "")
                 if current_branch is not None
                 else build_profile_setup_match_tab_text(
-                    match_summary=match_summary,
+                    match_summary=core.match_summary,
                     strategy_id=item.strategy_id,
                     strategy_name=item.strategy_name,
                     raw_strategy_text=raw_strategy_text,
@@ -499,31 +508,19 @@ class ProfilePresetService:
             editable_filter_value=editable.filter_value,
             editable_filter_enabled=editable.filter_editable,
             editable_filter_role=editable.filter_role,
-            editable_filter_kinds=_available_filter_kinds(editable, self._app_paths),
+            # Из доступных типов убираем те, что превратили бы профиль в
+            # дубликат соседа по пресету (пара «Все сайты» hostlist/ipset).
+            editable_filter_kinds=filter_kinds_without_preset_duplicates(
+                editable,
+                profile,
+                preset.profiles,
+                core.editable_filter_kinds,
+                self._app_paths,
+            ),
             in_range=editable.in_range,
             out_range=editable.out_range,
             current_strategy_state=strategy_states.get(current_strategy_id, ProfileStrategyState()),
         )
-        self._remember_profile_setup_payload(cache_key, payload)
-        return payload
-
-    def _profile_setup_cache_key(self, profile_key: str) -> tuple[object, ...] | None:
-        key = str(profile_key or "").strip()
-        if not key:
-            return None
-        preset_revision, _manifest, _source_text = self._selected_preset_revision()
-        return (*preset_revision, ("profile_setup", key))
-
-    def _remember_profile_setup_payload(
-        self,
-        cache_key: tuple[object, ...],
-        payload: ProfileSetupPayload | None,
-    ) -> None:
-        self._profile_setup_payload_cache[cache_key] = payload
-        self._profile_setup_payload_cache.move_to_end(cache_key)
-        limit = max(1, int(PROFILE_SETUP_PAYLOAD_CACHE_LIMIT))
-        while len(self._profile_setup_payload_cache) > limit:
-            self._profile_setup_payload_cache.popitem(last=False)
 
     def set_profile_enabled(
         self,
@@ -794,7 +791,12 @@ class ProfilePresetService:
         next_filter_kind = str(filter_kind or "").strip().lower()
         if next_filter_kind != current.filter_kind:
             resolved = resolve_filter_kind_switch(current, next_filter_kind, self._app_paths)
-            if not resolved.allowed:
+            if not resolved.allowed or filter_kind_switch_creates_preset_duplicate(
+                preset.profiles[index],
+                preset.profiles,
+                current,
+                resolved,
+            ):
                 next_filter_kind = current.filter_kind
                 next_filter_value = current.filter_value
             else:
@@ -833,7 +835,7 @@ class ProfilePresetService:
         if index is None:
             return None
         normalized_text = str(raw_text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
-        if _profile_raw_text(preset.profiles[index]) == normalized_text:
+        if profile_raw_text(preset.profiles[index]) == normalized_text:
             return preset.profiles[index].key
         preset = with_profile_raw_text(preset, index, raw_text)
         self.save_selected_preset(preset)
@@ -852,7 +854,9 @@ class ProfilePresetService:
     ) -> ProfileListFileEditorState | None:
         profile = self._resolve_profile(profile_key)
         if profile is None:
-            return None
+            # Тихий return None здесь превращался в «Список сохранён.» в UI
+            # без записи на диск — протухший ключ профиля обязан быть ошибкой.
+            raise ValueError("Profile не найден: обновите список profile-ов и повторите сохранение.")
         profile = self._profile_with_filter_override(
             profile,
             filter_kind=filter_kind,
@@ -906,6 +910,8 @@ class ProfilePresetService:
         resolved = resolve_filter_kind_switch(current, filter_kind, self._app_paths)
         if not resolved.allowed:
             return None
+        if filter_kind_switch_creates_preset_duplicate(profile, preset.profiles, current, resolved):
+            return None
 
         preset = with_editable_profile_settings(
             preset,
@@ -947,40 +953,12 @@ class ProfilePresetService:
         *,
         destination_folder_key: str = "",
     ) -> str | None:
-        sources = self._profile_sources_for_folder_order()
-        source = find_profile_list_source(sources, source_profile_key)
-        destination = find_profile_list_source(sources, destination_profile_key)
-        if source is None or destination is None:
-            return None
-        folder_state = load_profile_folder_state()
-        destination_folder_key = str(destination_folder_key or "").strip()
-        if not destination_folder_key:
-            destination_folder_key, _folder_name, _order = profile_folder_for_profile(destination.profile, folder_state)
-        current_ordered_keys = _profile_order_keys_for_folder(
-            sources,
-            folder_state,
-            destination_folder_key,
-        )
-        if _profile_key_is_immediately_before(
-            current_ordered_keys,
-            source.profile.persistent_key,
-            destination.profile.persistent_key,
-        ):
-            return source.key
-        ordered_keys = _profile_order_keys_for_folder(
-            sources,
-            folder_state,
-            destination_folder_key,
-            source_key=source.profile.persistent_key,
-        )
-        move_profile_before_in_folder_state(
-            source.profile.persistent_key,
-            destination.profile.persistent_key,
-            ordered_keys,
+        return self._move_profile_in_folder(
+            "before",
+            source_profile_key,
+            destination_profile_key=destination_profile_key,
             destination_folder_key=destination_folder_key,
         )
-        self._invalidate_profile_list_snapshot()
-        return source.key
 
     def move_profile_after(
         self,
@@ -989,81 +967,54 @@ class ProfilePresetService:
         *,
         destination_folder_key: str = "",
     ) -> str | None:
-        sources = self._profile_sources_for_folder_order()
-        source = find_profile_list_source(sources, source_profile_key)
-        destination = find_profile_list_source(sources, destination_profile_key)
-        if source is None or destination is None:
-            return None
-        folder_state = load_profile_folder_state()
-        destination_folder_key = str(destination_folder_key or "").strip()
-        if not destination_folder_key:
-            destination_folder_key, _folder_name, _order = profile_folder_for_profile(destination.profile, folder_state)
-        current_ordered_keys = _profile_order_keys_for_folder(
-            sources,
-            folder_state,
-            destination_folder_key,
-        )
-        if _profile_key_is_immediately_before(
-            current_ordered_keys,
-            destination.profile.persistent_key,
-            source.profile.persistent_key,
-        ):
-            return source.key
-        ordered_keys = _profile_order_keys_for_folder(
-            sources,
-            folder_state,
-            destination_folder_key,
-            source_key=source.profile.persistent_key,
-        )
-        move_profile_after_in_folder_state(
-            source.profile.persistent_key,
-            destination.profile.persistent_key,
-            ordered_keys,
+        return self._move_profile_in_folder(
+            "after",
+            source_profile_key,
+            destination_profile_key=destination_profile_key,
             destination_folder_key=destination_folder_key,
         )
-        self._invalidate_profile_list_snapshot()
-        return source.key
 
     def move_profile_to_end(self, profile_key: str) -> str | None:
-        sources = self._profile_sources_for_folder_order()
-        source = find_profile_list_source(sources, profile_key)
-        if source is None:
-            return None
-        folder_state = load_profile_folder_state()
-        source_folder_key, _folder_name, _order = profile_folder_for_profile(source.profile, folder_state)
-        current_ordered_keys = _profile_order_keys_for_folder(
-            sources,
-            folder_state,
-            source_folder_key,
-        )
-        if current_ordered_keys and current_ordered_keys[-1] == source.profile.persistent_key:
-            return source.key
-        move_profile_to_end_in_folder_state(
-            source.profile.persistent_key,
-            current_ordered_keys,
-            source_folder_key=source_folder_key,
-        )
-        self._invalidate_profile_list_snapshot()
-        return source.key
+        return self._move_profile_in_folder("end", profile_key)
 
     def move_profile_to_folder(self, profile_key: str, folder_key: str) -> str | None:
-        sources = self._profile_sources_for_folder_order()
-        source = find_profile_list_source(sources, profile_key)
         target_folder = str(folder_key or "").strip()
-        if source is None or not target_folder:
+        if not target_folder:
             return None
-        folder_state = load_profile_folder_state()
-        ordered_keys = _profile_order_keys_for_folder(
-            sources,
-            folder_state,
-            target_folder,
-            source_key=source.profile.persistent_key,
-        )
-        move_profile_to_folder_in_folder_state(
-            source.profile.persistent_key,
-            target_folder,
-            ordered_keys,
-        )
+        return self._move_profile_in_folder("folder", profile_key, destination_folder_key=target_folder)
+
+    def _move_profile_in_folder(
+        self,
+        action: str,
+        source_profile_key: str,
+        *,
+        destination_profile_key: str = "",
+        destination_folder_key: str = "",
+    ) -> str | None:
+        sources = self._profile_sources_for_folder_order()
+        source = find_profile_list_source(sources, source_profile_key)
+        if source is None:
+            return None
+        destination_key = ""
+        if action in {"before", "after"}:
+            destination = find_profile_list_source(sources, destination_profile_key)
+            if destination is None:
+                return None
+            destination_key = destination.profile.persistent_key
+        # План строится от отображаемого порядка (единый резолвер), поэтому
+        # сохранённое состояние всегда совпадает с тем, что видит пользователь.
+        with profile_folder_state_lock():
+            planned = plan_profile_move(
+                live_items_from_sources(sources),
+                load_profile_folder_state(),
+                action=action,
+                source_key=source.profile.persistent_key,
+                destination_key=destination_key,
+                destination_folder_key=str(destination_folder_key or "").strip(),
+            )
+            if planned is None:
+                return source.key
+            save_profile_folder_state(planned)
         self._invalidate_profile_list_snapshot()
         return source.key
 
@@ -1087,10 +1038,9 @@ class ProfilePresetService:
         return self._move_preset_profile_to_index(preset, source_index, len(preset.profiles))
 
     def create_user_profile(self, *, name: str, protocol: str, ports: str) -> str:
-        profile_id = create_user_profile(self._app_paths, name=name, protocol=protocol, ports=ports)
-        self._load_profile_templates.cache_clear()
-        self._invalidate_profile_list_snapshot()
-        return profile_id
+        # Кэши шаблонов и списка ключуются ревизией user_profiles —
+        # запись настроек инвалидирует их сама, без ручных вызовов.
+        return create_user_profile(self._app_paths, name=name, protocol=protocol, ports=ports)
 
     def _move_preset_profile_to_index(self, preset: Preset, source_index: int | None, destination_index: int | None) -> PresetProfileMoveResult | None:
         if source_index is None or destination_index is None:
@@ -1109,7 +1059,8 @@ class ProfilePresetService:
 
     def update_user_profile(self, profile_id: str, *, name: str, protocol: str, ports: str) -> int:
         old_name, row = update_user_profile(self._app_paths, profile_id, name=name, protocol=protocol, ports=ports)
-        self._load_profile_templates.cache_clear()
+        # Сброс нужен не из-за user_profiles (их ревизия в ключах кэшей),
+        # а потому что ниже переписываются файлы пресетов в обход save_selected_preset.
         self._invalidate_profile_list_snapshot()
         if not old_name:
             return 0
@@ -1117,7 +1068,6 @@ class ProfilePresetService:
 
     def delete_user_profile(self, profile_id: str) -> int:
         old_name, _row = delete_user_profile(self._app_paths, profile_id)
-        self._load_profile_templates.cache_clear()
         self._invalidate_profile_list_snapshot()
         if not old_name:
             return 0
@@ -1316,23 +1266,26 @@ class ProfilePresetService:
         profile: Profile,
         *,
         catalogs: dict[str, dict[str, StrategyEntry]],
+        catalogs_signature: tuple[object, ...],
         in_preset: bool,
         key: str | None = None,
         order: int | None = None,
-        folder_state: dict | None = None,
+        order_view: "_ProfileOrderViewAdapter | None" = None,
         user_template_key: str = "",
         resolved_display_name: str = "",
     ) -> ProfileListItem:
-        strategy_entries = _basic_strategy_entries(profile, catalogs)
-        strategy_branches = _strategy_branches_for_profile(profile, strategy_entries)
-        strategy_id, strategy_name = _profile_strategy_summary(profile, strategy_entries, strategy_branches)
-        list_type = _visible_list_type(profile, self._app_paths)
-        folder_key, folder_name, folder_order = profile_folder_for_profile(profile, folder_state)
-        effective_strategy_id = strategy_id if in_preset and profile.enabled else "none"
+        core = self._profile_derived_cache.core_for(
+            profile,
+            catalogs=catalogs,
+            catalogs_signature=catalogs_signature,
+            app_paths=self._app_paths,
+        )
+        folder = (order_view or _EMPTY_ORDER_VIEW).folder_for(profile)
+        effective_strategy_id = core.strategy_id if in_preset and profile.enabled else "none"
         display_strategy_name = _profile_status_name(
             in_preset=in_preset,
             enabled=bool(profile.enabled),
-            strategy_name=strategy_name,
+            strategy_name=core.strategy_name,
         )
         state = (
             self._state_store.get_strategy_state(profile.persistent_key, effective_strategy_id)
@@ -1350,21 +1303,29 @@ class ProfilePresetService:
             strategy_id=effective_strategy_id,
             strategy_name=display_strategy_name,
             match_lines=tuple(profile.match.all_lines()),
-            list_type=list_type,
+            list_type=core.list_type,
             rating=state.rating,
             favorite=state.favorite,
-            group=folder_key,
-            group_name=folder_name,
-            order=folder_order if folder_order is not None else (profile.index if order is None else int(order)),
-            order_is_manual=folder_order is not None,
-            group_collapsed=profile_folder_collapsed(folder_key, folder_state),
+            group=folder.key,
+            group_name=folder.name,
+            order=folder.position if folder.position is not None else (profile.index if order is None else int(order)),
+            source_order=profile.index if order is None else int(order),
+            group_rank=folder.rank,
+            group_collapsed=folder.collapsed,
             user_profile_id=_user_profile_id_from_template_key(user_template_key),
             profile_name=profile.name,
-            strategy_branches=strategy_branches,
+            strategy_branches=core.strategy_branches,
         )
 
-    @lru_cache(maxsize=1)
     def _load_profile_templates(self) -> dict[str, Profile]:
+        return self._load_profile_templates_cached(get_user_profiles_revision())
+
+    @lru_cache(maxsize=4)
+    def _load_profile_templates_cached(self, user_profiles_revision: str) -> dict[str, Profile]:
+        # Токен не используется в теле: он ключует кэш, чтобы любая запись
+        # user_profiles (в том числе из другого экземпляра сервиса) давала
+        # свежие шаблоны без ручного cache_clear.
+        del user_profiles_revision
         return load_profile_template_library(self._app_paths, self._engine)
 
     def _invalidate_selected_preset_snapshot(self) -> None:
@@ -1375,7 +1336,7 @@ class ProfilePresetService:
         self._profile_list_snapshot = None
         self._profile_list_snapshot_revision = None
         self._profile_list_snapshots_by_revision.clear()
-        self._profile_setup_payload_cache.clear()
+        self._profile_sources_cache.clear()
 
     def _refresh_strategy_only_snapshots(self, profile_key: str) -> None:
         clean_profile_key = str(profile_key or "").strip()
@@ -1383,7 +1344,6 @@ class ProfilePresetService:
             self._invalidate_selected_preset_snapshot()
             return
         self._selected_preset_snapshot = None
-        self._forget_profile_setup_payloads(clean_profile_key)
         setup = self.get_profile_setup(clean_profile_key)
         item = getattr(setup, "item", None)
         if item is None:
@@ -1391,14 +1351,6 @@ class ProfilePresetService:
             return
         if not self._replace_profile_list_snapshot_item(clean_profile_key, item):
             self._invalidate_profile_list_snapshot()
-
-    def _forget_profile_setup_payloads(self, profile_key: str) -> None:
-        clean_profile_key = str(profile_key or "").strip()
-        if not clean_profile_key:
-            return
-        for cache_key in list(self._profile_setup_payload_cache):
-            if cache_key and cache_key[-1] == ("profile_setup", clean_profile_key):
-                self._profile_setup_payload_cache.pop(cache_key, None)
 
     def _replace_profile_list_snapshot_item(self, profile_key: str, item: ProfileListItem) -> bool:
         payload = self._profile_list_snapshot
@@ -1515,6 +1467,74 @@ def _strategy_apply_result(
     )
 
 
+@dataclass(frozen=True)
+class _ProfileFolderInfo:
+    key: str
+    name: str
+    position: int | None
+    rank: int
+    collapsed: bool
+
+
+class _ProfileOrderViewAdapter:
+    """Позиции/папки для item-ов из единого резолвера порядка.
+
+    Без view (путь `list_preset_order_profiles`) папка определяется
+    классификацией по дефолтам — как и раньше, порядок там задаёт
+    profile_index, а не папки.
+    """
+
+    def __init__(self, view=None) -> None:
+        self._view = view
+        self._rank_by_folder = (
+            {key: rank for rank, key in enumerate(view.folder_keys)} if view is not None else {}
+        )
+
+    def folder_for(self, profile: Profile) -> _ProfileFolderInfo:
+        view = self._view
+        persistent_key = str(getattr(profile, "persistent_key", "") or "").strip()
+        if view is not None and persistent_key in view.folder_by_item:
+            folder_key = view.folder_by_item[persistent_key]
+            return _ProfileFolderInfo(
+                key=folder_key,
+                name=str(view.folder_names.get(folder_key) or "Общие"),
+                position=view.position_by_item.get(persistent_key),
+                rank=self._rank_by_folder.get(folder_key, 10_000),
+                collapsed=bool(view.collapsed.get(folder_key, False)),
+            )
+        from folders.defaults import build_default_profile_folders, classify_profile_folder
+
+        parts = [
+            str(getattr(profile, "display_name", "") or ""),
+            str(getattr(profile, "name", "") or ""),
+            persistent_key,
+        ]
+        try:
+            parts.extend(str(line or "") for line in profile.match.all_lines())
+        except Exception:
+            pass
+        folder_key = classify_profile_folder(" ".join(parts))
+        folders = build_default_profile_folders().get("folders", {})
+        folder = folders.get(folder_key) if isinstance(folders, dict) else None
+        if not isinstance(folder, dict):
+            folder_key = "common"
+            folder = folders.get(folder_key, {}) if isinstance(folders, dict) else {}
+        try:
+            rank = int(folder.get("order"))
+        except Exception:
+            rank = 10_000
+        return _ProfileFolderInfo(
+            key=folder_key,
+            name=str(folder.get("name") or "Общие"),
+            position=None,
+            rank=rank,
+            collapsed=False,
+        )
+
+
+_EMPTY_ORDER_VIEW = _ProfileOrderViewAdapter(None)
+
+
 def _profile_folder_state_revision(folder_state: dict[str, Any]) -> tuple[object, ...]:
     folders = folder_state.get("folders", {}) if isinstance(folder_state, dict) else {}
     items = folder_state.get("items", {}) if isinstance(folder_state, dict) else {}
@@ -1540,153 +1560,6 @@ def _profile_folder_state_revision(folder_state: dict[str, Any]) -> tuple[object
                 meta.get("order"),
             ))
     return tuple(folder_rows), tuple(item_rows)
-
-
-def _profile_order_keys_for_folder(sources, folder_state: dict[str, Any], folder_key: str, *, source_key: str = "") -> list[str]:
-    target_folder = str(folder_key or "").strip()
-    source = str(source_key or "").strip()
-    keys: list[str] = []
-    for item in tuple(sources or ()):
-        profile = getattr(item, "profile", None)
-        key = str(getattr(profile, "persistent_key", "") or "").strip()
-        if not key or key == source:
-            continue
-        item_folder_key, _folder_name, _order = profile_folder_for_profile(profile, folder_state)
-        if item_folder_key == target_folder:
-            keys.append(key)
-    if source and source not in keys:
-        keys.append(source)
-    return keys
-
-
-def _profile_key_is_immediately_before(keys: list[str], source_key: str, destination_key: str) -> bool:
-    source = str(source_key or "").strip()
-    destination = str(destination_key or "").strip()
-    if not source or not destination:
-        return False
-    try:
-        return int(keys.index(source)) + 1 == int(keys.index(destination))
-    except ValueError:
-        return False
-
-
-def _basic_strategy_entries(profile: Profile, catalogs: dict[str, dict[str, StrategyEntry]]) -> dict[str, StrategyEntry]:
-    if _list_type(profile) == "custom":
-        return {}
-    return dict(catalogs.get(_catalog_name_for_profile(profile)) or {})
-
-
-def _profile_strategy_summary(
-    profile: Profile,
-    entries: dict[str, StrategyEntry],
-    branches: tuple[ProfileStrategyBranch, ...],
-) -> tuple[str, str]:
-    if len(branches) <= 1:
-        return _resolve_strategy(profile, entries)
-    names = [str(branch.strategy_name or "").strip() for branch in branches if str(branch.strategy_name or "").strip()]
-    visible = names[:2]
-    suffix = f" +{len(names) - len(visible)}" if len(names) > len(visible) else ""
-    label = ", ".join(visible)
-    if label:
-        return "custom", f"{len(branches)} стратегии: {label}{suffix}"
-    return "custom", f"{len(branches)} стратегии"
-
-
-def _resolve_strategy(profile: Profile, entries: dict[str, StrategyEntry]) -> tuple[str, str]:
-    return _resolve_strategy_lines(profile, entries, getattr(profile.strategy, "strategy_lines", ()) or ())
-
-
-def _resolve_strategy_lines(profile: Profile, entries: dict[str, StrategyEntry], lines) -> tuple[str, str]:
-    current = _strategy_identity_lines(profile, lines)
-    if not current:
-        return "none", "Стратегия не выбрана"
-    matches = [
-        entry
-        for entry in entries.values()
-        if _strategy_identity_lines(profile, entry.args.splitlines()) == current
-    ]
-    if len(matches) == 1:
-        return matches[0].strategy_id, matches[0].name
-    return "custom", "custom"
-
-
-def _strategy_branches_for_profile(profile: Profile, entries: dict[str, StrategyEntry]) -> tuple[ProfileStrategyBranch, ...]:
-    if profile.engine != ENGINE_WINWS2:
-        return ()
-
-    payload = "all"
-    in_range = "x"
-    out_range = "a"
-    raw_lines: list[str] = []
-    branches: list[ProfileStrategyBranch] = []
-
-    def flush() -> None:
-        nonlocal raw_lines
-        if not raw_lines:
-            return
-        strategy_id, strategy_name = _resolve_strategy_lines(profile, entries, raw_lines)
-        scope_lines = _strategy_branch_scope_lines(payload=payload, in_range=in_range, out_range=out_range)
-        branches.append(
-            ProfileStrategyBranch(
-                branch_id=f"branch:{len(branches)}",
-                payload=payload,
-                in_range=in_range,
-                out_range=out_range,
-                strategy_id=strategy_id,
-                strategy_name=strategy_name,
-                raw_strategy_text="\n".join((*scope_lines, *raw_lines)).strip(),
-            )
-        )
-        raw_lines = []
-
-    for segment in tuple(getattr(profile, "segments", ()) or ()):
-        name = str(getattr(segment, "name", "") or "").strip().lower()
-        text = str(getattr(segment, "text", "") or "").strip()
-        if segment.kind == "strategy_filter":
-            flush()
-            value = str(getattr(segment, "value", "") or "").strip()
-            if name == "--payload":
-                payload = value or "all"
-            elif name == "--in-range":
-                in_range = value or "x"
-            elif name == "--out-range":
-                out_range = value or "a"
-            continue
-        if segment.kind == "strategy" and text:
-            raw_lines.append(text)
-
-    flush()
-    return tuple(branches)
-
-
-def _strategy_branches_with_match_text(
-    branches: tuple[ProfileStrategyBranch, ...],
-    *,
-    match_summary: str,
-) -> tuple[ProfileStrategyBranch, ...]:
-    return tuple(
-        replace(
-            branch,
-            match_tab_text=build_profile_setup_match_tab_text(
-                match_summary=match_summary,
-                strategy_id=branch.strategy_id,
-                strategy_name=branch.strategy_name,
-                raw_strategy_text=branch.raw_strategy_text,
-            ),
-        )
-        for branch in branches
-    )
-
-
-def _strategy_branch_scope_lines(*, payload: str, in_range: str, out_range: str) -> tuple[str, ...]:
-    lines: list[str] = []
-    if str(in_range or "x").strip() != "x":
-        lines.append(f"--in-range={str(in_range).strip()}")
-    if str(out_range or "a").strip() != "a":
-        lines.append(f"--out-range={str(out_range).strip()}")
-    if str(payload or "all").strip() != "all":
-        lines.append(f"--payload={str(payload).strip()}")
-    return tuple(lines)
 
 
 def _with_profile_strategy_branch_lines(
@@ -1756,64 +1629,6 @@ def _profile_status_name(*, in_preset: bool, enabled: bool, strategy_name: str) 
     return str(strategy_name or "").strip() or "Стратегия не выбрана"
 
 
-def _normalize_lines(lines) -> tuple[str, ...]:
-    return tuple(str(line or "").strip() for line in lines if str(line or "").strip())
-
-
-def _strategy_identity_lines(profile: Profile, lines) -> tuple[str, ...]:
-    normalized = _normalize_lines(lines)
-    if profile.engine != ENGINE_WINWS2:
-        return normalized
-    return tuple(line for line in normalized if line.lower().startswith("--lua-desync="))
-
-
-def _catalog_name_for_profile(profile: Profile) -> str:
-    return strategy_catalog_from_match_lines(tuple(profile.match.all_lines()))
-
-
-def _list_type(profile: Profile) -> str:
-    catalog_name = _catalog_name_for_profile(profile)
-    if catalog_name == "voice":
-        return "voice"
-    has_hostlist = bool(profile.match.hostlist_lines or profile.match.hostlist_domains_lines)
-    has_ipset = bool(profile.match.ipset_lines or profile.match.inline_ipset_lines)
-    has_excludes = bool(profile.match.hostlist_exclude_lines or profile.match.ipset_exclude_lines)
-    if has_excludes:
-        settings = read_editable_profile_settings(profile)
-        if settings.filter_role == "exclude" and not (has_hostlist or has_ipset):
-            if settings.filter_kind in {"hostlist", "ipset"}:
-                return settings.filter_kind
-        return "custom"
-    if has_hostlist and has_ipset:
-        return "custom"
-    if has_hostlist:
-        return "hostlist"
-    if has_ipset:
-        return "ipset"
-    return catalog_name
-
-
-def _visible_list_type(profile: Profile, app_paths) -> str:
-    list_type = _list_type(profile)
-    if list_type not in {"hostlist", "ipset"}:
-        return ""
-    if not _profile_has_filter_choice(profile, app_paths):
-        return ""
-    return list_type
-
-
-def _profile_has_filter_choice(profile: Profile, app_paths) -> bool:
-    settings = read_editable_profile_settings(profile)
-    if not settings.filter_editable:
-        return False
-    available = {
-        kind
-        for kind in _available_filter_kinds(settings, app_paths)
-        if kind in {"hostlist", "ipset"}
-    }
-    return len(available) > 1
-
-
 def _user_profile_id_from_template_key(template_key: str) -> str:
     key = str(template_key or "").strip()
     if key.startswith("template:user:"):
@@ -1823,24 +1638,3 @@ def _user_profile_id_from_template_key(template_key: str) -> str:
     return ""
 
 
-def _match_summary(profile: Profile, *, list_type: str | None = None) -> str:
-    match_lines = tuple(profile.match.all_lines())
-    visible_list_type = _list_type(profile) if list_type is None else str(list_type or "")
-    parts = [part for part in (protocol_label_from_match_lines(match_lines), ports_label_from_match_lines(match_lines), visible_list_type) if part]
-    return " • ".join(parts) or "без явных условий"
-
-
-def _available_filter_kinds(settings: EditableProfileSettings, app_paths) -> tuple[str, ...]:
-    current_kind = str(settings.filter_kind or "hostlist").strip().lower()
-    if not settings.filter_editable or current_kind not in {"hostlist", "ipset"}:
-        return (current_kind,)
-
-    result: list[str] = []
-    for candidate in ("hostlist", "ipset"):
-        if resolve_filter_kind_switch(settings, candidate, app_paths).allowed:
-            result.append(candidate)
-    return tuple(result) or (current_kind,)
-
-
-def _profile_raw_text(profile: Profile) -> str:
-    return "\n".join(segment.text for segment in profile.segments if str(segment.text or "").strip()).strip()

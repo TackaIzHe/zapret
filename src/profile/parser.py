@@ -4,7 +4,15 @@ from pathlib import PureWindowsPath
 
 from settings.mode import ENGINE_WINWS1, ENGINE_WINWS2
 
-from .models import EngineName, Preset, Profile, ProfileMatch, ProfileSegment, build_profile_persistent_key
+from .models import (
+    EngineName,
+    Preset,
+    Profile,
+    ProfileMatch,
+    ProfileSegment,
+    build_profile_logical_key,
+    build_profile_persistent_key,
+)
 from .winws1 import parse_winws1_strategy
 from .winws2 import parse_winws2_strategy
 
@@ -226,8 +234,34 @@ def _parse_profile(lines: list[str], *, engine: EngineName, index: int, new_line
 
 
 def _assign_profile_keys(profiles: list[Profile]) -> None:
-    for profile in profiles:
-        profile.persistent_key = build_profile_persistent_key(profile.name, profile.match_signature)
+    """persistent_key обязан быть уникален в пределах пресета: им ключуются
+    мета папок/рейтингов и состояние стратегий в settings.json, и он служит
+    стабильной ссылкой на профиль между UI и сервисом.
+
+    Ровно один из дубликатов сохраняет базовый ключ без суффикса (совместимость
+    с уже сохранённой метой). Владелец выбирается по КОНТЕНТУ — минимальной
+    логической сигнатуре, — а не по позиции: иначе перестановка одноимённой
+    пары переносила бы мету и живые ссылки с одного профиля на другой."""
+    groups: dict[str, list[int]] = {}
+    for index, profile in enumerate(profiles):
+        base = build_profile_persistent_key(profile.name, profile.match_signature)
+        groups.setdefault(base, []).append(index)
+
+    seen: dict[str, int] = {}
+    for base, indexes in groups.items():
+        holder = min(
+            indexes,
+            key=lambda i: (build_profile_logical_key(profiles[i].match_signature), i),
+        )
+        profiles[holder].persistent_key = base
+        seen[base] = seen.get(base, 0) + 1
+        for index in indexes:
+            if index == holder:
+                continue
+            candidate = f"{base}|{build_profile_logical_key(profiles[index].match_signature)}"
+            occurrence = seen.get(candidate, 0)
+            seen[candidate] = occurrence + 1
+            profiles[index].persistent_key = candidate if occurrence == 0 else f"{candidate}#{occurrence + 1}"
 
 
 def _name_from_new_line(new_line: str) -> str:

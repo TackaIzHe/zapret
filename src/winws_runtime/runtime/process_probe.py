@@ -13,13 +13,12 @@ from settings.mode import (
     ZAPRET2_MODE,
     exe_path_for_launch_method,
 )
+from utils.windows_process_probe import iter_process_records_winapi
 
 _WINWS_NAMES = ALL_WINWS_EXE_NAMES
 _WINWS_NAME_SET = frozenset(_WINWS_NAMES)
 
-TH32CS_SNAPPROCESS = 0x00000002
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
 MAX_PROCESS_PATH = 32768
 
 
@@ -30,35 +29,11 @@ class WinwsProcessRecord:
     exe_path: str
 
 
-class PROCESSENTRY32W(ctypes.Structure):
-    _fields_ = [
-        ("dwSize", wintypes.DWORD),
-        ("cntUsage", wintypes.DWORD),
-        ("th32ProcessID", wintypes.DWORD),
-        ("th32DefaultHeapID", ctypes.c_size_t),
-        ("th32ModuleID", wintypes.DWORD),
-        ("cntThreads", wintypes.DWORD),
-        ("th32ParentProcessID", wintypes.DWORD),
-        ("pcPriClassBase", ctypes.c_long),
-        ("dwFlags", wintypes.DWORD),
-        ("szExeFile", wintypes.WCHAR * wintypes.MAX_PATH),
-    ]
-
-
-if hasattr(ctypes, "windll"):
-    _kernel32 = ctypes.windll.kernel32
-
-    _CreateToolhelp32Snapshot = _kernel32.CreateToolhelp32Snapshot
-    _CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
-    _CreateToolhelp32Snapshot.restype = wintypes.HANDLE
-
-    _Process32FirstW = _kernel32.Process32FirstW
-    _Process32FirstW.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
-    _Process32FirstW.restype = wintypes.BOOL
-
-    _Process32NextW = _kernel32.Process32NextW
-    _Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
-    _Process32NextW.restype = wintypes.BOOL
+if hasattr(ctypes, "WinDLL"):
+    # Приватный экземпляр WinDLL, а не глобальный ctypes.windll.kernel32:
+    # windll кэширует функции процессно-глобально, и argtypes, выставленные
+    # здесь, конфликтовали бы с argtypes других модулей на тех же функциях.
+    _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 
     _OpenProcess = _kernel32.OpenProcess
     _OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
@@ -77,9 +52,6 @@ if hasattr(ctypes, "windll"):
     _CloseHandle.argtypes = [wintypes.HANDLE]
     _CloseHandle.restype = wintypes.BOOL
 else:  # pragma: no cover - import safety for non-Windows environments
-    _CreateToolhelp32Snapshot = None
-    _Process32FirstW = None
-    _Process32NextW = None
     _OpenProcess = None
     _QueryFullProcessImageNameW = None
     _CloseHandle = None
@@ -113,36 +85,11 @@ def get_expected_winws_paths() -> dict[str, str]:
 
 
 def _iter_winws_process_entries() -> list[tuple[int, str]]:
-    if (
-        _CreateToolhelp32Snapshot is None
-        or _Process32FirstW is None
-        or _Process32NextW is None
-        or _CloseHandle is None
-    ):
-        return []
-
-    snapshot = _CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
-    if not snapshot or snapshot == INVALID_HANDLE_VALUE:
-        return []
-
-    entries: list[tuple[int, str]] = []
-    try:
-        process_entry = PROCESSENTRY32W()
-        process_entry.dwSize = ctypes.sizeof(PROCESSENTRY32W)
-
-        if not _Process32FirstW(snapshot, ctypes.byref(process_entry)):
-            return entries
-
-        while True:
-            name = str(process_entry.szExeFile or "").strip().lower()
-            if name in _WINWS_NAME_SET:
-                entries.append((int(process_entry.th32ProcessID), name))
-            if not _Process32NextW(snapshot, ctypes.byref(process_entry)):
-                break
-    finally:
-        _CloseHandle(snapshot)
-
-    return entries
+    return [
+        (int(pid), name)
+        for pid, raw_name in iter_process_records_winapi()
+        if (name := str(raw_name or "").strip().lower()) in _WINWS_NAME_SET
+    ]
 
 
 def _query_process_image_path(pid: int) -> str:
@@ -189,6 +136,33 @@ def find_expected_winws_processes(expected_exe_path: str) -> list[WinwsProcessRe
 
     matches.sort(key=lambda item: item.pid)
     return matches
+
+
+def find_foreign_winws_processes() -> list[WinwsProcessRecord]:
+    """winws-named processes that are NOT our canonical executables.
+
+    A record counts as foreign only when its image path was successfully
+    queried and differs from the expected canonical path for that name —
+    an unqueryable path never raises a false alarm.
+    """
+    expected_paths = get_expected_winws_paths()
+    foreign: list[WinwsProcessRecord] = []
+    for pid, process_name in _iter_winws_process_entries():
+        process_path = _query_process_image_path(pid)
+        if not process_path:
+            continue
+        expected_path = expected_paths.get(process_name, "")
+        if expected_path and process_path == expected_path:
+            continue
+        foreign.append(
+            WinwsProcessRecord(
+                pid=int(pid),
+                name=process_name,
+                exe_path=process_path,
+            )
+        )
+    foreign.sort(key=lambda item: item.pid)
+    return foreign
 
 
 def find_canonical_winws_processes() -> dict[str, list[WinwsProcessRecord]]:

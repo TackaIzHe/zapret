@@ -253,6 +253,137 @@ class UserProfilesTests(unittest.TestCase):
         self.assertNotIn("--out-range=a", [segment.text for segment in preset.profiles[0].segments])
         self.assertIn("--lua-desync=pass", [segment.text for segment in preset.profiles[0].segments])
 
+    def test_created_user_profile_appears_after_warm_profile_list(self) -> None:
+        """Регресс: create после уже построенного списка (тёплый PresetSourcesCache)."""
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "profile" / "templates").mkdir(parents=True)
+            (root / "profile" / "templates" / "all_profiles.txt").write_text("", encoding="utf-8")
+            store = _PresetStore("")
+            feature = SimpleNamespace(
+                _presets_feature=store,
+                _app_paths=AppPaths(user_root=root, local_root=root),
+            )
+
+            with patch("settings.store.MAIN_DIRECTORY", str(root)):
+                service = ProfilePresetService(feature, "zapret2_mode")
+                self.assertEqual(len(service.list_profiles().items), 0)
+                profile_id = service.create_user_profile(name="My Site", protocol="tcp", ports="80,443")
+                payload = service.list_profiles()
+                setup = service.get_profile_setup(f"template:user:{profile_id}")
+
+        self.assertEqual([item.user_profile_id for item in payload.items], [profile_id])
+        self.assertIsNotNone(setup)
+
+    def test_deleted_user_profile_disappears_after_warm_profile_list(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "profile" / "templates").mkdir(parents=True)
+            (root / "profile" / "templates" / "all_profiles.txt").write_text("", encoding="utf-8")
+            library = _PresetLibrary({"zapret2_mode": {"selected.txt": ""}})
+            feature = SimpleNamespace(
+                _presets_feature=library,
+                _app_paths=AppPaths(user_root=root, local_root=root),
+            )
+
+            with patch("settings.store.MAIN_DIRECTORY", str(root)):
+                service = ProfilePresetService(feature, "zapret2_mode")
+                profile_id = service.create_user_profile(name="My Site", protocol="tcp", ports="80,443")
+                self.assertEqual(len(service.list_profiles().items), 1)
+                service.delete_user_profile(profile_id)
+                payload = service.list_profiles()
+
+        self.assertEqual(len(payload.items), 0)
+
+    def test_created_user_profile_is_visible_to_other_service_instances(self) -> None:
+        """Регресс: кэш шаблонов ключуется ревизией user_profiles, а не чистится вручную."""
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "profile" / "templates").mkdir(parents=True)
+            (root / "profile" / "templates" / "all_profiles.txt").write_text("", encoding="utf-8")
+            feature = SimpleNamespace(
+                _presets_feature=_PresetStore(""),
+                _app_paths=AppPaths(user_root=root, local_root=root),
+            )
+
+            with patch("settings.store.MAIN_DIRECTORY", str(root)):
+                creator = ProfilePresetService(feature, "zapret2_mode")
+                observer = ProfilePresetService(feature, "zapret2_mode")
+                self.assertEqual(len(observer.list_profiles().items), 0)
+                profile_id = creator.create_user_profile(name="My Site", protocol="tcp", ports="80,443")
+                payload = observer.list_profiles()
+
+        self.assertEqual([item.user_profile_id for item in payload.items], [profile_id])
+
+    def test_corrupt_settings_file_is_backed_up_before_defaults_rewrite(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            settings_path = root / "settings" / "settings.json"
+            settings_path.parent.mkdir(parents=True)
+            settings_path.write_text("{broken json", encoding="utf-8")
+
+            with patch("settings.store.MAIN_DIRECTORY", str(root)):
+                settings = read_settings()
+
+            backup_path = root / "settings" / "settings.json.corrupt.bak"
+            self.assertEqual(settings["user_profiles"]["profiles"], {})
+            self.assertTrue(backup_path.is_file())
+            self.assertEqual(backup_path.read_text(encoding="utf-8"), "{broken json")
+
+    def test_revision_read_does_not_prevent_corrupt_settings_repair(self) -> None:
+        """Регресс: не-materialize чтение (get_user_profiles_revision) не должно
+        отравлять кэш так, чтобы битый settings.json больше не чинился."""
+        from settings.store import get_user_profiles_revision, materialize_settings_file
+
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            settings_path = root / "settings" / "settings.json"
+            settings_path.parent.mkdir(parents=True)
+            settings_path.write_text("{broken json", encoding="utf-8")
+
+            with patch("settings.store.MAIN_DIRECTORY", str(root)):
+                get_user_profiles_revision()
+                self.assertEqual(settings_path.read_text(encoding="utf-8"), "{broken json")
+                materialize_settings_file()
+
+            import json
+
+            repaired = json.loads(settings_path.read_text(encoding="utf-8"))
+            self.assertIn("user_profiles", repaired)
+
+    def test_recreating_profile_preserves_orphaned_domains(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            orphan = root / "lists" / "user" / "my-site.txt"
+            orphan.parent.mkdir(parents=True)
+            orphan.write_text("mydomain.com\nanother.org\n", encoding="utf-8")
+            paths = AppPaths(user_root=root, local_root=root)
+
+            with patch("settings.store.MAIN_DIRECTORY", str(root)):
+                profile_id = create_user_profile(paths, name="My Site", protocol="tcp", ports="80,443")
+
+            self.assertEqual(profile_id, "my-site")
+            self.assertEqual(orphan.read_text(encoding="utf-8"), "mydomain.com\nanother.org\n")
+            final_text = (root / "lists" / "my-site.txt").read_text(encoding="utf-8")
+            self.assertIn("mydomain.com", final_text)
+            self.assertIn("another.org", final_text)
+
+    def test_save_list_file_text_raises_for_unknown_profile_key(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "profile" / "templates").mkdir(parents=True)
+            (root / "profile" / "templates" / "all_profiles.txt").write_text("", encoding="utf-8")
+            store = _PresetStore("")
+            feature = SimpleNamespace(
+                _presets_feature=store,
+                _app_paths=AppPaths(user_root=root, local_root=root),
+            )
+
+            with patch("settings.store.MAIN_DIRECTORY", str(root)):
+                service = ProfilePresetService(feature, "zapret2_mode")
+                with self.assertRaisesRegex(ValueError, "не найден"):
+                    service.save_profile_list_file_text("profile:99", "example.com\n")
+
     def test_enabling_user_profile_reloads_ranges_from_written_preset(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

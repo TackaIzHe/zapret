@@ -121,16 +121,30 @@ def _has_profile_scoped_lines(lines: list[str]) -> bool:
 
 
 def load_strategy_catalogs(paths: AppPaths, engine: str) -> dict[str, dict[str, StrategyEntry]]:
+    _signature, catalogs = load_strategy_catalogs_with_signature(paths, engine)
+    return catalogs
+
+
+def load_strategy_catalogs_with_signature(
+    paths: AppPaths,
+    engine: str,
+) -> tuple[tuple[object, ...], dict[str, dict[str, StrategyEntry]]]:
+    """Возвращает каталоги вместе с подписью дерева файлов.
+
+    Подпись стабильна, пока файлы каталогов не менялись, и пригодна как компонент
+    ключа для контентных кэшей поверх каталогов.
+    """
     engine_key = str(engine or "").strip().lower()
     engine_root = strategy_catalog_root(paths) / engine_key
     cache_key = (str(engine_root.resolve()), engine_key)
     signature = _tree_signature(engine_root)
+    full_signature = (cache_key, signature)
     cached = _STRATEGY_CATALOGS_CACHE.get(cache_key)
     if cached is not None and cached[0] == signature:
-        return cached[1]
+        return full_signature, cached[1]
 
     catalogs: dict[str, dict[str, StrategyEntry]] = {}
     for path in sorted(engine_root.glob("*.txt")):
         catalogs[path.stem.lower()] = _parse_catalog_file(path, path.stem.lower())
     _STRATEGY_CATALOGS_CACHE[cache_key] = (signature, catalogs)
-    return catalogs
+    return full_signature, catalogs

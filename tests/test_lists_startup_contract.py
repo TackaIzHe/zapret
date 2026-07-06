@@ -61,6 +61,143 @@ class ListsStartupContractTests(unittest.TestCase):
 
             self.assertEqual((lists_root / "tiktok.txt").read_text(encoding="utf-8"), "tiktok.com\n")
 
+    def test_fast_required_files_check_skips_unreferenced_user_only_lists(self) -> None:
+        from lists import file_manager
+
+        with tempfile.TemporaryDirectory() as tmp:
+            lists_root = Path(tmp)
+            user_dir = lists_root / "user"
+            user_dir.mkdir(parents=True)
+            for name in ("other.txt", "ipset-all.txt", "ipset-ru.txt"):
+                (lists_root / name).write_text("ready\n", encoding="utf-8")
+            (user_dir / "i.ytimg.txt").write_text("qwen.ai\n", encoding="utf-8")
+
+            with (
+                patch.object(file_manager, "LISTS_FOLDER", str(lists_root)),
+                patch.object(file_manager, "ensure_required_files", side_effect=AssertionError("unexpected full rebuild")),
+                patch("settings.store.get_user_profiles_settings", return_value={"version": 1, "profiles": {}}),
+            ):
+                self.assertTrue(file_manager.ensure_required_files_fast())
+
+            self.assertFalse((lists_root / "i.ytimg.txt").exists())
+
+    def test_fast_required_files_check_rebuilds_active_preset_user_only_lists(self) -> None:
+        from lists import file_manager
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            lists_root = root / "lists"
+            user_dir = lists_root / "user"
+            user_dir.mkdir(parents=True)
+            for name in ("other.txt", "ipset-all.txt", "ipset-ru.txt"):
+                (lists_root / name).write_text("ready\n", encoding="utf-8")
+            (user_dir / "custom.txt").write_text("qwen.ai\n", encoding="utf-8")
+            preset_path = root / "selected.txt"
+            preset_path.write_text(
+                "--filter-tcp=443\n--hostlist=lists/custom.txt\n--lua-desync=pass\n",
+                encoding="utf-8",
+            )
+
+            with (
+                patch.object(file_manager, "LISTS_FOLDER", str(lists_root)),
+                patch.object(file_manager, "ensure_required_files", side_effect=AssertionError("unexpected full rebuild")),
+                patch("settings.store.get_user_profiles_settings", return_value={"version": 1, "profiles": {}}),
+            ):
+                self.assertTrue(file_manager.ensure_required_files_fast(active_preset_path=str(preset_path)))
+
+            self.assertEqual((lists_root / "custom.txt").read_text(encoding="utf-8"), "qwen.ai\n")
+
+    def test_fast_required_files_check_reads_file_from_mixed_hostlist_line(self) -> None:
+        from lists import file_manager
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            lists_root = root / "lists"
+            user_dir = lists_root / "user"
+            user_dir.mkdir(parents=True)
+            for name in ("other.txt", "ipset-all.txt", "ipset-ru.txt"):
+                (lists_root / name).write_text("ready\n", encoding="utf-8")
+            (user_dir / "discord-updates.txt").write_text("discord.com\n", encoding="utf-8")
+            (user_dir / "animego.online.txt").write_text("old.example\n", encoding="utf-8")
+            preset_path = root / "selected.txt"
+            preset_path.write_text(
+                "--filter-tcp=443\n"
+                "--hostlist=lists/discord-updates.txt,stable.dl2.discordapp.net,animego.online\n"
+                "--lua-desync=pass\n",
+                encoding="utf-8",
+            )
+
+            with (
+                patch.object(file_manager, "LISTS_FOLDER", str(lists_root)),
+                patch.object(file_manager, "ensure_required_files", side_effect=AssertionError("unexpected full rebuild")),
+                patch("settings.store.get_user_profiles_settings", return_value={"version": 1, "profiles": {}}),
+            ):
+                self.assertTrue(file_manager.ensure_required_files_fast(active_preset_path=str(preset_path)))
+
+            self.assertEqual((lists_root / "discord-updates.txt").read_text(encoding="utf-8"), "discord.com\n")
+            self.assertFalse((lists_root / "animego.online.txt").exists())
+
+    def test_fast_required_files_check_rebuilds_user_profile_list_files(self) -> None:
+        from lists import file_manager
+
+        with tempfile.TemporaryDirectory() as tmp:
+            lists_root = Path(tmp)
+            user_dir = lists_root / "user"
+            user_dir.mkdir(parents=True)
+            for name in ("other.txt", "ipset-all.txt", "ipset-ru.txt"):
+                (lists_root / name).write_text("ready\n", encoding="utf-8")
+            (user_dir / "my-site.txt").write_text("qwen.ai\n", encoding="utf-8")
+            (user_dir / "ipset-my-site.txt").write_text("1.1.1.1\n", encoding="utf-8")
+            settings = {
+                "version": 1,
+                "profiles": {
+                    "my-site": {
+                        "hostlist": "lists/my-site.txt",
+                        "ipset": "lists/ipset-my-site.txt",
+                    }
+                },
+            }
+
+            with (
+                patch.object(file_manager, "LISTS_FOLDER", str(lists_root)),
+                patch.object(file_manager, "ensure_required_files", side_effect=AssertionError("unexpected full rebuild")),
+                patch("settings.store.get_user_profiles_settings", return_value=settings),
+            ):
+                self.assertTrue(file_manager.ensure_required_files_fast())
+
+            self.assertEqual((lists_root / "my-site.txt").read_text(encoding="utf-8"), "qwen.ai\n")
+            self.assertEqual((lists_root / "ipset-my-site.txt").read_text(encoding="utf-8"), "1.1.1.1\n")
+
+    def test_post_startup_lists_check_rebuilds_user_profile_files_but_skips_old_user_only_files(self) -> None:
+        from lists import commands
+
+        with tempfile.TemporaryDirectory() as tmp:
+            lists_root = Path(tmp)
+            user_dir = lists_root / "user"
+            user_dir.mkdir(parents=True)
+            (user_dir / "my-site.txt").write_text("qwen.ai\n", encoding="utf-8")
+            (user_dir / "i.ytimg.txt").write_text("old.example\n", encoding="utf-8")
+            settings = {
+                "version": 1,
+                "profiles": {
+                    "my-site": {
+                        "hostlist": "lists/my-site.txt",
+                        "ipset": "lists/ipset-my-site.txt",
+                    }
+                },
+            }
+
+            with (
+                patch.object(commands, "LISTS_FOLDER", str(lists_root)),
+                patch("lists.hostlists_manager.startup_hostlists_check", return_value=True),
+                patch("lists.ipsets_manager.startup_ipsets_check", return_value=True),
+                patch("settings.store.get_user_profiles_settings", return_value=settings),
+            ):
+                self.assertEqual(commands.startup_lists_check(), (True, True))
+
+            self.assertEqual((lists_root / "my-site.txt").read_text(encoding="utf-8"), "qwen.ai\n")
+            self.assertFalse((lists_root / "i.ytimg.txt").exists())
+
     def test_fast_required_files_check_falls_back_when_final_file_missing(self) -> None:
         from lists import file_manager
 

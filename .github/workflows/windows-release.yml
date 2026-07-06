@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pyinstaller PyQt6 PyQt6-Qt6 PyQt6-sip pywin32 psutil requests urllib3 PySocks tgcrypto qtawesome pytz PyQt6-Fluent-Widgets wmi websockets httpx aiohttp packaging
+          python -m pip install pyinstaller PyQt6 PyQt6-Qt6 PyQt6-sip pywin32 psutil requests urllib3 PySocks tgcrypto qtawesome PyQt6-Fluent-Widgets wmi httpx packaging
 
       - name: Generate build files
         shell: python

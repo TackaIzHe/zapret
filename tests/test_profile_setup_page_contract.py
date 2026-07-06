@@ -958,7 +958,8 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             group="common",
             group_name="Общие",
             order=0,
-            order_is_manual=False,
+            source_order=0,
+            group_rank=0,
             group_collapsed=False,
             user_profile_id="",
         )
@@ -978,7 +979,8 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             group="video",
             group_name="Видео",
             order=1,
-            order_is_manual=False,
+            source_order=1,
+            group_rank=1,
             group_collapsed=False,
             user_profile_id="",
         )
@@ -1006,7 +1008,6 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         self.assertEqual(moved.group, "video")
         self.assertEqual(moved.group_name, "Видео")
         self.assertEqual(moved.order, 1)
-        self.assertTrue(moved.order_is_manual)
 
     def test_profile_list_reserves_space_for_visible_fluent_scrollbar(self) -> None:
         list_source = inspect.getsource(ProfilesList._build_ui)
@@ -1301,7 +1302,8 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             group="video",
             group_name="Video",
             order=1,
-            order_is_manual=False,
+            source_order=1,
+            group_rank=1,
             group_collapsed=False,
         )
         unused = SimpleNamespace(
@@ -1442,7 +1444,8 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             group="voice",
             group_name="Voice",
             order=1,
-            order_is_manual=False,
+            source_order=1,
+            group_rank=1,
             group_collapsed=False,
         )
         second = SimpleNamespace(
@@ -1540,7 +1543,8 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             group="voice",
             group_name="Voice",
             order=1,
-            order_is_manual=False,
+            source_order=1,
+            group_rank=1,
             group_collapsed=False,
         )
         youtube = SimpleNamespace(
@@ -1674,7 +1678,8 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             group="discord",
             group_name="Discord",
             order=0,
-            order_is_manual=False,
+            source_order=0,
+            group_rank=0,
             group_collapsed=False,
         )
         destination = SimpleNamespace(
@@ -1693,7 +1698,8 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             group="youtube",
             group_name="YouTube",
             order=0,
-            order_is_manual=False,
+            source_order=0,
+            group_rank=0,
             group_collapsed=False,
         )
 
@@ -1791,7 +1797,8 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             group="video",
             group_name="Video",
             order=0,
-            order_is_manual=False,
+            source_order=0,
+            group_rank=0,
             group_collapsed=False,
         )
         disabled = SimpleNamespace(
@@ -1847,7 +1854,8 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             group="video",
             group_name="Video",
             order=0,
-            order_is_manual=False,
+            source_order=0,
+            group_rank=0,
             group_collapsed=False,
         )
 
@@ -1878,7 +1886,8 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             group="voice",
             group_name="Voice",
             order=0,
-            order_is_manual=False,
+            source_order=0,
+            group_rank=0,
             group_collapsed=False,
         )
         youtube = SimpleNamespace(
@@ -1897,7 +1906,8 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             group="video",
             group_name="Video",
             order=1,
-            order_is_manual=False,
+            source_order=1,
+            group_rank=1,
             group_collapsed=False,
         )
         updated_discord = SimpleNamespace(
@@ -1945,7 +1955,8 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             group="video",
             group_name="Video",
             order=0,
-            order_is_manual=False,
+            source_order=0,
+            group_rank=0,
             group_collapsed=False,
         )
         second = SimpleNamespace(
@@ -1995,7 +2006,8 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             group="voice",
             group_name="Voice",
             order=0,
-            order_is_manual=False,
+            source_order=0,
+            group_rank=0,
             group_collapsed=False,
         )
         youtube = SimpleNamespace(
@@ -2014,7 +2026,8 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             group="video",
             group_name="Video",
             order=1,
-            order_is_manual=False,
+            source_order=1,
+            group_rank=1,
             group_collapsed=False,
         )
 
@@ -2055,7 +2068,8 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             group="video",
             group_name="Video",
             order=1,
-            order_is_manual=False,
+            source_order=1,
+            group_rank=1,
             group_collapsed=False,
         )
         discord = SimpleNamespace(
@@ -2074,7 +2088,8 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             group="voice",
             group_name="Voice",
             order=0,
-            order_is_manual=False,
+            source_order=0,
+            group_rank=0,
             group_collapsed=False,
         )
 
@@ -2115,7 +2130,8 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             group="video",
             group_name="Video",
             order=0,
-            order_is_manual=False,
+            source_order=0,
+            group_rank=0,
             group_collapsed=False,
         )
         second = SimpleNamespace(
@@ -2264,6 +2280,140 @@ class ProfileSetupPageContractTests(unittest.TestCase):
                 self.assertEqual(getattr(page, attr), 7)
                 page._schedule_next_profile_preset_write_operation_start.assert_not_called()
                 page._set_user_profile_actions_enabled.assert_not_called()
+
+    def test_list_file_load_result_is_current_for_multi_file_filter_value(self) -> None:
+        # Профили «Все сайты (айпи)» несут несколько файлов через запятую —
+        # результат, эхом повторяющий пару последнего запроса, обязан пройти
+        # проверку актуальности (AC1: раньше выбрасывался из-за имени файла).
+        multi_value = "lists/ipset-ru.txt,lists/ipset-dns.txt,lists/ipset-exclude.txt"
+        page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        page._profile_key = "profile:3"
+        page._list_file_editor_filter = ("ipset", multi_value)
+        result = SimpleNamespace(
+            profile_key="profile:3",
+            filter_kind="ipset",
+            filter_value=multi_value,
+        )
+
+        self.assertTrue(ProfileSetupPageBase._list_file_load_result_is_current(page, result))
+
+    def test_list_file_load_result_is_current_for_kind_switch_preview(self) -> None:
+        # Регрессия «бесконечная загрузка файла списка»: при переключении типа
+        # Hostlist → IPset сервис легитимно ремапит пару (youtube.txt →
+        # ipset-youtube.txt) — состояние описывает ДРУГОЙ файл, чем пара
+        # запроса. Идентичность результата — эхо пары, а не сравнение имён.
+        page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        page._profile_key = "profile:0"
+        page._list_file_editor_filter = ("ipset", "lists/youtube.txt")
+        result = SimpleNamespace(
+            profile_key="profile:0",
+            filter_kind="ipset",
+            filter_value="lists/youtube.txt",
+            state=SimpleNamespace(display_path="lists/ipset-youtube.txt", editable=True),
+        )
+
+        self.assertTrue(ProfileSetupPageBase._list_file_load_result_is_current(page, result))
+
+    def test_list_file_load_result_is_stale_for_other_request_pair(self) -> None:
+        # Результат чужого запроса (контекст уже перезапрошен с другой парой)
+        # не применяется.
+        page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        page._profile_key = "profile:3"
+        page._list_file_editor_filter = ("ipset", "lists/ipset-youtube.txt,lists/ipset-dns.txt")
+        result = SimpleNamespace(
+            profile_key="profile:3",
+            filter_kind="ipset",
+            filter_value="lists/ipset-ru.txt,lists/ipset-dns.txt",
+        )
+
+        self.assertFalse(ProfileSetupPageBase._list_file_load_result_is_current(page, result))
+
+    def test_list_file_load_result_is_stale_for_other_profile_key(self) -> None:
+        page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        page._profile_key = "profile:4"
+        page._list_file_editor_filter = ("hostlist", "lists/youtube.txt")
+        result = SimpleNamespace(
+            profile_key="profile:3",
+            filter_kind="hostlist",
+            filter_value="lists/youtube.txt",
+        )
+
+        self.assertFalse(ProfileSetupPageBase._list_file_load_result_is_current(page, result))
+
+    def test_list_file_none_state_shows_error_instead_of_endless_loading(self) -> None:
+        # Профиль не разрешился (удалён/переименован во время загрузки):
+        # молчаливый return оставлял статус «Загрузка файла списка...» навсегда.
+        page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        page._profile_key = "profile:0"
+        page._list_file_load_request_id = 5
+        page._list_file_editor_filter = ("hostlist", "lists/youtube.txt")
+        page._list_file_load_state_obj = Mock(return_value=SimpleNamespace(has_pending=lambda: False))
+        page._list_file_status_label = object()
+        page._schedule_list_file_editor_state_apply = Mock(
+            side_effect=AssertionError("None state must not be applied")
+        )
+        result = SimpleNamespace(
+            profile_key="profile:0",
+            filter_kind="hostlist",
+            filter_value="lists/youtube.txt",
+            state=None,
+        )
+
+        with patch("profile.ui.profile_setup_page.set_profile_list_status_text") as set_status:
+            ProfileSetupPageBase._on_list_file_editor_state_loaded(page, 5, result)
+
+        set_status.assert_called_once()
+        self.assertIn("Ошибка загрузки файла списка", set_status.call_args.args[1])
+
+    def test_filter_value_editing_finished_reloads_editor_for_changed_pair(self) -> None:
+        # Правка пути в поле — мутация контекста редактора: без перезагрузки
+        # последний результат навсегда остался бы про другой файл.
+        page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        page._loading = False
+        page._current_filter_kind = lambda: "hostlist"
+        page._current_filter_value = lambda: "lists/edited.txt"
+        page._list_file_editor_filter = ("hostlist", "lists/original.txt")
+        page._flush_list_file_autosave_before_filter_switch = Mock()
+        page._editor_tab_built = True
+        page._strategy_stack = SimpleNamespace(currentIndex=lambda: 1)
+        page._request_list_file_editor_state = Mock()
+
+        ProfileSetupPageBase._on_filter_value_editing_finished(page)
+
+        page._flush_list_file_autosave_before_filter_switch.assert_called_once()
+        page._request_list_file_editor_state.assert_called_once()
+
+    def test_filter_value_editing_finished_skips_reload_for_same_pair(self) -> None:
+        # editingFinished срабатывает и на потере фокуса без правок —
+        # незачем гонять воркер и терять несохранённый baseline.
+        page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        page._loading = False
+        page._current_filter_kind = lambda: "hostlist"
+        page._current_filter_value = lambda: "lists/original.txt"
+        page._list_file_editor_filter = ("hostlist", "lists/original.txt")
+        page._flush_list_file_autosave_before_filter_switch = Mock(
+            side_effect=AssertionError("unchanged pair must not flush")
+        )
+        page._request_list_file_editor_state = Mock(
+            side_effect=AssertionError("unchanged pair must not reload")
+        )
+
+        ProfileSetupPageBase._on_filter_value_editing_finished(page)
+
+    def test_breadcrumb_click_restores_crumbs_before_navigation(self) -> None:
+        # Клик по крошке физически удаляет из BreadcrumbBar элементы правее
+        # выбранного — обработчик обязан перестроить полный путь до навигации.
+        for key, navigate_attr in (("control", "_open_root"), ("profiles", "_open_profiles")):
+            with self.subTest(key=key):
+                page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+                page._rebuild_breadcrumb = Mock()
+                page._open_root = Mock()
+                page._open_profiles = Mock()
+
+                ProfileSetupPageBase._on_breadcrumb_item_changed(page, key)
+
+                page._rebuild_breadcrumb.assert_called_once()
+                getattr(page, navigate_attr).assert_called_once()
 
     def test_profile_setup_cleanup_stops_all_detail_workers_and_pending_requests(self) -> None:
         class _Worker:
@@ -3537,7 +3687,9 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         page._schedule_profiles_list_show_after_page_switch = Mock(
             side_effect=AssertionError("hidden warmup must not show the list immediately")
         )
-        page._hide_profiles_list_for_next_switch = Mock()
+        page._hide_profiles_list_for_next_switch = Mock(
+            side_effect=AssertionError("hidden warmup must not force a list relayout")
+        )
         payload = SimpleNamespace(items=(), selected_preset_name="Old")
         callbacks = []
 
@@ -3554,7 +3706,7 @@ class ProfileSetupPageContractTests(unittest.TestCase):
 
         page._apply_payload.assert_called_once_with(payload, view_state=None, apply_signature_base=None)
         page._schedule_profiles_list_show_after_page_switch.assert_not_called()
-        page._hide_profiles_list_for_next_switch.assert_called_once_with()
+        page._hide_profiles_list_for_next_switch.assert_not_called()
         self.assertFalse(page._profile_payload_dirty)
         self.assertIsNone(page._deferred_profile_payload_apply)
 
@@ -3571,7 +3723,9 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         page._schedule_profiles_list_show_after_page_switch = Mock(
             side_effect=AssertionError("hidden warmup must not show the list immediately")
         )
-        page._hide_profiles_list_for_next_switch = Mock()
+        page._hide_profiles_list_for_next_switch = Mock(
+            side_effect=AssertionError("hidden warmup must not force a list relayout")
+        )
         payload = SimpleNamespace(items=(), selected_preset_name="Default")
         callbacks = []
 
@@ -3587,11 +3741,11 @@ class ProfileSetupPageContractTests(unittest.TestCase):
 
         page._apply_payload.assert_called_once_with(payload, view_state=None, apply_signature_base=None)
         page._schedule_profiles_list_show_after_page_switch.assert_not_called()
-        page._hide_profiles_list_for_next_switch.assert_called_once_with()
+        page._hide_profiles_list_for_next_switch.assert_not_called()
         self.assertIsNone(page._deferred_profile_payload_apply)
         self.assertFalse(page._profile_payload_dirty)
 
-    def test_profile_list_show_marks_page_content_ready(self) -> None:
+    def test_profile_list_ready_marker_marks_page_content_ready_without_visibility_toggle(self) -> None:
         profile_list = SimpleNamespace(setVisible=Mock())
         page = PresetSetupPageBase.__new__(PresetSetupPageBase)
         page._cleanup_in_progress = False
@@ -3600,9 +3754,9 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         page.mark_content_ready = Mock()
         page.mark_content_ready_after_next_paint = Mock()
 
-        PresetSetupPageBase._show_profiles_list_after_page_switch(page)
+        PresetSetupPageBase._mark_profiles_list_ready_after_page_switch(page)
 
-        profile_list.setVisible.assert_called_once_with(True)
+        profile_list.setVisible.assert_not_called()
         page.mark_content_ready.assert_called_once_with(
             stage="content.profiles_list.visible",
             extra="list=visible",
@@ -3612,7 +3766,6 @@ class ProfileSetupPageContractTests(unittest.TestCase):
             stage="content.profiles_list.painted",
             extra="list=painted",
         )
-        self.assertFalse(page._profiles_list_show_scheduled)
 
     def test_hidden_warmed_profile_payload_is_applied_on_next_activation(self) -> None:
         page = PresetSetupPageBase.__new__(PresetSetupPageBase)
@@ -3841,6 +3994,61 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         self.assertTrue(page._profile_payload_dirty)
         self.assertTrue(page._profile_payload_request_scheduled)
         page._show_empty_state.assert_not_called()
+
+    def test_failed_profile_payload_load_is_not_retried_after_worker_finish(self) -> None:
+        from ui.latest_value_worker_state import LatestValueWorkerState
+
+        runtime = SimpleNamespace(is_running=Mock(return_value=False))
+        state = LatestValueWorkerState(runtime, empty_value=False)
+        worker = SimpleNamespace(_request_id=8)
+        page = PresetSetupPageBase.__new__(PresetSetupPageBase)
+        page._cleanup_in_progress = False
+        page._profile_load_request_id = 8
+        page._profile_load_runtime_request_id = 8
+        page._profile_load_refresh_state = state
+        page._profile_load_runtime = runtime
+        page._profile_payload_request_scheduled = False
+        page._profile_payload_dirty = True
+        page._profile_payload_load_failed = False
+        page._deferred_profile_payload_apply = None
+        page.isVisible = Mock(return_value=True)
+        page._show_empty_state = Mock()
+        page._schedule_profiles_list_show_after_page_switch = Mock()
+
+        PresetSetupPageBase._on_profile_payload_failed(page, 8, "boom")
+        PresetSetupPageBase._on_profile_worker_finished(page, worker)
+
+        page._show_empty_state.assert_called_once()
+        self.assertFalse(state.has_pending(), "failed load must not convert dirty into a pending retry")
+        self.assertFalse(state.start_scheduled, "failed load must not schedule another load start")
+        self.assertFalse(page._profile_payload_load_failed, "failure flag must be consumed by worker finish")
+        self.assertTrue(page._profile_payload_dirty, "payload must stay dirty for the next explicit refresh")
+
+    def test_dirty_profile_payload_without_failure_is_retried_after_worker_finish(self) -> None:
+        from ui.latest_value_worker_state import LatestValueWorkerState
+
+        runtime = SimpleNamespace(is_running=Mock(return_value=False))
+        state = LatestValueWorkerState(runtime, empty_value=False)
+        worker = SimpleNamespace(_request_id=8)
+        page = PresetSetupPageBase.__new__(PresetSetupPageBase)
+        page._cleanup_in_progress = False
+        page._profile_load_request_id = 8
+        page._profile_load_runtime_request_id = 8
+        page._profile_load_refresh_state = state
+        page._profile_load_runtime = runtime
+        page._profile_payload_request_scheduled = False
+        page._profile_payload_dirty = True
+        page._profile_payload_load_failed = False
+        page._deferred_profile_payload_apply = None
+        page.isVisible = Mock(return_value=True)
+        page._schedule_profiles_list_show_after_page_switch = Mock()
+
+        PresetSetupPageBase._on_profile_worker_finished(page, worker)
+
+        self.assertTrue(
+            state.start_scheduled or state.has_pending(),
+            "dirty payload after a successful stale finish must schedule a refresh",
+        )
 
     def test_preset_switch_refresh_schedules_profile_payload_request(self) -> None:
         page = PresetSetupPageBase.__new__(PresetSetupPageBase)
@@ -5305,6 +5513,9 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         page._profile_key = "profile-1"
         page._list_file_text = SimpleNamespace(toPlainText=lambda: "ignored.example")
         page._list_file_text_snapshot = "latest.example"
+        # Мемо чистое: клик сохраняет согласованный текст мемо, без повторного
+        # чтения редактора на рестарте отложенного сохранения.
+        page._list_file_text_dirty = False
         page._list_file_save_request_id = 1
         page._list_file_save_runtime = runtime
         page._pending_list_file_save = None
@@ -5387,6 +5598,204 @@ class ProfileSetupPageContractTests(unittest.TestCase):
         self.assertEqual(saved[0][:2], (3, state))
         self.assertIs(saved[0][2].payload, payload)
         self.assertTrue(saved[0][2].apply_signature)
+
+    def _make_list_editor_page(self, *, snapshot: str, server_snapshot: str | None):
+        page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        page._list_file_kind = ""
+        page._list_file_text_snapshot = snapshot
+        # Мемо чистое: снапшот моделирует текущий текст редактора (Mock не
+        # умеет отдавать осмысленный toPlainText).
+        page._list_file_text_dirty = False
+        page._list_file_server_text_snapshot = server_snapshot
+        # Состояние приходит для того же файла, что уже показан.
+        page._list_file_applied_identity = ("hostlist", "lists/site.txt")
+        page._list_file_base_text_snapshot = ""
+        page._list_file_title = None
+        page._list_file_base_title = None
+        page._list_file_base_text = None
+        page._list_file_user_title = None
+        page._list_file_text = Mock()
+        page._list_file_save_button = None
+        page._list_file_status_label = None
+        page._render_list_file_validation = Mock()
+        return page
+
+    def _list_editor_state(self, user_text: str):
+        return SimpleNamespace(
+            kind="hostlist",
+            display_path="lists/site.txt",
+            text=user_text,
+            base_text="",
+            user_text=user_text,
+            base_display_path="",
+            user_display_path="lists/user/site.txt",
+            editable=True,
+            error_text="",
+            invalid_lines=(),
+            base_entries_count=0,
+            user_entries_count=1,
+        )
+
+    def test_apply_list_file_state_keeps_unsaved_user_text(self) -> None:
+        """Поздний ответ воркера не затирает домены, набранные пользователем."""
+        page = self._make_list_editor_page(snapshot="typed.example.com\n", server_snapshot="old.example.com\n")
+        ProfileSetupPageBase._apply_list_file_editor_state(page, self._list_editor_state("old.example.com\n"))
+
+        page._list_file_text.setPlainText.assert_not_called()
+        self.assertEqual(page._list_file_text_snapshot, "typed.example.com\n")
+
+    def test_apply_list_file_state_keeps_unsaved_text_even_after_validation_cycle(self) -> None:
+        """Дыра флага dirty: валидация его сбрасывала, и ответ, пришедший позже,
+        затирал несохранённый текст. Несохранённость — производное от
+        server_text_snapshot, и от валидации не зависит."""
+        page = self._make_list_editor_page(snapshot="typed.example.com\n", server_snapshot="old.example.com\n")
+        page._list_file_text_dirty = False  # состояние после цикла валидации
+        ProfileSetupPageBase._apply_list_file_editor_state(page, self._list_editor_state("old.example.com\n"))
+
+        page._list_file_text.setPlainText.assert_not_called()
+        self.assertEqual(page._list_file_text_snapshot, "typed.example.com\n")
+
+    def test_apply_list_file_state_updates_clean_editor(self) -> None:
+        page = self._make_list_editor_page(snapshot="old.example.com\n", server_snapshot="old.example.com\n")
+        ProfileSetupPageBase._apply_list_file_editor_state(page, self._list_editor_state("fresh.example.com\n"))
+
+        page._list_file_text.setPlainText.assert_called_once_with("fresh.example.com\n")
+        self.assertEqual(page._list_file_text_snapshot, "fresh.example.com\n")
+        self.assertEqual(page._list_file_server_text_snapshot, "fresh.example.com\n")
+
+    def test_apply_list_file_state_applies_first_state_after_profile_open(self) -> None:
+        page = self._make_list_editor_page(snapshot="", server_snapshot=None)
+        ProfileSetupPageBase._apply_list_file_editor_state(page, self._list_editor_state("fresh.example.com\n"))
+
+        page._list_file_text.setPlainText.assert_called_once_with("fresh.example.com\n")
+        self.assertEqual(page._list_file_server_text_snapshot, "fresh.example.com\n")
+
+    def test_apply_list_file_state_records_server_text_even_when_keeping_user_text(self) -> None:
+        page = self._make_list_editor_page(snapshot="typed.example.com\n", server_snapshot="old.example.com\n")
+        ProfileSetupPageBase._apply_list_file_editor_state(page, self._list_editor_state("newer.example.com\n"))
+
+        page._list_file_text.setPlainText.assert_not_called()
+        self.assertEqual(page._list_file_text_snapshot, "typed.example.com\n")
+        self.assertEqual(page._list_file_server_text_snapshot, "newer.example.com\n")
+
+    def _make_autosave_page(self, *, snapshot: str, server_snapshot: str | None, profile_key: str = "name:Site"):
+        page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        page._loading = False
+        page._profile_key = profile_key
+        page._list_file_text = Mock()
+        page._list_file_text.isReadOnly.return_value = False
+        page._list_file_text_snapshot = snapshot
+        # Мемо чистое: снапшот моделирует текущий текст редактора.
+        page._list_file_text_dirty = False
+        page._list_file_server_text_snapshot = server_snapshot
+        page._list_file_validation_has_error = False
+        page._current_filter_kind = Mock(return_value="hostlist")
+        page._current_filter_value = Mock(return_value="lists/site.txt")
+        page._request_list_file_save = Mock()
+        return page
+
+    def test_autosave_sends_unsaved_valid_text(self) -> None:
+        page = self._make_autosave_page(snapshot="typed.example.com\n", server_snapshot="old.example.com\n")
+        ProfileSetupPageBase._maybe_autosave_list_file(page)
+
+        page._request_list_file_save.assert_called_once_with(
+            "name:Site",
+            "typed.example.com\n",
+            filter_kind="hostlist",
+            filter_value="lists/site.txt",
+        )
+
+    def test_autosave_skips_when_text_matches_server(self) -> None:
+        page = self._make_autosave_page(snapshot="same.example.com\n", server_snapshot="same.example.com\n")
+        ProfileSetupPageBase._maybe_autosave_list_file(page)
+
+        page._request_list_file_save.assert_not_called()
+
+    def test_autosave_skips_read_only_editor(self) -> None:
+        page = self._make_autosave_page(snapshot="typed.example.com\n", server_snapshot="")
+        page._list_file_text.isReadOnly.return_value = True
+        ProfileSetupPageBase._maybe_autosave_list_file(page)
+
+        page._request_list_file_save.assert_not_called()
+
+    def test_switch_flush_saves_unsaved_text_for_previous_profile(self) -> None:
+        page = self._make_autosave_page(snapshot="typed.example.com\n", server_snapshot="old.example.com\n")
+        ProfileSetupPageBase._flush_list_file_autosave_before_switch(page, "name:Previous")
+
+        page._request_list_file_save.assert_called_once_with(
+            "name:Previous",
+            "typed.example.com\n",
+            filter_kind="hostlist",
+            filter_value="lists/site.txt",
+        )
+
+    def test_switch_flush_skips_invalid_text(self) -> None:
+        page = self._make_autosave_page(snapshot="typed example com", server_snapshot="old.example.com\n")
+        page._list_file_validation_has_error = True
+        ProfileSetupPageBase._flush_list_file_autosave_before_switch(page, "name:Previous")
+
+        page._request_list_file_save.assert_not_called()
+
+    def test_list_file_save_finish_ignores_result_for_other_profile(self) -> None:
+        page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        page._list_file_save_request_id = 3
+        page._profile_key = "name:Current"
+        page._list_file_save_profile_key = "name:Previous"
+        page._list_file_status_label = Mock()
+        page.reload_current_profile = Mock()
+        page._apply_list_file_editor_state = Mock()
+        page._on_profile_changed_callback = Mock()
+        page.window = Mock(return_value=None)
+
+        with patch("profile.ui.profile_setup_page.InfoBar.success"):
+            ProfileSetupPageBase._on_list_file_save_finished(page, 3, object(), None)
+
+        page._apply_list_file_editor_state.assert_not_called()
+        page.reload_current_profile.assert_not_called()
+        # Запись на диск состоялась — другие страницы должны узнать о ней,
+        # даже когда state к текущему редактору не применяется.
+        page._on_profile_changed_callback.assert_called_once_with("name:Previous", "list_file")
+
+    def test_write_queue_keeps_list_file_saves_for_different_targets(self) -> None:
+        """Регресс: автосейв профиля B не должен вытеснять из очереди флаш
+        профиля A — это разные файлы, потеря одного из них невосстановима."""
+        page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        state = SimpleNamespace(pending=[], start_scheduled=False)
+        page._profile_setup_write_state_obj = lambda: state
+
+        op_a = {"kind": "list_file_save", "profile_key": "name:A", "filter_kind": "hostlist", "filter_value": "lists/a.txt", "text": "a.example\n"}
+        op_b = {"kind": "list_file_save", "profile_key": "name:B", "filter_kind": "hostlist", "filter_value": "lists/b.txt", "text": "b.example\n"}
+        ProfileSetupPageBase._queue_profile_setup_write_operation(page, op_a)
+        ProfileSetupPageBase._queue_profile_setup_write_operation(page, op_b)
+
+        self.assertEqual([op["profile_key"] for op in state.pending], ["name:A", "name:B"])
+
+    def test_write_queue_replaces_list_file_save_for_same_target(self) -> None:
+        page = ProfileSetupPageBase.__new__(ProfileSetupPageBase)
+        state = SimpleNamespace(pending=[], start_scheduled=False)
+        page._profile_setup_write_state_obj = lambda: state
+
+        op_old = {"kind": "list_file_save", "profile_key": "name:A", "filter_kind": "hostlist", "filter_value": "lists/a.txt", "text": "old\n"}
+        op_new = {"kind": "list_file_save", "profile_key": "name:A", "filter_kind": "hostlist", "filter_value": "lists/a.txt", "text": "new\n"}
+        ProfileSetupPageBase._queue_profile_setup_write_operation(page, op_old)
+        ProfileSetupPageBase._queue_profile_setup_write_operation(page, op_new)
+
+        self.assertEqual([op["text"] for op in state.pending], ["new\n"])
+
+    def test_autosave_targets_filter_pair_editor_was_loaded_with(self) -> None:
+        """Регресс: правка поля значения фильтра не должна пересаживать текст
+        редактора в другой файл — сохраняем в пару, под которую он загружен."""
+        page = self._make_autosave_page(snapshot="typed.example.com\n", server_snapshot="old.example.com\n")
+        page._list_file_editor_filter = ("hostlist", "lists/a.txt")
+        page._current_filter_value = Mock(return_value="lists/b.txt")
+        ProfileSetupPageBase._maybe_autosave_list_file(page)
+
+        page._request_list_file_save.assert_called_once_with(
+            "name:Site",
+            "typed.example.com\n",
+            filter_kind="hostlist",
+            filter_value="lists/a.txt",
+        )
 
     def test_list_file_save_finish_passes_updated_item_to_preset_page(self) -> None:
         item = SimpleNamespace(key="profile-1")

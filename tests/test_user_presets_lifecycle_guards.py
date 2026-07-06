@@ -82,7 +82,7 @@ class UserPresetsLifecycleGuardTests(unittest.TestCase):
 
         page._apply_preset_search.assert_not_called()
 
-    def test_clean_activation_restores_presets_list_after_show(self) -> None:
+    def test_clean_activation_keeps_ready_presets_list_attached(self) -> None:
         from presets.ui.common.user_presets_page import UserPresetsPageBase
 
         class _List:
@@ -122,14 +122,10 @@ class UserPresetsLifecycleGuardTests(unittest.TestCase):
             UserPresetsPageBase.on_page_hidden(page)
             UserPresetsPageBase.on_page_activated(page)
 
-        self.assertEqual(presets_list.visible_calls, [False])
+        self.assertEqual(presets_list.visible_calls, [])
         page.refresh_presets_view_if_possible.assert_not_called()
         page._update_presets_view_height.assert_called_once_with()
-        self.assertEqual(len(scheduled), 1)
-
-        scheduled[0]()
-
-        self.assertEqual(presets_list.visible_calls, [False, True])
+        self.assertEqual(scheduled, [])
 
 
 if __name__ == "__main__":

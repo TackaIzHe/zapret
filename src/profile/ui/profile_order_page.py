@@ -687,12 +687,14 @@ class ProfileOrderPageBase(BasePage):
             self._breadcrumb.blockSignals(False)
 
     def _on_breadcrumb_item_changed(self, key: str) -> None:
+        # Клик по крошке уже удалил из BreadcrumbBar элементы правее выбранного —
+        # восстанавливаем полный путь до навигации, иначе при возврате на эту же
+        # страницу крошки остаются обрезанными.
+        self._rebuild_breadcrumb()
         if key == "control":
             self._open_root()
         elif key == "profiles":
             self._open_profiles()
-        elif key == "order":
-            self._rebuild_breadcrumb()
 
     def handle_page_command(self, command: str, payload: dict) -> bool:
         if command == "profile_order_changed":

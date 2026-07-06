@@ -27,14 +27,14 @@ class PresetSummaryRefreshRuntimeTests(unittest.TestCase):
         self.assertIn("_summary_runtime.stop", cleanup_source)
         self.assertIn("_summary_runtime.cancel", cleanup_source)
 
-    def test_summary_worker_warms_profile_list_before_resolving_summary(self) -> None:
+    def test_summary_worker_ensures_profile_list_before_resolving_summary(self) -> None:
         from presets.display_state import ProfileStrategyDisplayState
         from presets.display_state_refresh import PresetProfileStrategySummaryWorker
         from settings.mode import ZAPRET2_MODE
 
         events: list[str] = []
         profile_feature = SimpleNamespace(
-            warm_profile_list=Mock(side_effect=lambda _method: events.append("warm")),
+            list_profiles=Mock(side_effect=lambda _method: events.append("list")),
             get_profile_strategy_display_state=Mock(
                 side_effect=lambda _method, max_items=2: (
                     events.append("summary") or ProfileStrategyDisplayState(summary="OVH UDP", active_count=1)
@@ -49,34 +49,16 @@ class PresetSummaryRefreshRuntimeTests(unittest.TestCase):
 
         worker.run()
 
-        self.assertEqual(events, ["warm", "summary"])
-        profile_feature.warm_profile_list.assert_called_once_with(ZAPRET2_MODE)
+        self.assertEqual(events, ["list", "summary"])
+        profile_feature.list_profiles.assert_called_once_with(ZAPRET2_MODE)
 
-    def test_strategy_only_summary_worker_skips_profile_list_warmup(self) -> None:
-        from presets.display_state import ProfileStrategyDisplayState
+    def test_summary_worker_never_triggers_mass_warmup(self) -> None:
         from presets.display_state_refresh import PresetProfileStrategySummaryWorker
-        from settings.mode import ZAPRET2_MODE
 
-        events: list[str] = []
-        profile_feature = SimpleNamespace(
-            warm_profile_list=Mock(side_effect=lambda _method: events.append("warm")),
-            get_profile_strategy_display_state=Mock(
-                side_effect=lambda _method, max_items=2: (
-                    events.append("summary") or ProfileStrategyDisplayState(summary="OVH UDP", active_count=1)
-                )
-            ),
-        )
-        worker = PresetProfileStrategySummaryWorker(
-            1,
-            method=ZAPRET2_MODE,
-            profile_feature=profile_feature,
-            refresh_reason="strategy_only",
-        )
+        run_source = inspect.getsource(PresetProfileStrategySummaryWorker.run)
 
-        worker.run()
-
-        self.assertEqual(events, ["summary"])
-        profile_feature.warm_profile_list.assert_not_called()
+        self.assertNotIn("warm_profile_list", run_source)
+        self.assertIn("list_profiles", run_source)
 
     def test_summary_refresh_queue_lives_in_latest_worker_state(self) -> None:
         from presets.display_state_refresh import PresetProfileStrategySummaryRefreshRuntime

@@ -2,15 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
-from typing import Any
+from typing import Any, Sequence
 
-from .editable_settings import EditableProfileSettings, normalize_filter_value
+from .editable_settings import EditableProfileSettings, normalize_filter_value, with_editable_profile
 from .list_file_editor import profile_list_file_exists
-
-
-_SERVICE_EXCLUDE_HOSTLIST_NAME = "netrogat.txt"
-_SERVICE_EXCLUDE_IPSET_NAMES = ("ipset-ru.txt", "ipset-dns.txt", "ipset-exclude.txt")
-_SERVICE_EXCLUDE_IPSET_NAME_SET = frozenset(_SERVICE_EXCLUDE_IPSET_NAMES)
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,41 +59,16 @@ def _filter_value_for_kind_switch(settings: EditableProfileSettings, filter_kind
     if target_kind == current_kind:
         return normalize_filter_value(current_value, target_kind, filter_role=settings.filter_role)
     if str(settings.filter_role or "").strip().lower() == "exclude":
-        return _paired_exclude_filter_value(
-            current_value,
-            current_kind,
-            target_kind,
-            filter_protocol=str(settings.filter_protocol or "").strip().lower(),
-        )
+        # Exclude-фильтры не переключаются между типами: у пары catch-all
+        # профилей («Все сайты (хостлисты)» с netrogat.txt и «Все сайты
+        # (айпи)» со служебными ipset-*) разные роли в пресете, и связка
+        # netrogat ↔ ipset-ru/dns/exclude только путала (убрана по решению
+        # пользователя 2026-07-06). Пустая пара → switch недоступен, комбо
+        # типа на таких профилях скрывается.
+        return ""
     if "," in current_value:
         return ""
     return _paired_primary_filter_value(current_value, current_kind, target_kind)
-
-
-def _paired_exclude_filter_value(value: str, current_kind: str, target_kind: str, *, filter_protocol: str = "") -> str:
-    raw = str(value or "").strip()
-    if not raw:
-        return ""
-
-    values = _filter_reference_values(raw)
-    if current_kind == "hostlist" and target_kind == "ipset":
-        if len(values) != 1:
-            return ""
-        path = PureWindowsPath(values[0])
-        if path.name.lower() != _SERVICE_EXCLUDE_HOSTLIST_NAME:
-            return ""
-        return ",".join(_replace_filter_path_name(values[0], path, name) for name in _SERVICE_EXCLUDE_IPSET_NAMES)
-
-    if current_kind == "ipset" and target_kind == "hostlist":
-        if filter_protocol == "udp":
-            return ""
-        names = [PureWindowsPath(item).name.lower() for item in values]
-        if len(names) != len(_SERVICE_EXCLUDE_IPSET_NAMES) or frozenset(names) != _SERVICE_EXCLUDE_IPSET_NAME_SET:
-            return ""
-        path = PureWindowsPath(values[0])
-        return _replace_filter_path_name(values[0], path, _SERVICE_EXCLUDE_HOSTLIST_NAME)
-
-    return ""
 
 
 def _paired_primary_filter_value(value: str, current_kind: str, target_kind: str) -> str:
@@ -163,3 +133,70 @@ def _filter_reference_values(filter_value: str) -> tuple[str, ...]:
 def _looks_like_list_file_reference(value: str) -> bool:
     normalized = str(value or "").strip().replace("\\", "/")
     return normalized.startswith("lists/") or "/" in normalized or normalized.lower().endswith((".txt", ".lst", ".list"))
+
+
+def filter_kind_switch_creates_preset_duplicate(
+    profile: Any,
+    preset_profiles: Sequence[Any],
+    settings: EditableProfileSettings,
+    resolution: FilterKindSwitchResolution,
+) -> bool:
+    """Проверяет, не превратит ли переключение типа фильтра профиль в дубликат.
+
+    Пресеты несут ПАРЫ catch-all профилей («Все сайты (хостлисты)» с
+    hostlist-exclude и «Все сайты (айпи)» с ipset-exclude) — это разные роли:
+    первый ловит соединения с известным hostname, второй — остальные по IP.
+    Переключение типа на одном из них дало бы второй профиль с той же
+    match-сигнатурой: winws2 отдаст трафик первому по порядку, а пара
+    развалится. Такое переключение запрещаем; для пресетов с единственным
+    catch-all профилем переключение остаётся доступным.
+    """
+    try:
+        switched = with_editable_profile(
+            profile,
+            EditableProfileSettings(
+                filter_kind=resolution.filter_kind,
+                filter_value=resolution.filter_value,
+                filter_role=settings.filter_role,
+                in_range=settings.in_range,
+                out_range=settings.out_range,
+            ),
+        )
+        target_signature = str(switched.match_signature or "")
+    except Exception:
+        return False
+    if not target_signature:
+        return False
+    profile_persistent_key = str(getattr(profile, "persistent_key", "") or "")
+    for other in preset_profiles or ():
+        if other is profile:
+            continue
+        if profile_persistent_key and str(getattr(other, "persistent_key", "") or "") == profile_persistent_key:
+            continue
+        if str(getattr(other, "match_signature", "") or "") == target_signature:
+            return True
+    return False
+
+
+def filter_kinds_without_preset_duplicates(
+    settings: EditableProfileSettings,
+    profile: Any,
+    preset_profiles: Sequence[Any],
+    kinds: Sequence[str],
+    app_paths: Any,
+) -> tuple[str, ...]:
+    """Убирает из доступных типов фильтра те, что создали бы дубликат в пресете."""
+    current_kind = str(settings.filter_kind or "hostlist").strip().lower()
+    result: list[str] = []
+    for kind in kinds or ():
+        normalized = str(kind or "").strip().lower()
+        if normalized == current_kind:
+            result.append(normalized)
+            continue
+        resolution = resolve_filter_kind_switch(settings, normalized, app_paths)
+        if not resolution.allowed:
+            continue
+        if filter_kind_switch_creates_preset_duplicate(profile, preset_profiles, settings, resolution):
+            continue
+        result.append(normalized)
+    return tuple(result) or (current_kind,)

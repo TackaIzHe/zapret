@@ -20,7 +20,6 @@ class PresetProfileStrategySummaryWorker(QThread):
         *,
         method: str,
         profile_feature,
-        refresh_reason: str = "",
         max_items: int = 2,
         parent=None,
     ) -> None:
@@ -28,17 +27,16 @@ class PresetProfileStrategySummaryWorker(QThread):
         self._request_id = int(request_id)
         self._method = normalize_launch_method(method, default="")
         self._profile_feature = profile_feature
-        self._refresh_reason = str(refresh_reason or "").strip()
         self._max_items = max(1, int(max_items))
 
     def run(self) -> None:
         try:
-            warm_profile_list = getattr(self._profile_feature, "warm_profile_list", None)
-            if callable(warm_profile_list) and self._refresh_reason != "strategy_only":
+            list_profiles = getattr(self._profile_feature, "list_profiles", None)
+            if callable(list_profiles):
                 try:
-                    warm_profile_list(self._method)
+                    list_profiles(self._method)
                 except Exception as exc:
-                    log(f"PresetProfileStrategySummaryWorker: прогрев профилей не выполнен: {exc}", "DEBUG")
+                    log(f"PresetProfileStrategySummaryWorker: список профилей не обновлён: {exc}", "DEBUG")
 
             from presets.display_state import resolve_profile_strategy_display_state
 
@@ -94,7 +92,6 @@ class PresetProfileStrategySummaryRefreshRuntime(QObject):
                 request_id,
                 method=method,
                 profile_feature=self._profile_feature,
-                refresh_reason=reason,
                 parent=self,
             ),
             on_loaded=self._on_summary_loaded,

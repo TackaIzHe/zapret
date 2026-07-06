@@ -199,7 +199,7 @@ class ProfileServiceApplyStrategyGuardTests(unittest.TestCase):
                 googlevideo = next(item for item in payload.items if "googlevideo" in " ".join(item.match_lines).lower())
                 with (
                     patch(
-                        "profile.service.move_profile_to_end_in_folder_state",
+                        "profile.service.save_profile_folder_state",
                         side_effect=AssertionError("already-last profile must not rewrite folder state"),
                     ),
                     patch.object(
@@ -246,7 +246,7 @@ class ProfileServiceApplyStrategyGuardTests(unittest.TestCase):
                 source, destination = youtube_items[0], youtube_items[1]
                 with (
                     patch(
-                        "profile.service.move_profile_before_in_folder_state",
+                        "profile.service.save_profile_folder_state",
                         side_effect=AssertionError("already-ordered profile must not rewrite folder state"),
                     ),
                     patch.object(
@@ -293,7 +293,7 @@ class ProfileServiceApplyStrategyGuardTests(unittest.TestCase):
                 destination, source = youtube_items[0], youtube_items[1]
                 with (
                     patch(
-                        "profile.service.move_profile_after_in_folder_state",
+                        "profile.service.save_profile_folder_state",
                         side_effect=AssertionError("already-ordered profile must not rewrite folder state"),
                     ),
                     patch.object(

@@ -450,17 +450,21 @@ def _get_split_catalog_content_sig(path: Path) -> tuple[int, int]:
     return (int(checksum), int(total_size))
 
 
+def _get_file_content_sig_from_raw(raw: bytes) -> tuple[int, int]:
+    return (int(zlib.crc32(raw)), int(len(raw)))
+
+
+def _get_file_content_sig(path: Path) -> tuple[int, int]:
+    return _get_file_content_sig_from_raw(path.read_bytes())
+
+
 def _get_path_sig(path: Path) -> tuple[int, int] | None:
     try:
         if path.is_dir():
             sig = _get_split_catalog_content_sig(path)
             _remember_recent_path_sig(path, sig)
             return sig
-        st = path.stat()
-        mtime_ns = getattr(st, "st_mtime_ns", None)
-        if mtime_ns is None:
-            mtime_ns = int(st.st_mtime * 1_000_000_000)
-        sig = (int(mtime_ns), int(st.st_size))
+        sig = _get_file_content_sig(path)
         _remember_recent_path_sig(path, sig)
         return sig
     except Exception:
@@ -517,8 +521,9 @@ def _load_catalog() -> HostsCatalog:
                 data, sig = _load_split_catalog_data_with_sig(path)
                 text = json.dumps(data, ensure_ascii=False, sort_keys=True)
             else:
-                text = path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
-                sig = _get_path_sig(path) if path.exists() else None
+                raw = path.read_bytes() if path.exists() else b""
+                text = raw.decode("utf-8", errors="replace") if raw else ""
+                sig = _get_file_content_sig_from_raw(raw) if path.exists() else None
         except Exception as exc:
             _log(f"Не удалось прочитать hosts-каталог: {exc}", "WARNING")
             text = ""

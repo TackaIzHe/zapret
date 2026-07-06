@@ -253,7 +253,9 @@ class ProfileFilterKindSwitchTests(unittest.TestCase):
         self.assertIn("--hostlist=lists/other.txt", store.text)
         self.assertNotIn("--ipset=lists/ipset-all.txt", store.text)
 
-    def test_switch_exclusion_ipsets_to_hostlist_uses_netrogat(self) -> None:
+    def test_exclusion_ipsets_do_not_offer_or_switch_to_hostlist(self) -> None:
+        # AC10: exclude-фильтры не переключаются между типами — связка
+        # netrogat ↔ ipset-ru/dns/exclude убрана, комбо типа скрыто.
         from tempfile import TemporaryDirectory
 
         with TemporaryDirectory() as temp_dir:
@@ -277,16 +279,17 @@ class ProfileFilterKindSwitchTests(unittest.TestCase):
                 ),
                 root=root,
             )
+            text_before = store.text
 
+            setup = service.get_profile_setup("profile:0")
             new_key = service.set_profile_filter_kind("profile:0", "hostlist")
 
-        self.assertEqual(new_key, "profile:0")
-        self.assertIn("--hostlist-exclude=lists/netrogat.txt", store.text)
-        self.assertNotIn("--ipset-exclude=lists/ipset-ru.txt", store.text)
-        self.assertNotIn("--ipset-exclude=lists/ipset-dns.txt", store.text)
-        self.assertNotIn("--ipset-exclude=lists/ipset-exclude.txt", store.text)
-        self.assertIn("--out-range=-d8", store.text)
-        self.assertIn("--lua-desync=pass", store.text)
+        self.assertIsNotNone(setup)
+        self.assertEqual(setup.editable_filter_kinds, ("ipset",))
+        self.assertIsNone(new_key)
+        self.assertEqual(store.text, text_before)
+        self.assertNotIn("--hostlist-exclude=lists/netrogat.txt", store.text)
+        self.assertIn("--ipset-exclude=lists/ipset-ru.txt", store.text)
 
     def test_udp_exclusion_ipsets_do_not_offer_hostlist_pair(self) -> None:
         from tempfile import TemporaryDirectory
@@ -300,7 +303,7 @@ class ProfileFilterKindSwitchTests(unittest.TestCase):
             service, store = self._service(
                 "\n".join(
                     (
-                        "--name=Все сайты UDP (исключение)",
+                        "--name=Все сайты UDP (айпи)",
                         "--filter-udp=443-65535",
                         "--ipset-exclude=lists/ipset-ru.txt",
                         "--ipset-exclude=lists/ipset-dns.txt",
@@ -325,7 +328,8 @@ class ProfileFilterKindSwitchTests(unittest.TestCase):
         self.assertIn("--ipset-exclude=lists/ipset-dns.txt", store.text)
         self.assertIn("--ipset-exclude=lists/ipset-exclude.txt", store.text)
 
-    def test_switch_exclusion_hostlist_to_ipset_uses_service_ipsets(self) -> None:
+    def test_exclusion_hostlist_does_not_offer_or_switch_to_ipset(self) -> None:
+        # AC10: обратное направление симметрично недоступно.
         from tempfile import TemporaryDirectory
 
         with TemporaryDirectory() as temp_dir:
@@ -347,16 +351,20 @@ class ProfileFilterKindSwitchTests(unittest.TestCase):
                 ),
                 root=root,
             )
+            text_before = store.text
 
+            setup = service.get_profile_setup("profile:0")
             new_key = service.set_profile_filter_kind("profile:0", "ipset")
 
-        self.assertEqual(new_key, "profile:0")
-        self.assertNotIn("--hostlist-exclude=lists/netrogat.txt", store.text)
-        self.assertIn("--ipset-exclude=lists/ipset-ru.txt", store.text)
-        self.assertIn("--ipset-exclude=lists/ipset-dns.txt", store.text)
-        self.assertIn("--ipset-exclude=lists/ipset-exclude.txt", store.text)
+        self.assertIsNotNone(setup)
+        self.assertEqual(setup.editable_filter_kinds, ("hostlist",))
+        self.assertIsNone(new_key)
+        self.assertEqual(store.text, text_before)
+        self.assertIn("--hostlist-exclude=lists/netrogat.txt", store.text)
+        self.assertNotIn("--ipset-exclude=lists/ipset-ru.txt", store.text)
 
-    def test_update_settings_switches_exclusion_hostlist_to_ipsets_in_service(self) -> None:
+    def test_update_settings_keeps_exclusion_hostlist_kind(self) -> None:
+        # AC10: автосейв настроек с чужим типом не переключает exclude-фильтр.
         from tempfile import TemporaryDirectory
 
         with TemporaryDirectory() as temp_dir:
@@ -378,6 +386,7 @@ class ProfileFilterKindSwitchTests(unittest.TestCase):
                 ),
                 root=root,
             )
+            text_before = store.text
 
             new_key = service.update_winws2_editable_settings(
                 "profile:0",
@@ -388,10 +397,107 @@ class ProfileFilterKindSwitchTests(unittest.TestCase):
             )
 
         self.assertEqual(new_key, "profile:0")
-        self.assertNotIn("--hostlist-exclude=lists/netrogat.txt", store.text)
-        self.assertIn("--ipset-exclude=lists/ipset-ru.txt", store.text)
-        self.assertIn("--ipset-exclude=lists/ipset-dns.txt", store.text)
-        self.assertIn("--ipset-exclude=lists/ipset-exclude.txt", store.text)
+        self.assertEqual(store.text, text_before)
+        self.assertIn("--hostlist-exclude=lists/netrogat.txt", store.text)
+        self.assertNotIn("--ipset-exclude=lists/ipset-ru.txt", store.text)
+
+    def test_switch_blocked_when_counterpart_profile_exists_in_preset(self) -> None:
+        # Пара catch-all профилей: hostlist-вариант ловит соединения с известным
+        # hostname, ipset-вариант — остальные по IP. Переключение типа на одном
+        # из них создало бы дубликат match-сигнатуры соседа — запрещено.
+        from tempfile import TemporaryDirectory
+
+        preset_text = "\n".join(
+            (
+                "--new",
+                "--name=Все сайты (хостлисты)",
+                "--filter-tcp=80,443-65535",
+                "--hostlist-exclude=lists/netrogat.txt",
+                "--out-range=-d8",
+                "--lua-desync=pass",
+                "",
+                "--new",
+                "--name=Все сайты (айпи)",
+                "--filter-tcp=80,443-65535",
+                "--ipset-exclude=lists/ipset-ru.txt",
+                "--ipset-exclude=lists/ipset-dns.txt",
+                "--ipset-exclude=lists/ipset-exclude.txt",
+                "--out-range=-d8",
+                "--lua-desync=pass",
+                "",
+            )
+        )
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            lists_dir = root / "lists"
+            (lists_dir / "base").mkdir(parents=True)
+            for name in ("ipset-ru.txt", "ipset-dns.txt", "ipset-exclude.txt", "netrogat.txt"):
+                (lists_dir / "base" / name).write_text("1.1.1.1\n", encoding="utf-8")
+            service, store = self._service(preset_text, root=root)
+            text_before = store.text
+
+            hostlist_setup = service.get_profile_setup("profile:0")
+            ipset_setup = service.get_profile_setup("profile:1")
+            hostlist_switch = service.set_profile_filter_kind("profile:0", "ipset")
+            ipset_switch = service.set_profile_filter_kind("profile:1", "hostlist")
+            settings_switch = service.update_winws2_editable_settings(
+                "profile:0",
+                filter_kind="ipset",
+                filter_value="lists/netrogat.txt",
+                in_range="x",
+                out_range="-d8",
+            )
+
+        self.assertIsNotNone(hostlist_setup)
+        self.assertEqual(hostlist_setup.editable_filter_kinds, ("hostlist",))
+        self.assertIsNotNone(ipset_setup)
+        self.assertEqual(ipset_setup.editable_filter_kinds, ("ipset",))
+        self.assertIsNone(hostlist_switch)
+        self.assertIsNone(ipset_switch)
+        # Автосейв настроек не молча меняет тип: профиль остаётся hostlist.
+        self.assertEqual(settings_switch, "profile:0")
+        self.assertEqual(store.text, text_before)
+
+    def test_switch_blocked_even_when_counterpart_is_disabled(self) -> None:
+        # Выключенный двойник — всё равно двойник: переключение создало бы
+        # дубликат ключей и путаницу с метой. Правильный путь — включить пару.
+        from tempfile import TemporaryDirectory
+
+        preset_text = "\n".join(
+            (
+                "--new",
+                "--name=Все сайты (хостлисты)",
+                "--filter-tcp=80,443-65535",
+                "--hostlist-exclude=lists/netrogat.txt",
+                "--out-range=-d8",
+                "--lua-desync=pass",
+                "",
+                "--new",
+                "--name=Все сайты (айпи)",
+                "--skip",
+                "--filter-tcp=80,443-65535",
+                "--ipset-exclude=lists/ipset-ru.txt",
+                "--ipset-exclude=lists/ipset-dns.txt",
+                "--ipset-exclude=lists/ipset-exclude.txt",
+                "--out-range=-d8",
+                "--lua-desync=pass",
+                "",
+            )
+        )
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            lists_dir = root / "lists"
+            (lists_dir / "base").mkdir(parents=True)
+            for name in ("ipset-ru.txt", "ipset-dns.txt", "ipset-exclude.txt", "netrogat.txt"):
+                (lists_dir / "base" / name).write_text("1.1.1.1\n", encoding="utf-8")
+            service, _store = self._service(preset_text, root=root)
+
+            setup = service.get_profile_setup("profile:0")
+            switch = service.set_profile_filter_kind("profile:0", "ipset")
+
+        self.assertIsNotNone(setup)
+        self.assertEqual(setup.editable_filter_kinds, ("hostlist",))
+        self.assertIsNone(switch)
 
     def test_custom_exclusion_file_is_not_rewritten_to_service_pair(self) -> None:
         from tempfile import TemporaryDirectory
@@ -670,7 +776,9 @@ class FilterKindSwitchResolverTests(unittest.TestCase):
         self.assertEqual(resolved.filter_kind, "hostlist")
         self.assertEqual(resolved.filter_value, "")
 
-    def test_resolver_handles_service_exclude_pair(self) -> None:
+    def test_resolver_rejects_exclude_role_switch(self) -> None:
+        # AC10: exclude-роль не имеет парного типа — даже при существующих
+        # служебных файлах resolver не предлагает netrogat ↔ ipset-триплет.
         from tempfile import TemporaryDirectory
 
         with TemporaryDirectory() as temp_dir:
@@ -680,20 +788,27 @@ class FilterKindSwitchResolverTests(unittest.TestCase):
             for name in ("ipset-ru.txt", "ipset-dns.txt", "ipset-exclude.txt", "netrogat.txt"):
                 (lists_dir / "base" / name).write_text("1.1.1.1\n", encoding="utf-8")
             app_paths = AppPaths(user_root=root, local_root=root)
-            settings = EditableProfileSettings(
-                filter_kind="hostlist",
-                filter_value="lists/netrogat.txt",
-                filter_role="exclude",
-            )
 
-            resolved = resolve_filter_kind_switch(settings, "ipset", app_paths)
+            for current_kind, current_value, target_kind in (
+                ("hostlist", "lists/netrogat.txt", "ipset"),
+                (
+                    "ipset",
+                    "lists/ipset-ru.txt,lists/ipset-dns.txt,lists/ipset-exclude.txt",
+                    "hostlist",
+                ),
+            ):
+                with self.subTest(current=current_kind, target=target_kind):
+                    settings = EditableProfileSettings(
+                        filter_kind=current_kind,
+                        filter_value=current_value,
+                        filter_role="exclude",
+                    )
 
-        self.assertTrue(resolved.allowed)
-        self.assertEqual(resolved.filter_kind, "ipset")
-        self.assertEqual(
-            resolved.filter_value,
-            "lists/ipset-ru.txt,lists/ipset-dns.txt,lists/ipset-exclude.txt",
-        )
+                    resolved = resolve_filter_kind_switch(settings, target_kind, app_paths)
+
+                    self.assertFalse(resolved.allowed)
+                    self.assertEqual(resolved.reason, "missing_pair")
+                    self.assertEqual(resolved.filter_value, "")
 
     def test_resolver_reports_not_editable_reason(self) -> None:
         app_paths = AppPaths(user_root=Path("src").resolve(), local_root=Path("src").resolve())

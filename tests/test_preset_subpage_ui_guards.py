@@ -89,6 +89,31 @@ class _StartRuntime:
         return 0, worker
 
 
+class _FakeBreadcrumb:
+    def __init__(self) -> None:
+        self.items: list[tuple[str, str]] = []
+        self.clear_calls = 0
+
+    def blockSignals(self, _blocked) -> None:  # noqa: N802
+        pass
+
+    def clear(self) -> None:
+        self.clear_calls += 1
+        self.items = []
+
+    def addItem(self, key: str, text: str) -> None:  # noqa: N802
+        self.items.append((str(key), str(text)))
+
+    def count(self) -> int:
+        return len(self.items)
+
+    def setProperty(self, *_args) -> None:  # noqa: N802
+        pass
+
+    def property(self, *_args) -> str:
+        return ""
+
+
 class PresetSubpageUiGuardTests(unittest.TestCase):
     def test_raw_preset_load_while_worker_runs_queues_latest_request(self) -> None:
         from presets.ui.common.preset_subpage_base import PresetRawEditorPage
@@ -467,21 +492,25 @@ class PresetSubpageUiGuardTests(unittest.TestCase):
         self.assertEqual(text, "--new\n--filter-tcp=443\n")
         self.assertEqual(page.editor.plain_text_read_calls, [])
 
-    def test_raw_preset_save_uses_visible_editor_text_when_snapshot_is_empty(self) -> None:
+    def test_raw_preset_save_reads_editor_when_snapshot_is_invalidated(self) -> None:
         from presets.ui.common.preset_subpage_base import PresetRawEditorPage
 
         page = PresetRawEditorPage.__new__(PresetRawEditorPage)
-        page._raw_editor_text_snapshot = ""
+        page._raw_editor_text_snapshot = None
         page.editor = _PlainTextEditor("--new\n--filter-tcp=443\n")
 
         text = PresetRawEditorPage._resolve_raw_preset_save_text(page, None)
 
         self.assertEqual(text, "--new\n--filter-tcp=443\n")
         self.assertEqual(page._raw_editor_text_snapshot, "--new\n--filter-tcp=443\n")
+        self.assertEqual(page.editor.plain_text_read_calls, ["--new\n--filter-tcp=443\n"])
 
-    def test_raw_preset_save_after_text_change_uses_cached_snapshot(self) -> None:
+    def test_raw_preset_save_after_text_change_reads_editor_once(self) -> None:
         from presets.ui.common.preset_subpage_base import PresetRawEditorPage
 
+        # После правки (textChanged инвалидирует мемо) сохранение перечитывает
+        # живой текст из редактора ровно один раз — инкрементального кэша по
+        # contentsChange больше нет, он молча терял вставленный текст.
         page = PresetRawEditorPage.__new__(PresetRawEditorPage)
         page._cleanup_in_progress = False
         page._is_loading = False
@@ -489,18 +518,13 @@ class PresetSubpageUiGuardTests(unittest.TestCase):
         page._raw_save_runtime = _StartRuntime()
         page._raw_save_request_id = 0
         page._raw_save_succeeded = True
+        page._save_timer = Mock()
+        page._commit_timer = Mock()
         page._set_footer = Mock()
         page.editor = _PlainTextEditor("--new\nlatest\n")
         page.create_raw_preset_save_worker = Mock(return_value=object())
-        page._raw_editor_inserted_text = Mock(return_value="--new\nlatest\n")
 
-        PresetRawEditorPage._on_raw_editor_contents_changed(
-            page,
-            0,
-            len("--new\nold\n"),
-            len("--new\nlatest\n"),
-        )
-        page.editor.plain_text_read_calls.clear()
+        PresetRawEditorPage._on_text_changed(page)
         PresetRawEditorPage._start_raw_preset_save_worker(
             page,
             file_name="Default.txt",
@@ -508,7 +532,7 @@ class PresetSubpageUiGuardTests(unittest.TestCase):
             publish_content_changed=True,
         )
 
-        self.assertEqual(page.editor.plain_text_read_calls, [])
+        self.assertEqual(page.editor.plain_text_read_calls, ["--new\nlatest\n"])
         page.create_raw_preset_save_worker.assert_called_once_with(
             1,
             file_name="Default.txt",
@@ -516,6 +540,51 @@ class PresetSubpageUiGuardTests(unittest.TestCase):
             publish_content_changed=True,
             parent=page,
         )
+
+    def test_rebuild_breadcrumb_restores_items_after_click_truncation(self) -> None:
+        # Клик по крошке заставляет BreadcrumbBar удалить элементы правее
+        # выбранного, при этом текстовый ключ пути не меняется. Перестройка
+        # обязана восстановить все крошки, а не скипаться по мемо-ключу.
+        from presets.ui.common.preset_subpage_base import PresetRawEditorPage
+
+        breadcrumb = _FakeBreadcrumb()
+        page = PresetRawEditorPage.__new__(PresetRawEditorPage)
+        page._breadcrumb = breadcrumb
+        page._preset_name = "Мой пресет"
+
+        PresetRawEditorPage._rebuild_breadcrumb(page)
+        self.assertEqual(breadcrumb.count(), 3)
+        clear_calls_after_build = breadcrumb.clear_calls
+
+        # Повторный вызов с тем же ключом и полным баром — без перестройки.
+        PresetRawEditorPage._rebuild_breadcrumb(page)
+        self.assertEqual(breadcrumb.clear_calls, clear_calls_after_build)
+
+        # Симулируем клик по корневой крошке: остаётся только первый элемент.
+        breadcrumb.items = breadcrumb.items[:1]
+        PresetRawEditorPage._rebuild_breadcrumb(page)
+
+        self.assertEqual(breadcrumb.count(), 3)
+        self.assertEqual([key for key, _text in breadcrumb.items], ["root", "list", "raw_preset"])
+
+    def test_breadcrumb_item_click_restores_crumbs_and_navigates(self) -> None:
+        from presets.ui.common.preset_subpage_base import PresetRawEditorPage
+
+        breadcrumb = _FakeBreadcrumb()
+        page = PresetRawEditorPage.__new__(PresetRawEditorPage)
+        page._breadcrumb = breadcrumb
+        page._preset_name = "Мой пресет"
+        page._open_root_callback = Mock()
+        page._open_back_callback = Mock()
+
+        PresetRawEditorPage._rebuild_breadcrumb(page)
+        breadcrumb.items = breadcrumb.items[:1]
+
+        PresetRawEditorPage._on_breadcrumb_item_changed(page, "root")
+
+        self.assertEqual(breadcrumb.count(), 3)
+        page._open_root_callback.assert_called_once()
+        page._open_back_callback.assert_not_called()
 
     def test_status_message_update_skips_runtime_toggle_render(self) -> None:
         from app.state_store import AppUiState

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -49,23 +50,51 @@ class TrayMenuContractTests(unittest.TestCase):
         manager.show_context_menu.assert_called_once_with(anchor_x=None, anchor_y=None)
         manager._schedule_visibility_toggle.assert_not_called()
 
-    def test_round_tray_menu_keeps_fluent_style_and_suppresses_hairline(self) -> None:
+    def test_round_tray_menu_uses_global_hairline_fix(self) -> None:
         import tray
         from qfluentwidgets import Action, RoundMenu
+        from ui.popup_menu_style import install_global_round_menu_hairline_fix
 
         manager = tray.SystemTrayManager.__new__(tray.SystemTrayManager)
-        menu = RoundMenu(parent=None)
+        with patch("ui.popup_menu_style._is_windows_11_or_newer", return_value=True):
+            install_global_round_menu_hairline_fix()
+            menu = RoundMenu(parent=None)
         self.addCleanup(menu.deleteLater)
         menu.addAction(Action("Скрыть в трей", menu))
+        before = menu.styleSheet()
 
-        with patch("ui.popup_menu_style._is_windows_11_or_newer", return_value=True):
-            tray.SystemTrayManager._apply_menu_style(manager, menu)
+        tray.SystemTrayManager._apply_menu_style(manager, menu)
 
+        self.assertEqual(menu.styleSheet(), before)
         self.assertIn("MenuActionListWidget", menu.styleSheet())
         self.assertIn("border-color", menu.styleSheet())
-        self.assertIn("MenuActionListWidget", menu.view.styleSheet())
-        self.assertIn("border-color", menu.view.styleSheet())
-        self.assertNotIn("border-left", menu.view.styleSheet())
+        self.assertIn("zapretgui-round-menu-hairline-begin", menu.styleSheet())
+        self.assertNotIn("border-left", menu.styleSheet())
+
+    def test_native_tray_winapi_calls_have_pointer_safe_ctypes_signatures(self) -> None:
+        source = (Path(__file__).resolve().parents[1] / "src" / "tray.py").read_text(encoding="utf-8")
+
+        required_signatures = [
+            "kernel32.GetModuleHandleW.restype",
+            "user32.RegisterClassExW.argtypes",
+            "user32.RegisterClassExW.restype",
+            "user32.CreateWindowExW.argtypes",
+            "user32.CreateWindowExW.restype",
+            "user32.DestroyWindow.argtypes",
+            "user32.DestroyWindow.restype",
+            "user32.LoadImageW.argtypes",
+            "user32.LoadImageW.restype",
+            "user32.LoadIconW.argtypes",
+            "user32.LoadIconW.restype",
+            "user32.DestroyIcon.argtypes",
+            "user32.DestroyIcon.restype",
+            "shell32.Shell_NotifyIconW.argtypes",
+            "shell32.Shell_NotifyIconW.restype",
+        ]
+
+        missing = [signature for signature in required_signatures if signature not in source]
+
+        self.assertEqual(missing, [])
 
 
 if __name__ == "__main__":

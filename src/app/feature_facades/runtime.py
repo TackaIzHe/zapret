@@ -63,6 +63,8 @@ class RuntimeFeature:
             qt_parent=self.lifecycle.qt_parent,
         )
         self.commands = RuntimeCommandPort(self)
+        # Авто-рестарт после неожиданной смерти процесса идёт через command port.
+        self.events.command_port = self.commands
 
     def is_available(self) -> bool:
         return self.objects.is_available()
@@ -234,11 +236,15 @@ def build_runtime_feature(
     profile_feature,
     orchestra_feature,
 ) -> RuntimeFeature:
+    from winws_runtime.health.post_mortem import resolve_unexpected_exit_message
     from winws_runtime.state import LaunchRuntimeService
 
     return RuntimeFeature(
         qt_parent=qt_parent,
-        runtime_service=LaunchRuntimeService(state.ui),
+        runtime_service=LaunchRuntimeService(
+            state.ui,
+            unexpected_exit_diagnoser=resolve_unexpected_exit_message,
+        ),
         presets_feature=presets_feature,
         profile_feature=profile_feature,
         ui_state=state.ui,

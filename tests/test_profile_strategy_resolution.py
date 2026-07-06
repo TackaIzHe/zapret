@@ -6,7 +6,13 @@ import unittest
 from core.paths import AppPaths
 from profile.match_filters import strategy_catalog_from_match_lines
 from profile.parser import parse_preset_text
-from profile.service import _basic_strategy_entries, _list_type, _normalize_lines, _resolve_strategy, _strategy_identity_lines
+from profile.derived_cache import (
+    basic_strategy_entries,
+    normalize_lines,
+    profile_list_type,
+    resolve_strategy,
+    strategy_identity_lines,
+)
 from profile.strategy_catalog import load_strategy_catalogs
 
 
@@ -72,12 +78,12 @@ class ProfileStrategyResolutionTests(unittest.TestCase):
                     engine="winws2",
                 )
                 profile = preset.profiles[0]
-                entries = _basic_strategy_entries(profile, self.catalogs)
+                entries = basic_strategy_entries(profile, self.catalogs)
 
                 self.assertEqual(strategy_catalog_from_match_lines(tuple(profile.match.all_lines())), "voice")
-                self.assertEqual(_list_type(profile), "voice")
+                self.assertEqual(profile_list_type(profile), "voice")
                 self.assertIn("fake_simple", entries)
-                self.assertEqual(_resolve_strategy(profile, entries), ("fake_simple", "Fake (простой)"))
+                self.assertEqual(resolve_strategy(profile, entries), ("fake_simple", "Fake (простой)"))
 
     def test_tcp_filter_only_profile_uses_tcp_catalog_without_list_file(self) -> None:
         preset = parse_preset_text(
@@ -95,12 +101,12 @@ class ProfileStrategyResolutionTests(unittest.TestCase):
             engine="winws2",
         )
         profile = preset.profiles[0]
-        entries = _basic_strategy_entries(profile, self.catalogs)
+        entries = basic_strategy_entries(profile, self.catalogs)
 
         self.assertEqual(strategy_catalog_from_match_lines(tuple(profile.match.all_lines())), "tcp")
-        self.assertEqual(_list_type(profile), "tcp")
+        self.assertEqual(profile_list_type(profile), "tcp")
         self.assertIn("send_syndata", entries)
-        self.assertEqual(_resolve_strategy(profile, entries), ("send_syndata", "send repeats 2 + syndata (stun)"))
+        self.assertEqual(resolve_strategy(profile, entries), ("send_syndata", "send repeats 2 + syndata (stun)"))
 
     def test_strategy_catalogs_do_not_contain_duplicate_args(self) -> None:
         for engine in ("winws1", "winws2"):
@@ -136,15 +142,15 @@ class ProfileStrategyResolutionTests(unittest.TestCase):
                 continue
             preset = parse_preset_text(path.read_text(encoding="utf-8"), engine="winws2", source_name=path.name)
             for index, profile in enumerate(preset.profiles, start=1):
-                strategy_lines = _strategy_identity_lines(profile, profile.strategy.strategy_lines)
+                strategy_lines = strategy_identity_lines(profile, profile.strategy.strategy_lines)
                 if any("circular:" in line.lower() for line in strategy_lines):
                     continue
                 if not strategy_lines:
                     continue
-                strategy_id, _strategy_name = _resolve_strategy(profile, _basic_strategy_entries(profile, self.catalogs))
+                strategy_id, _strategy_name = resolve_strategy(profile, basic_strategy_entries(profile, self.catalogs))
                 if strategy_id == "custom":
                     catalog = strategy_catalog_from_match_lines(tuple(profile.match.all_lines()))
-                    unresolved.append(f"{path.name}:{index}: {profile.display_name} ({catalog}/{_list_type(profile)})")
+                    unresolved.append(f"{path.name}:{index}: {profile.display_name} ({catalog}/{profile_list_type(profile)})")
 
         self.assertEqual(unresolved, [])
 
@@ -164,7 +170,13 @@ class ProfileStrategyResolutionTests(unittest.TestCase):
         for path in sorted(Path("src/presets/builtin/winws2").glob("*1.9.9*.txt")):
             preset = parse_preset_text(path.read_text(encoding="utf-8"), engine="winws2", source_name=path.name)
             for profile in preset.profiles:
-                for line in _normalize_lines(profile.strategy.strategy_lines):
+                lines = normalize_lines(profile.strategy.strategy_lines)
+                lua_lines = [line for line in lines if line.lower().startswith("--lua-desync=")]
+                if lua_lines and all(line.lower() == "--lua-desync=pass" for line in lua_lines):
+                    # Профили-исключения (pass-through) намеренно сужают no-op
+                    # до tls_client_hello и не обязаны использовать payload=all.
+                    continue
+                for line in lines:
                     if line.lower().startswith("--payload=") and line != "--payload=all":
                         violations.append(f"{path.name}: {profile.display_name}: {line}")
 
@@ -177,7 +189,7 @@ class ProfileStrategyResolutionTests(unittest.TestCase):
             for profile in preset.profiles:
                 violations.extend(
                     f"{path.name}: {profile.display_name}: {line}"
-                    for line in _normalize_lines(profile.strategy.strategy_lines)
+                    for line in normalize_lines(profile.strategy.strategy_lines)
                     if line.startswith("--lua-desync=fake:") and ":payload=" in line
                 )
 
@@ -192,7 +204,7 @@ class ProfileStrategyResolutionTests(unittest.TestCase):
         profile = next(profile for profile in preset.profiles if profile.display_name == "Telegram")
 
         self.assertEqual(
-            _normalize_lines(profile.strategy.strategy_lines),
+            normalize_lines(profile.strategy.strategy_lines),
             (
                 "--payload=all",
                 "--lua-desync=fake:blob=fake_stun_as_tls:tcp_seq=1000:repeats=6",
@@ -211,7 +223,7 @@ class ProfileStrategyResolutionTests(unittest.TestCase):
         profile = next(profile for profile in preset.profiles if profile.display_name == "Голосовые звонки/чаты")
 
         self.assertEqual(
-            _normalize_lines(profile.strategy.strategy_lines),
+            normalize_lines(profile.strategy.strategy_lines),
             (
                 "--payload=all",
                 "--lua-desync=fake:blob=fake_stun:repeats=3",
@@ -228,7 +240,7 @@ class ProfileStrategyResolutionTests(unittest.TestCase):
     def _resolved_strategy_id(self, profile) -> str:
         catalog = strategy_catalog_from_match_lines(tuple(profile.match.all_lines()))
         self.assertIn(catalog, self.catalogs)
-        strategy_id, _strategy_name = _resolve_strategy(profile, _basic_strategy_entries(profile, self.catalogs))
+        strategy_id, _strategy_name = resolve_strategy(profile, basic_strategy_entries(profile, self.catalogs))
         return strategy_id
 
     def _profile_by_name(self, display_name: str):
@@ -236,7 +248,7 @@ class ProfileStrategyResolutionTests(unittest.TestCase):
 
 
 def _ready_strategy_identity(engine: str, lines) -> tuple[str, ...]:
-    normalized = _normalize_lines(lines)
+    normalized = normalize_lines(lines)
     if engine == "winws2":
         return tuple(line for line in normalized if line.lower().startswith("--lua-desync="))
     return normalized
@@ -246,7 +258,7 @@ def _payload_groups_with_lua(lines) -> int:
     payload_groups = 0
     in_payload = False
     has_lua = False
-    for line in _normalize_lines(lines):
+    for line in normalize_lines(lines):
         lowered = line.lower()
         if lowered.startswith("--payload="):
             if in_payload and has_lua:

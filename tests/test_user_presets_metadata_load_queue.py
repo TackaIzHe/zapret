@@ -323,9 +323,6 @@ class UserPresetsMetadataLoadQueueTests(unittest.TestCase):
         }
         service._single_metadata_request_id = 3
         service._cached_presets_metadata = {"Default.txt": dict(metadata)}
-        service.sync_watched_preset_files = Mock(
-            side_effect=AssertionError("duplicate metadata must not resync watcher paths")
-        )
         service.try_apply_single_preset_metadata_update = Mock(
             side_effect=AssertionError("duplicate metadata must not repaint preset row")
         )
@@ -357,7 +354,6 @@ class UserPresetsMetadataLoadQueueTests(unittest.TestCase):
         service._single_metadata_request_id = 3
         service._single_metadata_pending = ["Default.txt"]
         service._cached_presets_metadata = {"Default.txt": {"display_name": "Old"}}
-        service._schedule_watched_preset_files_sync = Mock()
         service.try_apply_single_preset_metadata_update = Mock()
         service.refresh_presets_view_from_cache = Mock()
 
@@ -369,7 +365,6 @@ class UserPresetsMetadataLoadQueueTests(unittest.TestCase):
         )
 
         self.assertEqual(service._cached_presets_metadata, {"Default.txt": {"display_name": "Old"}})
-        service._schedule_watched_preset_files_sync.assert_not_called()
         service.try_apply_single_preset_metadata_update.assert_not_called()
         service.refresh_presets_view_from_cache.assert_not_called()
 
@@ -524,7 +519,7 @@ class UserPresetsMetadataLoadQueueTests(unittest.TestCase):
 
         self.assertEqual(presets_list.set_indexes, [2])
 
-    def test_metadata_loaded_defers_watcher_sync_after_rows_request(self) -> None:
+    def test_metadata_loaded_resets_dir_snapshot_before_rows_request(self) -> None:
         from presets.user_presets_runtime_service import UserPresetsRuntimeAdapter, UserPresetsRuntimeService
 
         page = SimpleNamespace(isVisible=lambda: True)
@@ -542,15 +537,13 @@ class UserPresetsMetadataLoadQueueTests(unittest.TestCase):
         service = UserPresetsRuntimeService()
         service.attach_page(page, adapter)
         service._metadata_load_request_id = 7
-        calls: list[str] = []
-        service.sync_watched_preset_files = Mock(side_effect=lambda *_args, **_kwargs: calls.append("watcher"))
-        service._request_rows_plan_refresh = Mock(side_effect=lambda *_args, **_kwargs: calls.append("rows"))
+        service._user_dir_snapshot = {"Stale.txt": (1, 1)}
+        service._request_rows_plan_refresh = Mock()
 
         service._on_metadata_loaded(7, {"Default.txt": {}}, {}, 0.0, page)
 
-        self.assertEqual(calls, ["rows"])
-        self._app.processEvents()
-        self.assertEqual(calls, ["rows", "watcher"])
+        self.assertIsNone(service._user_dir_snapshot)
+        service._request_rows_plan_refresh.assert_called_once()
 
     def test_metadata_load_result_ignored_when_new_load_is_pending(self) -> None:
         from presets.user_presets_runtime_service import UserPresetsRuntimeAdapter, UserPresetsRuntimeService
@@ -573,14 +566,12 @@ class UserPresetsMetadataLoadQueueTests(unittest.TestCase):
         service._metadata_load_pending_page = page
         service._cached_presets_metadata = {"Old.txt": {}}
         service._cached_folder_state = {"items": {"Old.txt": {}}}
-        service._schedule_watched_preset_files_sync = Mock()
         service._request_rows_plan_refresh = Mock()
 
         service._on_metadata_loaded(7, {"New.txt": {}}, {"items": {"New.txt": {}}}, 1.5, page)
 
         self.assertEqual(service._cached_presets_metadata, {"Old.txt": {}})
         self.assertEqual(service._cached_folder_state, {"items": {"Old.txt": {}}})
-        service._schedule_watched_preset_files_sync.assert_not_called()
         service._request_rows_plan_refresh.assert_not_called()
 
     def test_metadata_load_error_ignored_when_new_load_is_pending(self) -> None:
@@ -974,6 +965,7 @@ class UserPresetsMetadataLoadQueueTests(unittest.TestCase):
         from presets.user_presets_runtime_service import UserPresetsRuntimeAdapter, UserPresetsRuntimeService
 
         model = Mock()
+        model.find_preset_row.return_value = 0
         model.remove_preset.return_value = True
         page = SimpleNamespace(isVisible=lambda: True, _presets_model=model)
         adapter = UserPresetsRuntimeAdapter(
@@ -990,53 +982,20 @@ class UserPresetsMetadataLoadQueueTests(unittest.TestCase):
         service = UserPresetsRuntimeService()
         service.attach_page(page, adapter)
         service._cached_presets_metadata = {"Deleted.txt": {}}
-        service.sync_watched_preset_files = Mock()
 
         self.assertTrue(service.remove_deleted_preset_locally("Deleted.txt", page))
 
         self.assertFalse(hasattr(adapter, "delete_preset_item_meta"))
 
-    def test_watched_preset_files_sync_merges_pending_file_sets(self) -> None:
-        from presets.user_presets_runtime_service import UserPresetsRuntimeService
+    def _make_flush_service(self, *, bulk_reset_running: bool = False):
+        from presets.user_presets_runtime_service import UserPresetsRuntimeAdapter, UserPresetsRuntimeService
 
-        import presets.user_presets_runtime_service as runtime_service
-
-        page = SimpleNamespace()
-        service = UserPresetsRuntimeService()
-        service.sync_watched_preset_files = Mock()
-        single_shot = Mock(side_effect=lambda _delay, _callback: None)
-
-        with patch.object(runtime_service, "QTimer", SimpleNamespace(singleShot=single_shot)):
-            service._schedule_watched_preset_files_sync(page, {"Alpha.txt", "Beta.txt"})
-            service._schedule_watched_preset_files_sync(page, {"Beta.txt", "Gamma.txt"})
-
-        single_shot.assert_called_once()
-
-        single_shot.call_args.args[1]()
-
-        service.sync_watched_preset_files.assert_called_once_with(
-            page,
-            {"Alpha.txt", "Beta.txt", "Gamma.txt"},
-        )
-
-    def test_watched_preset_files_sync_runs_in_small_gui_batches(self) -> None:
-        from pathlib import Path
-
-        from presets.user_presets_runtime_service import (
-            UserPresetsRuntimeAdapter,
-            UserPresetsRuntimeService,
-            UserPresetsWatcherSyncPlan,
-        )
-
-        import presets.user_presets_runtime_service as runtime_service
-
-        page = SimpleNamespace()
-        presets_dir = Path("/tmp/presets")
+        page = SimpleNamespace(isVisible=lambda: True)
         adapter = UserPresetsRuntimeAdapter(
-            bulk_reset_running=lambda: False,
+            bulk_reset_running=lambda: bulk_reset_running,
             read_single_metadata=lambda _name: None,
             selected_source_file_name=lambda: "",
-            presets_dir=lambda: presets_dir,
+            presets_dir=lambda: None,
             cached_metadata=lambda: {},
             load_all_metadata=lambda: {},
             load_folder_state=lambda: {},
@@ -1045,52 +1004,140 @@ class UserPresetsMetadataLoadQueueTests(unittest.TestCase):
         )
         service = UserPresetsRuntimeService()
         service.attach_page(page, adapter)
-        service._file_watcher = _Watcher()
-        service._watched_preset_files_sync_batch_size = 2
-        service._watched_preset_files_sync_plan_request_id = 7
-        callbacks = []
+        service._request_single_metadata_refresh = Mock()
+        service.schedule_presets_reload = Mock()
+        return service, page
 
-        with patch.object(
-            runtime_service,
-            "QTimer",
-            SimpleNamespace(singleShot=lambda _delay, callback: callbacks.append(callback)),
-        ):
-            service._on_watched_preset_files_sync_plan_loaded(
-                7,
-                UserPresetsWatcherSyncPlan(
-                    remove_paths=[],
-                    add_paths=[
-                        str(presets_dir / "Alpha.txt"),
-                        str(presets_dir / "Beta.txt"),
-                        str(presets_dir / "Gamma.txt"),
-                        str(presets_dir / "Omega.txt"),
-                        str(presets_dir / "Zeta.txt"),
-                    ],
-                ),
-                page,
-            )
+    def test_watch_events_flush_applies_point_refresh_for_small_batches(self) -> None:
+        service, page = self._make_flush_service()
+        service._watcher_mode = "native"
+        service._pending_watch_event_names = {"Alpha.txt", "Beta.txt"}
 
-            self.assertEqual(
-                service._file_watcher.add_calls,
-                [[str(presets_dir / "Alpha.txt"), str(presets_dir / "Beta.txt")]],
-            )
-            self.assertEqual(len(callbacks), 1)
+        service._flush_pending_watch_events(page)
 
-            callbacks.pop(0)()
-
-            self.assertEqual(
-                service._file_watcher.add_calls[1],
-                [str(presets_dir / "Gamma.txt"), str(presets_dir / "Omega.txt")],
-            )
-            self.assertEqual(len(callbacks), 1)
-
-            callbacks.pop(0)()
-
+        self.assertEqual(service._pending_watch_event_names, set())
         self.assertEqual(
-            service._file_watcher.add_calls[2],
-            [str(presets_dir / "Zeta.txt")],
+            [call.args[0] for call in service._request_single_metadata_refresh.call_args_list],
+            ["Alpha.txt", "Beta.txt"],
         )
-        self.assertEqual(callbacks, [])
+        service.schedule_presets_reload.assert_not_called()
+
+    def test_watch_events_flush_falls_back_to_full_reload_on_overflow(self) -> None:
+        service, page = self._make_flush_service()
+        service._watcher_mode = "native"
+        service._pending_watch_event_names = {"Alpha.txt"}
+        service._pending_watch_overflow = True
+
+        service._flush_pending_watch_events(page)
+
+        service._request_single_metadata_refresh.assert_not_called()
+        service.schedule_presets_reload.assert_called_once()
+        self.assertTrue(service._ui_dirty)
+
+    def test_watch_events_flush_falls_back_to_full_reload_on_large_batches(self) -> None:
+        service, page = self._make_flush_service()
+        service._watcher_mode = "native"
+        service._pending_watch_event_names = {f"Preset{i}.txt" for i in range(9)}
+
+        service._flush_pending_watch_events(page)
+
+        service._request_single_metadata_refresh.assert_not_called()
+        service.schedule_presets_reload.assert_called_once()
+
+    def test_watch_events_flush_marks_dirty_without_reload_during_bulk_reset(self) -> None:
+        service, page = self._make_flush_service(bulk_reset_running=True)
+        service._watcher_mode = "native"
+        service._pending_watch_event_names = {"Alpha.txt"}
+
+        service._flush_pending_watch_events(page)
+
+        service._request_single_metadata_refresh.assert_not_called()
+        service.schedule_presets_reload.assert_not_called()
+        self.assertTrue(service._ui_dirty)
+
+    def test_watch_events_flush_in_qfsw_mode_requests_dir_diff(self) -> None:
+        service, page = self._make_flush_service()
+        service._watcher_mode = "qfsw"
+        service._request_user_dir_diff = Mock()
+
+        service._flush_pending_watch_events(page)
+
+        service._request_user_dir_diff.assert_called_once()
+
+    def test_native_watch_events_filter_non_preset_names(self) -> None:
+        service, page = self._make_flush_service()
+        service._restart_watch_flush_timer = Mock()
+
+        service._on_native_watch_events(
+            [
+                (3, "Alpha.txt"),
+                (1, "editor.tmp"),
+                (3, "nested\\Beta.txt"),
+                (2, ""),
+            ],
+            page,
+        )
+
+        self.assertEqual(service._pending_watch_event_names, {"Alpha.txt"})
+        service._restart_watch_flush_timer.assert_called_once()
+
+    def test_initial_dir_diff_reconciles_names_with_cached_metadata(self) -> None:
+        service, page = self._make_flush_service()
+        service._apply_watch_event_names = Mock()
+        service._dir_diff_request_id = 5
+        service._cached_presets_metadata = {
+            "Gone.txt": {"is_builtin": False},
+            "Builtin.txt": {"is_builtin": True},
+            "Same.txt": {"is_builtin": False},
+        }
+
+        service._on_user_dir_diff_loaded(
+            5,
+            ({"Same.txt": (1, 1), "New.txt": (2, 2)}, [], True),
+            page,
+        )
+
+        self.assertEqual(service._user_dir_snapshot, {"Same.txt": (1, 1), "New.txt": (2, 2)})
+        service._apply_watch_event_names.assert_called_once()
+        names = service._apply_watch_event_names.call_args.args[0]
+        self.assertEqual(names, {"New.txt", "Gone.txt"})
+
+    def test_dir_diff_worker_reports_added_removed_and_changed_names(self) -> None:
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+
+        from presets.user_presets_runtime_service import UserPresetsDirDiffWorker
+
+        with TemporaryDirectory() as temp_dir:
+            presets_dir = Path(temp_dir)
+            (presets_dir / "Kept.txt").write_text("--new\n", encoding="utf-8")
+            (presets_dir / "Added.txt").write_text("--new\n", encoding="utf-8")
+            (presets_dir / "Changed.txt").write_text("--new\n--extra\n", encoding="utf-8")
+            (presets_dir / "ignored.log").write_text("noise", encoding="utf-8")
+
+            kept_key = (
+                int((presets_dir / "Kept.txt").stat().st_mtime_ns),
+                int((presets_dir / "Kept.txt").stat().st_size),
+            )
+            worker = UserPresetsDirDiffWorker(
+                1,
+                presets_dir=presets_dir,
+                previous_snapshot={
+                    "Kept.txt": kept_key,
+                    "Removed.txt": (10, 10),
+                    "Changed.txt": (1, 1),
+                },
+            )
+            results: list = []
+            worker.loaded.connect(lambda _rid, result: results.append(result))
+
+            worker.run()
+
+        self.assertEqual(len(results), 1)
+        snapshot, changed_names, is_initial = results[0]
+        self.assertFalse(is_initial)
+        self.assertEqual(set(snapshot), {"Kept.txt", "Added.txt", "Changed.txt"})
+        self.assertEqual(changed_names, ["Added.txt", "Changed.txt", "Removed.txt"])
 
 
 if __name__ == "__main__":

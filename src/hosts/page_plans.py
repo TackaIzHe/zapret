@@ -274,55 +274,110 @@ def get_direct_profile_name() -> str | None:
     return None
 
 
-def _normalize_active_domains_map(active_domains_map: dict[str, str]) -> dict[str, str]:
+def _iter_ip_values(raw_ips) -> list[str]:
+    if isinstance(raw_ips, str):
+        values = [raw_ips]
+    elif isinstance(raw_ips, (list, tuple, set, frozenset)):
+        values = list(raw_ips)
+    else:
+        values = [raw_ips]
+    return [str(ip or "").strip() for ip in values if str(ip or "").strip()]
+
+
+def _normalize_active_domains_map(active_domains_map: dict[str, object]) -> dict[str, str]:
     normalized: dict[str, str] = {}
     for domain, ip in (active_domains_map or {}).items():
         domain_key = str(domain or "").strip().casefold()
         if not domain_key or domain_key in normalized:
             continue
-        normalized[domain_key] = str(ip or "").strip()
+        ip_values = _iter_ip_values(ip)
+        if not ip_values:
+            continue
+        normalized[domain_key] = ip_values[0]
     return normalized
+
+
+def _normalize_active_domain_ip_sets(active_domains_map: dict[str, object]) -> dict[str, set[str]]:
+    normalized: dict[str, set[str]] = {}
+    for domain, ips in (active_domains_map or {}).items():
+        domain_key = str(domain or "").strip().casefold()
+        if not domain_key:
+            continue
+        values = normalized.setdefault(domain_key, set())
+        for ip in _iter_ip_values(ips):
+            values.add(ip.casefold())
+    return {domain: ips for domain, ips in normalized.items() if ips}
+
+
+def _rows_to_domain_ip_sets(rows) -> dict[str, set[str]]:
+    domain_ips: dict[str, set[str]] = {}
+    for domain, ip in rows or []:
+        domain_key = str(domain or "").strip().casefold()
+        ip_key = str(ip or "").strip().casefold()
+        if not domain_key or not ip_key:
+            continue
+        domain_ips.setdefault(domain_key, set()).add(ip_key)
+    return domain_ips
+
+
+def _domain_ip_sets_are_active(
+    required_domain_ips: dict[str, set[str]],
+    active_domain_ips: dict[str, set[str]],
+) -> bool:
+    if not required_domain_ips or not active_domain_ips:
+        return False
+    for domain_key, required_ips in required_domain_ips.items():
+        active_ips = active_domain_ips.get(domain_key)
+        if not active_ips or not required_ips <= active_ips:
+            return False
+    return True
+
+
+def _domain_ip_sets_have_allowed_match(
+    domain_ip_candidates: dict[str, set[str]],
+    active_domain_ips: dict[str, set[str]],
+) -> bool:
+    if not domain_ip_candidates or not active_domain_ips:
+        return False
+    for domain_key, allowed_ips in domain_ip_candidates.items():
+        active_ips = active_domain_ips.get(domain_key)
+        if not active_ips or not allowed_ips or active_ips.isdisjoint(allowed_ips):
+            return False
+    return True
 
 
 def infer_profile_from_hosts(
     service_name: str,
     available_profiles: list[str],
-    active_domains_map: dict[str, str],
+    active_domains_map: dict[str, object],
 ) -> str | None:
-    from hosts.proxy_domains import get_service_domain_ip_map
+    from hosts.proxy_domains import get_service_domain_ip_rows
 
-    normalized_active = _normalize_active_domains_map(active_domains_map)
-    if not normalized_active or not available_profiles:
+    active_domain_ips = _normalize_active_domain_ip_sets(active_domains_map)
+    if not active_domain_ips or not available_profiles:
         return None
 
     for profile_name in available_profiles:
         try:
-            domain_map = get_service_domain_ip_map(service_name, profile_name) or {}
+            required_domain_ips = _rows_to_domain_ip_sets(
+                get_service_domain_ip_rows(service_name, profile_name) or []
+            )
         except Exception:
-            domain_map = {}
-        if not domain_map:
+            required_domain_ips = {}
+        if not required_domain_ips:
             continue
 
-        total = len(domain_map)
-        matches = 0
-        for domain, ip in domain_map.items():
-            active_ip = normalized_active.get(str(domain or "").casefold())
-            if active_ip is None:
-                continue
-            if (active_ip or "").strip().casefold() == (ip or "").strip().casefold():
-                matches += 1
-
-        if total and matches == total:
+        if _domain_ip_sets_are_active(required_domain_ips, active_domain_ips):
             return profile_name
 
     return None
 
 
-def infer_direct_toggle_from_hosts(service_name: str, active_domains_map: dict[str, str]) -> bool:
+def infer_direct_toggle_from_hosts(service_name: str, active_domains_map: dict[str, object]) -> bool:
     from hosts.proxy_domains import get_service_domain_ip_rows
 
-    normalized_active = _normalize_active_domains_map(active_domains_map)
-    if not normalized_active:
+    active_domain_ips = _normalize_active_domain_ip_sets(active_domains_map)
+    if not active_domain_ips:
         return False
     direct_profile = get_direct_profile_name()
     if not direct_profile:
@@ -331,22 +386,10 @@ def infer_direct_toggle_from_hosts(service_name: str, active_domains_map: dict[s
         rows = get_service_domain_ip_rows(service_name, direct_profile) or []
     except Exception:
         return False
-    domain_ip_candidates: dict[str, set[str]] = {}
-    for domain, ip in rows:
-        domain_key = str(domain or "").strip().casefold()
-        ip_key = str(ip or "").strip().casefold()
-        if not domain_key or not ip_key:
-            continue
-        domain_ip_candidates.setdefault(domain_key, set()).add(ip_key)
+    domain_ip_candidates = _rows_to_domain_ip_sets(rows)
     if not domain_ip_candidates:
         return False
-    for domain_key, allowed_ips in domain_ip_candidates.items():
-        active_ip = normalized_active.get(domain_key)
-        if active_ip is None:
-            return False
-        if (active_ip or "").strip().casefold() not in allowed_ips:
-            return False
-    return True
+    return _domain_ip_sets_have_allowed_match(domain_ip_candidates, active_domain_ips)
 
 
 def _service_has_active_domains_from_index(
@@ -395,31 +438,59 @@ def _infer_profile_from_index(
 def _infer_direct_toggle_from_index(
     service_name: str,
     direct_profile: str | None,
-    normalized_active: dict[str, str],
+    active_domain_ips: dict[str, set[str]],
     profile_domain_ip_candidates_by_service: dict[str, dict[str, dict[str, list[str]]]],
 ) -> bool:
-    if not normalized_active or not direct_profile:
+    if not active_domain_ips or not direct_profile:
         return False
     profile_candidates = profile_domain_ip_candidates_by_service.get(service_name, {}) or {}
     domain_ip_candidates = profile_candidates.get(direct_profile, {}) or {}
     if not domain_ip_candidates:
         return False
 
-    for domain_key, allowed_ips in domain_ip_candidates.items():
-        active_ip = normalized_active.get(str(domain_key or "").casefold())
-        if active_ip is None:
-            return False
-        allowed = {
+    required = {
+        str(domain_key or "").strip().casefold(): {
             str(ip or "").strip().casefold()
             for ip in (allowed_ips or [])
             if str(ip or "").strip()
         }
-        if (active_ip or "").strip().casefold() not in allowed:
-            return False
-    return True
+        for domain_key, allowed_ips in domain_ip_candidates.items()
+        if str(domain_key or "").strip()
+    }
+    required = {domain_key: ips for domain_key, ips in required.items() if ips}
+    return _domain_ip_sets_have_allowed_match(required, active_domain_ips)
 
 
-def service_has_active_domains(service_name: str, active_domains_map: dict[str, str]) -> bool:
+def _infer_profile_from_ip_candidates_index(
+    service_name: str,
+    available_profiles: list[str],
+    active_domain_ips: dict[str, set[str]],
+    profile_domain_ip_candidates_by_service: dict[str, dict[str, dict[str, list[str]]]],
+) -> str | None:
+    if not active_domain_ips or not available_profiles:
+        return None
+
+    profile_candidates = profile_domain_ip_candidates_by_service.get(service_name, {}) or {}
+    for profile_name in available_profiles:
+        domain_ip_candidates = profile_candidates.get(profile_name, {}) or {}
+        if not domain_ip_candidates:
+            continue
+        required = {
+            str(domain_key or "").strip().casefold(): {
+                str(ip or "").strip().casefold()
+                for ip in (allowed_ips or [])
+                if str(ip or "").strip()
+            }
+            for domain_key, allowed_ips in domain_ip_candidates.items()
+            if str(domain_key or "").strip()
+        }
+        required = {domain_key: ips for domain_key, ips in required.items() if ips}
+        if _domain_ip_sets_are_active(required, active_domain_ips):
+            return profile_name
+    return None
+
+
+def service_has_active_domains(service_name: str, active_domains_map: dict[str, object]) -> bool:
     from hosts.proxy_domains import get_service_domain_names
 
     normalized_active = _normalize_active_domains_map(active_domains_map)
@@ -437,7 +508,7 @@ def service_has_active_domains(service_name: str, active_domains_map: dict[str, 
 def build_selection_sync_plan(
     *,
     service_names: list[str],
-    active_domains_map: dict[str, str],
+    active_domains_map: dict[str, object],
     available_profiles_by_service: dict[str, list[str]] | None = None,
     service_has_proxy_by_service: dict[str, bool] | None = None,
     direct_profile: object = _MISSING,
@@ -462,6 +533,7 @@ def build_selection_sync_plan(
         else None
     )
     normalized_active = _normalize_active_domains_map(active_domains_map)
+    active_domain_ips = _normalize_active_domain_ip_sets(active_domains_map)
     entries: dict[str, HostsSelectionSyncEntry] = {}
     new_selection: dict[str, str] = {}
 
@@ -491,7 +563,7 @@ def build_selection_sync_plan(
                 enabled = _infer_direct_toggle_from_index(
                     service_name,
                     direct_profile,
-                    normalized_active,
+                    active_domain_ips,
                     profile_domain_ip_candidates_by_service,
                 )
             else:
@@ -502,7 +574,14 @@ def build_selection_sync_plan(
                 selected_profile = direct_profile
                 new_selection[service_name] = direct_profile
         else:
-            if profile_domain_maps_by_service is not None:
+            if profile_domain_ip_candidates_by_service is not None:
+                inferred = _infer_profile_from_ip_candidates_index(
+                    service_name,
+                    available,
+                    active_domain_ips,
+                    profile_domain_ip_candidates_by_service,
+                )
+            elif profile_domain_maps_by_service is not None:
                 inferred = _infer_profile_from_index(
                     service_name,
                     available,
@@ -548,7 +627,7 @@ def is_ai_service(name: str) -> bool:
 def build_services_catalog_plan(
     *,
     current_selection: dict[str, str],
-    active_domains_map: dict[str, str],
+    active_domains_map: dict[str, object],
     direct_title: str,
     ai_title: str,
     other_title: str,

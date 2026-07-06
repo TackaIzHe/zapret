@@ -67,6 +67,22 @@ class WindowNotificationActionsContractTests(unittest.TestCase):
         self.assertEqual(len(payloads), 1)
         self.assertGreaterEqual(int(payloads[0]["dedupe_window_ms"]), 15000)
 
+    def test_global_error_notifications_skip_handled_preset_launch_lines(self) -> None:
+        center = WindowNotificationCenter.__new__(WindowNotificationCenter)
+        payloads = []
+        center.notify_threadsafe = lambda payload: payloads.append(payload)
+
+        handled_messages = [
+            "[ERROR] Preset содержит ссылки на отсутствующие файлы (2), например: --hostlist=lists/example.txt",
+            "[ERROR] - --hostlist=lists/example.txt  (ожидается: C:\\Zapret\\Dev\\lists\\example.txt)",
+            "[❌ ERROR] Ошибка preset mode switch, поколение 3 (zapret2_mode): Preset содержит ссылки",
+            "[❌ ERROR] Ошибка асинхронного запуска DPI: Preset содержит ссылки",
+        ]
+        for message in handled_messages:
+            WindowNotificationCenter.enqueue_global_error_notification(center, message)
+
+        self.assertEqual(payloads, [])
+
     def test_infobar_action_button_has_screen_reader_text(self) -> None:
         import qfluentwidgets
 
@@ -164,66 +180,18 @@ class WindowNotificationActionsContractTests(unittest.TestCase):
         self.assertEqual(bar.property("screenReaderStateText"), expected)
         self.assertIn("уведомление", bar.accessibleDescription().lower())
 
-    def test_infobar_notification_wraps_long_content_inside_window(self) -> None:
-        import qfluentwidgets
+    def test_infobar_notification_leaves_layout_to_adaptive_patch(self) -> None:
+        # Регрессия: принудительные setMaximumWidth/setWordWrap ужимали и
+        # обрезали текст InfoBar. Компоновкой управляет только глобальный
+        # патч ui.infobar_layout, центр уведомлений её не трогает.
+        center_source = inspect.getsource(WindowNotificationCenter)
+        show_source = inspect.getsource(WindowNotificationCenter._show_infobar_notification)
 
-        class _FakeLabel:
-            def __init__(self) -> None:
-                self.word_wrap = False
-                self.maximum_width = 0
-
-            def setWordWrap(self, value: bool) -> None:  # noqa: N802
-                self.word_wrap = bool(value)
-
-            def setMaximumWidth(self, value: int) -> None:  # noqa: N802
-                self.maximum_width = int(value)
-
-        class _FakeBar:
-            def __init__(self) -> None:
-                self.contentLabel = _FakeLabel()
-                self.titleLabel = _FakeLabel()
-                self.maximum_width = 0
-                self.minimum_width = 0
-                self.adjusted = False
-
-            def setMaximumWidth(self, value: int) -> None:  # noqa: N802
-                self.maximum_width = int(value)
-
-            def setMinimumWidth(self, value: int) -> None:  # noqa: N802
-                self.minimum_width = int(value)
-
-            def adjustSize(self) -> None:  # noqa: N802
-                self.adjusted = True
-
-            def addWidget(self, _widget) -> None:  # noqa: N802
-                return None
-
-        bar = _FakeBar()
-        center = WindowNotificationCenter.__new__(WindowNotificationCenter)
-        center._parent = SimpleNamespace(width=lambda: 1200)
-        center._action_handler = SimpleNamespace(build_action_callback=lambda _action, _bar: None)
-
-        with (
-            patch.object(qfluentwidgets.InfoBar, "warning", return_value=bar),
-            patch.object(qfluentwidgets.InfoBar, "info", return_value=bar),
-            patch.object(qfluentwidgets.InfoBar, "success", return_value=bar),
-            patch.object(qfluentwidgets.InfoBar, "error", return_value=bar),
-        ):
-            WindowNotificationCenter._show_infobar_notification(
-                center,
-                {
-                    "level": "error",
-                    "title": "Ошибка",
-                    "content": "Очень длинное уведомление. " * 12,
-                },
-            )
-
-        self.assertLessEqual(bar.maximum_width, 760)
-        self.assertGreaterEqual(bar.minimum_width, 420)
-        self.assertTrue(bar.contentLabel.word_wrap)
-        self.assertTrue(bar.titleLabel.word_wrap)
-        self.assertLessEqual(bar.contentLabel.maximum_width, bar.maximum_width)
-        self.assertTrue(bar.adjusted)
+        self.assertNotIn("_apply_infobar_layout_limits", center_source)
+        self.assertNotIn("setWordWrap", center_source)
+        self.assertNotIn("setMaximumWidth", center_source)
+        self.assertNotIn("setMinimumWidth", center_source)
+        self.assertNotIn("orient=", show_source)
 
     def test_notification_open_url_pending_restarts_after_event_loop_turn(self) -> None:
         import ui.window_notification_center as notification_center

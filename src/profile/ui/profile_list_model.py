@@ -9,11 +9,13 @@ from PyQt6.QtCore import QAbstractListModel, QMimeData, QModelIndex, Qt
 from profile.display_items import ProfileDisplayItem, build_profile_display_items, profile_display_sort_key
 from profile.list_view_state import (
     ProfileListViewState,
+    apply_profile_folder_state_to_items as _apply_profile_folder_state_to_items,
     build_profile_list_view_state,
     build_profile_rows_from as _build_profile_rows_from,
     group_name_for_key as _group_name_for_key,
     grouped_items as _grouped_items,
     initial_group_expanded as _initial_group_expanded,
+    moved_profile_display_items as _moved_profile_display_items,
     normalized_profile_types as _normalized_profile_types,
     normalized_search_query as _normalized_search_query,
     profile_matches_filter as _profile_matches_filter,
@@ -513,60 +515,22 @@ class ProfileListModel(QAbstractListModel):
         if source is None:
             return False
 
-        destination = self._profile_items.get(str(destination_profile_key or "").strip())
-        if kind in {"profile", "profile_after"}:
-            if destination is None or destination.key == source.key:
-                return False
-            target_group = str(destination_group_key or destination.group or source.group or "common")
-        elif kind == "folder":
-            target_group = str(destination_group_key or "").strip()
-        elif kind == "end":
-            target_group = str(destination_group_key or source.group or "common").strip()
-        else:
+        # Единственная реализация move-семантики — общий планировщик
+        # (plan_view_move); модель только применяет его результат.
+        next_items = _moved_profile_display_items(
+            self._all_items,
+            source_key,
+            kind,
+            str(destination_profile_key or "").strip(),
+            str(destination_group_key or "").strip(),
+            folder_state=self.__dict__.get("_folder_state"),
+        )
+        if next_items is None:
             return False
-        if not target_group:
-            return False
-
-        group_name = _group_name_for_key(target_group, self._all_items)
-        source_for_target = replace(source, group=target_group, group_name=group_name, order_is_manual=True)
-        target_items = [
-            item
-            for item in sorted(self._all_items, key=profile_display_sort_key)
-            if item.key != source_key and str(item.group or "common") == target_group
-        ]
-
-        if kind == "profile":
-            insert_index = next((index for index, item in enumerate(target_items) if item.key == destination.key), -1)
-            if insert_index < 0:
-                return False
-            target_items.insert(insert_index, source_for_target)
-        elif kind == "profile_after":
-            insert_index = next((index for index, item in enumerate(target_items) if item.key == destination.key), -1)
-            if insert_index < 0:
-                return False
-            target_items.insert(insert_index + 1, source_for_target)
-        else:
-            target_items.append(source_for_target)
-
-        target_order = {item.key: index for index, item in enumerate(target_items)}
-        next_items: list[ProfileDisplayItem] = []
-        for item in self._all_items:
-            if item.key == source_key and item.key not in target_order:
-                continue
-            if item.key in target_order:
-                next_items.append(
-                    replace(
-                        source_for_target if item.key == source_key else item,
-                        group=target_group,
-                        group_name=group_name,
-                        order=target_order[item.key],
-                        order_is_manual=True,
-                    )
-                )
-            else:
-                next_items.append(item)
 
         next_items_tuple = tuple(next_items)
+        moved_source = next((item for item in next_items_tuple if item.key == source_key), None)
+        target_group = str(getattr(moved_source, "group", "") or "common")
         next_group_expanded = dict(self._group_expanded)
         next_group_expanded.setdefault(target_group, True)
         next_rows = self._build_rows_from(next_items_tuple, next_group_expanded)
@@ -600,26 +564,11 @@ class ProfileListModel(QAbstractListModel):
     def apply_folder_state(self, folder_state: dict[str, Any]) -> bool:
         if not isinstance(folder_state, dict):
             return False
+        self.__dict__["_folder_state"] = dict(folder_state)
         if not self._all_items:
             return False
 
-        from profile.folders import profile_folder_collapsed, profile_folder_for_profile
-
-        next_items: list[ProfileDisplayItem] = []
-        for item in self._all_items:
-            folder_key, folder_name, order = profile_folder_for_profile(item, folder_state)
-            next_items.append(
-                replace(
-                    item,
-                    group=folder_key,
-                    group_name=folder_name,
-                    order=int(order) if order is not None else int(item.order or 0),
-                    order_is_manual=order is not None,
-                    group_collapsed=profile_folder_collapsed(folder_key, folder_state),
-                )
-            )
-
-        next_items_tuple = tuple(sorted(next_items, key=profile_display_sort_key))
+        next_items_tuple = _apply_profile_folder_state_to_items(self._all_items, folder_state)
         next_group_expanded = _initial_group_expanded(next_items_tuple)
         next_rows = self._build_rows_from(next_items_tuple, next_group_expanded)
         next_profile_items = {item.key: item for item in next_items_tuple}

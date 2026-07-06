@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 from config.config import LOGS_FOLDER, MAX_DEBUG_LOG_FILES, MAX_LOG_FILES
 from log.log import LOG_FILE, cleanup_old_logs, global_logger, log
-from ui.performance_metrics import log_ui_timing_since
+from app.performance_metrics import log_ui_timing_since
 
 from support_request_bundle import prepare_support_request
 

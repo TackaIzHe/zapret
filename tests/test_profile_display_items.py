@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import unittest
 
 from profile.display_items import build_profile_display_items
+from profile.list_view_state import apply_profile_folder_state_to_items
 
 
 def _item(
@@ -178,7 +179,7 @@ class ProfileDisplayItemsTests(unittest.TestCase):
         self.assertEqual(by_key["catalog-discord"].group, "youtube")
 
     def test_default_order_puts_tcp_profiles_before_udp_profiles(self) -> None:
-        rows = build_profile_display_items((
+        rows = apply_profile_folder_state_to_items(build_profile_display_items((
             _item(
                 "udp-youtube",
                 name="YouTube UDP",
@@ -193,12 +194,12 @@ class ProfileDisplayItemsTests(unittest.TestCase):
                 lines=("--filter-tcp=80,443", "--hostlist=lists/youtube.txt"),
                 order=1,
             ),
-        ))
+        )), {})
 
         self.assertEqual([row.key for row in rows], ["tcp-youtube", "udp-youtube"])
 
     def test_default_order_puts_l7_profiles_after_udp_profiles(self) -> None:
-        rows = build_profile_display_items((
+        rows = apply_profile_folder_state_to_items(build_profile_display_items((
             _item(
                 "l7-discord",
                 name="Discord L7",
@@ -220,7 +221,7 @@ class ProfileDisplayItemsTests(unittest.TestCase):
                 lines=("--filter-tcp=443", "--hostlist=lists/discord.txt"),
                 order=2,
             ),
-        ))
+        )), {})
 
         self.assertEqual([row.key for row in rows], ["tcp-discord", "udp-discord", "l7-discord"])
 

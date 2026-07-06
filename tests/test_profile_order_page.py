@@ -1293,6 +1293,24 @@ class ProfileOrderPageTests(unittest.TestCase):
             "Показывает путь до текущей страницы. Выберите пункт, чтобы вернуться назад.",
         )
 
+    def test_order_page_breadcrumb_click_restores_crumbs_before_navigation(self) -> None:
+        # Клик по крошке удаляет из BreadcrumbBar элементы правее выбранного —
+        # обработчик обязан перестроить полный путь до навигации.
+        from profile.ui.profile_order_page import ProfileOrderPageBase
+
+        for key, navigate_attr in (("control", "_open_root"), ("profiles", "_open_profiles")):
+            with self.subTest(key=key):
+                page = SimpleNamespace(
+                    _rebuild_breadcrumb=Mock(),
+                    _open_root=Mock(),
+                    _open_profiles=Mock(),
+                )
+
+                ProfileOrderPageBase._on_breadcrumb_item_changed(page, key)
+
+                page._rebuild_breadcrumb.assert_called_once()
+                getattr(page, navigate_attr).assert_called_once()
+
     def test_order_list_does_not_expose_context_or_folder_actions(self) -> None:
         from profile.ui.profile_order_list import ProfileOrderList
 

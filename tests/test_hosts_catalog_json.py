@@ -282,6 +282,60 @@ class HostsCatalogJsonTests(unittest.TestCase):
                     {"chat.openai.com": "2.23.88.118"},
                 )
 
+    def test_services_catalog_plan_matches_multi_ip_domain_when_all_ips_are_active(self) -> None:
+        from hosts import page_plans
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            catalog_path = self._write_catalog(root)
+            data = json.loads(catalog_path.read_text(encoding="utf-8"))
+            data["services"][0]["domains"][0]["ips"]["xbox_dns"] = ["2.23.88.118", "2.23.88.119"]
+            catalog_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+            fake_module = root / "public_zapretgui" / "src" / "hosts" / "proxy_domains.py"
+            fake_module.parent.mkdir(parents=True, exist_ok=True)
+            fake_module.write_text("", encoding="utf-8")
+
+            with patch.object(self.proxy_domains, "__file__", str(fake_module)):
+                self.proxy_domains.invalidate_hosts_catalog_cache()
+
+                plan = page_plans.build_services_catalog_plan(
+                    current_selection={},
+                    active_domains_map={"chat.openai.com": ["2.23.88.118", "2.23.88.119"]},
+                    direct_title="Direct",
+                    ai_title="AI",
+                    other_title="Other",
+                )
+
+        self.assertEqual(plan.new_selection.get("ChatGPT"), "xbox_dns")
+        rows = [row for group in plan.groups for row in group.rows if row.service_name == "ChatGPT"]
+        self.assertEqual(rows[0].selected_profile, "xbox_dns")
+
+    def test_services_catalog_plan_does_not_match_multi_ip_domain_when_ip_is_missing(self) -> None:
+        from hosts import page_plans
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            catalog_path = self._write_catalog(root)
+            data = json.loads(catalog_path.read_text(encoding="utf-8"))
+            data["services"][0]["domains"][0]["ips"]["xbox_dns"] = ["2.23.88.118", "2.23.88.119"]
+            catalog_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+            fake_module = root / "public_zapretgui" / "src" / "hosts" / "proxy_domains.py"
+            fake_module.parent.mkdir(parents=True, exist_ok=True)
+            fake_module.write_text("", encoding="utf-8")
+
+            with patch.object(self.proxy_domains, "__file__", str(fake_module)):
+                self.proxy_domains.invalidate_hosts_catalog_cache()
+
+                plan = page_plans.build_services_catalog_plan(
+                    current_selection={},
+                    active_domains_map={"chat.openai.com": ["2.23.88.118"]},
+                    direct_title="Direct",
+                    ai_title="AI",
+                    other_title="Other",
+                )
+
+        self.assertNotIn("ChatGPT", plan.new_selection)
+
     def test_services_catalog_plan_matches_dns_domains_case_insensitively(self) -> None:
         from hosts import page_plans
 
@@ -820,7 +874,7 @@ class HostsCatalogJsonTests(unittest.TestCase):
                     second = self.proxy_domains.get_services_profile_index()
 
         self.assertIs(first, second)
-        self.assertEqual(get_path_sig.call_count, 1)
+        self.assertEqual(get_path_sig.call_count, 0)
 
     def test_split_catalog_signature_tracks_same_size_content_change(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -835,6 +889,33 @@ class HostsCatalogJsonTests(unittest.TestCase):
             os.utime(item, ns=(int(first_stat.st_atime_ns), int(first_stat.st_mtime_ns)))
 
             second_sig = self.proxy_domains._get_path_sig(root)
+
+        self.assertNotEqual(first_sig, second_sig)
+
+    def test_legacy_catalog_signature_ignores_timestamp_only_touch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            item = Path(tmp) / "hosts_catalog.json"
+            item.write_text('{"a":1}\n', encoding="utf-8")
+            first_sig = self.proxy_domains._get_path_sig(item)
+
+            stat = item.stat()
+            os.utime(item, ns=(int(stat.st_atime_ns), int(stat.st_mtime_ns + 10_000_000)))
+
+            second_sig = self.proxy_domains._get_path_sig(item)
+
+        self.assertEqual(first_sig, second_sig)
+
+    def test_legacy_catalog_signature_tracks_same_size_content_change(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            item = Path(tmp) / "hosts_catalog.json"
+            item.write_text('{"a":1}\n', encoding="utf-8")
+            first_stat = item.stat()
+            first_sig = self.proxy_domains._get_path_sig(item)
+
+            item.write_text('{"a":2}\n', encoding="utf-8")
+            os.utime(item, ns=(int(first_stat.st_atime_ns), int(first_stat.st_mtime_ns)))
+
+            second_sig = self.proxy_domains._get_path_sig(item)
 
         self.assertNotEqual(first_sig, second_sig)
 
@@ -891,6 +972,27 @@ class HostsCatalogJsonTests(unittest.TestCase):
 
         read_hosts.assert_not_called()
         write_hosts.assert_not_called()
+
+    def test_hosts_bootstrap_signature_has_no_domain_payload(self) -> None:
+        from hosts import hosts as hosts_module
+
+        self.assertEqual(hosts_module._get_hosts_bootstrap_signature(), "v3")
+
+    def test_hosts_bootstrap_does_not_write_when_github_cleanup_is_disabled(self) -> None:
+        from hosts import hosts as hosts_module
+
+        with (
+            patch.object(hosts_module, "safe_read_hosts_file", return_value="127.0.0.1 localhost\n") as read_hosts,
+            patch.object(hosts_module, "safe_write_hosts_file", return_value=True) as write_hosts,
+            patch("settings.store.get_hosts_bootstrap_signature", return_value="old"),
+            patch("settings.store.set_hosts_bootstrap_signature", return_value=True) as set_signature,
+            patch("settings.store.get_remove_github_api", return_value=False),
+        ):
+            hosts_module.HostsManager().apply_hosts_bootstrap_if_needed()
+
+        read_hosts.assert_called_once()
+        write_hosts.assert_not_called()
+        set_signature.assert_called_once_with("v3")
 
     def test_execute_hosts_operation_runs_bootstrap_only_for_explicit_operation(self) -> None:
         from hosts import commands as hosts_commands
@@ -1227,6 +1329,49 @@ class HostsCatalogJsonTests(unittest.TestCase):
         manager = hosts_module.HostsManager()
         with patch.object(hosts_module, "safe_read_hosts_file", return_value=content):
             self.assertEqual(manager.get_active_domains_map(), {"chatgpt.com": "2.2.2.2"})
+
+    def test_active_domain_ip_map_keeps_all_managed_domain_ips(self) -> None:
+        from hosts import hosts as hosts_module
+
+        content = "\n".join(
+            [
+                "# >>> zapretgui:hosts managed begin >>>",
+                "# Generated by ZapretGUI. Do not edit this block manually.",
+                "2.2.2.2 ChatGPT.com",
+                "3.3.3.3 chatgpt.com",
+                "# <<< zapretgui:hosts managed end <<<",
+                "",
+            ]
+        )
+        manager = hosts_module.HostsManager()
+        with patch.object(hosts_module, "safe_read_hosts_file", return_value=content):
+            self.assertEqual(
+                manager.get_active_domain_ip_map(),
+                {"chatgpt.com": ["2.2.2.2", "3.3.3.3"]},
+            )
+
+    def test_services_catalog_command_uses_full_active_domain_ip_map(self) -> None:
+        from hosts import commands as hosts_commands
+
+        class FakeHostsManager:
+            def get_active_domain_ip_map(self) -> dict[str, list[str]]:
+                return {"chatgpt.com": ["2.2.2.2", "3.3.3.3"]}
+
+            def get_active_domains_map(self) -> dict[str, str]:
+                raise AssertionError("нельзя терять дополнительные IP одного домена")
+
+        with patch("hosts.page_plans.build_services_catalog_plan") as build_plan:
+            build_plan.side_effect = lambda **kwargs: kwargs["active_domains_map"]
+
+            result = hosts_commands.build_services_catalog_plan(
+                hosts_runtime=FakeHostsManager(),
+                current_selection={},
+                direct_title="Direct",
+                ai_title="AI",
+                other_title="Other",
+            )
+
+        self.assertEqual(result, {"chatgpt.com": ["2.2.2.2", "3.3.3.3"]})
 
     def test_clear_hosts_file_removes_only_zapretgui_managed_block(self) -> None:
         from hosts import hosts as hosts_module

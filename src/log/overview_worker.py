@@ -4,7 +4,7 @@ import time
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
-from ui.performance_metrics import log_ui_timing_since
+from app.performance_metrics import log_ui_timing_since
 
 
 class LogsOverviewWorker(QObject):

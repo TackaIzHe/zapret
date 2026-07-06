@@ -358,6 +358,18 @@ def build_telegram_proxy_feature() -> TelegramProxyFeature:
 
         return telegram_proxy_public
 
+    def _copy_text_via_qt(*args, **kwargs):
+        from PyQt6.QtGui import QGuiApplication
+
+        clipboard = QGuiApplication.clipboard()
+
+        def _write_clipboard(text: str) -> None:
+            if clipboard is None:
+                raise RuntimeError("clipboard unavailable")
+            clipboard.setText(text)
+
+        return _public().copy_text(*args, clipboard_writer=_write_clipboard, **kwargs)
+
     return TelegramProxyFeature(
         start_proxy_if_enabled_async=lambda *args, **kwargs: _public().start_proxy_if_enabled_async(*args, **kwargs),
         get_proxy_manager=lambda *args, **kwargs: _commands().get_proxy_manager(*args, **kwargs),
@@ -377,7 +389,7 @@ def build_telegram_proxy_feature() -> TelegramProxyFeature:
         build_diagnostics_start_plan=lambda *args, **kwargs: _public().build_diagnostics_start_plan(*args, **kwargs),
         build_diagnostics_poll_plan=lambda *args, **kwargs: _public().build_diagnostics_poll_plan(*args, **kwargs),
         build_diagnostics_finish_plan=lambda *args, **kwargs: _public().build_diagnostics_finish_plan(*args, **kwargs),
-        copy_text=lambda *args, **kwargs: _public().copy_text(*args, **kwargs),
+        copy_text=lambda *args, **kwargs: _copy_text_via_qt(*args, **kwargs),
         open_log_file=lambda *args, **kwargs: _public().open_log_file(*args, **kwargs),
         open_external_link=lambda *args, **kwargs: _public().open_external_link(*args, **kwargs),
         ensure_telegram_hosts=lambda *args, **kwargs: _public().ensure_telegram_hosts(*args, **kwargs),

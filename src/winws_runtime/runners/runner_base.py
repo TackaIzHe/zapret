@@ -12,6 +12,7 @@ from log.log import log
 from .args_filters import apply_all_filters
 from .constants import SW_HIDE, CREATE_NO_WINDOW, STARTF_USESHOWWINDOW
 from .preset_runner_support import launch_args_from_preset_text, wait_for_process_exit
+from .spawn_failure import classify_spawn_failure
 from winws_runtime.health.process_health_check import (
     check_process_health, get_last_crash_info, check_common_crash_causes,
     diagnose_startup_error, diagnose_winws_exit, execute_windivert_auto_fix,
@@ -63,6 +64,7 @@ class StrategyRunnerBase(ABC):
         self._runner_failure_callback = None
         self._launch_error_callback = None
         self._active_preset_content_changed_callback = None
+        self._unexpected_process_exit_callback = None
 
         # Verify exe exists
         if not os.path.exists(self.winws_exe):
@@ -86,11 +88,13 @@ class StrategyRunnerBase(ABC):
         runner_failure=None,
         launch_error=None,
         active_preset_content_changed=None,
+        unexpected_process_exit=None,
     ) -> None:
         self._transition_in_progress_callback = transition_in_progress
         self._runner_failure_callback = runner_failure
         self._launch_error_callback = launch_error
         self._active_preset_content_changed_callback = active_preset_content_changed
+        self._unexpected_process_exit_callback = unexpected_process_exit
 
     def launch_transition_in_progress(self, launch_method: str) -> bool:
         callback = self._transition_in_progress_callback
@@ -128,6 +132,56 @@ class StrategyRunnerBase(ABC):
         except Exception:
             return
 
+    def notify_unexpected_process_exit(self) -> None:
+        callback = self._unexpected_process_exit_callback
+        if not callable(callback):
+            return
+        try:
+            callback()
+        except Exception:
+            return
+
+    def _start_process_exit_watcher(self, process) -> None:
+        """Instant exit detection for OUR spawned process.
+
+        A daemon thread parked in `process.wait()` (WaitForSingleObject under
+        the hood: zero CPU) fires the moment the process dies — no waiting for
+        the 2s PID poll. The poll monitor stays as the fallback and as the only
+        watcher for processes we did not spawn.
+        """
+        import threading
+
+        def _watch() -> None:
+            try:
+                process.wait()
+            except Exception:
+                return
+            self._on_watched_process_exit(process)
+
+        threading.Thread(target=_watch, name="winws-exit-watcher", daemon=True).start()
+
+    def _on_watched_process_exit(self, process) -> None:
+        # Identity first (lock-free): fast switch replaces running_process
+        # before stopping the old one; stop() clears it after termination.
+        if process is not self.running_process:
+            return
+        try:
+            snapshot = self.get_runner_state_snapshot()
+        except Exception:
+            snapshot = None
+        state_value = str(getattr(getattr(snapshot, "state", None), "value", "") or "")
+        if state_value in ("stopping", "idle"):
+            return
+        try:
+            exit_code = process.poll()
+        except Exception:
+            exit_code = None
+        log(
+            f"Watched winws process exited unexpectedly (code: {exit_code}); notifying runtime",
+            "WARNING",
+        )
+        self.notify_unexpected_process_exit()
+
     @abstractmethod
     def start_from_preset_file(self, preset_path: str, strategy_name: str = "Preset") -> bool:
         """
@@ -158,6 +212,48 @@ class StrategyRunnerBase(ABC):
         runner должен выйти до запуска нового процесса.
         """
         pass
+
+    def read_post_mortem_output(self) -> str:
+        """Process output available after an unexpected death; "" when the runner keeps none."""
+        return ""
+
+    def build_post_mortem_snapshot(self) -> dict | None:
+        """Exit facts for a tracked process that died unexpectedly.
+
+        Returns None when there is nothing to diagnose: no tracked Popen
+        (e.g. an adopted external process) or the process is still alive.
+        """
+        process = self.running_process
+        if process is None:
+            return None
+        try:
+            exit_code = process.poll()
+        except Exception:
+            return None
+        if exit_code is None:
+            return None
+        return {
+            "exit_code": int(exit_code),
+            "output": self.read_post_mortem_output(),
+            "strategy_name": str(self.current_launch_label or ""),
+        }
+
+    def _publish_final_launch_failure(self, *, launch_method: str, fallback_message: str) -> None:
+        """Single user-facing publication point for a failed launch operation.
+
+        Individual spawn attempts and retries stay quiet (WARNING logs only);
+        this is called exactly once, after the whole operation — including all
+        retries — has failed. The ERROR log line doubles as the UI toast via
+        the global error notifier.
+        """
+        message = str(getattr(self, "last_error", "") or "").strip() or str(fallback_message or "").strip()
+        if not message:
+            message = "Не удалось запустить DPI"
+        self.last_error = message
+        log(message, "ERROR")
+        self.notify_launch_error(message)
+        details = str(getattr(self, "_last_spawn_stderr", "") or "").strip()
+        self.publish_runner_failure(launch_method=launch_method, error=details or message)
 
     def _create_startup_info(self):
         """Creates STARTUPINFO for hidden process launch"""
@@ -280,17 +376,7 @@ class StrategyRunnerBase(ABC):
         driver blocked (1275), or Secure Boot (577) — those are not fixable
         by cleanup/retry.
         """
-        # Exit code 9 = ERROR_INVALID_BLOCK — stale WinDivert state
-        if exit_code == 9:
-            return True
-
-        stderr_lower = (stderr or "").lower()
-        conflict_signatures = [
-            "guid or luid already exists",
-            "object with that guid",
-            "already running with the same filter",
-        ]
-        return any(sig in stderr_lower for sig in conflict_signatures)
+        return classify_spawn_failure(exit_code, stderr).is_conflict
 
     def _is_windivert_system_error(self, stderr: str, exit_code: int) -> bool:
         """Checks if error is a non-retryable WinDivert system error.
@@ -298,20 +384,7 @@ class StrategyRunnerBase(ABC):
         These errors require user action (Secure Boot, AV, adapter, etc.)
         and should NOT be retried.
         """
-        non_retryable_codes = {577, 1058, 1060, 1068, 1275, 654}
-        if exit_code in non_retryable_codes:
-            return True
-
-        stderr_lower = (stderr or "").lower()
-        system_signatures = [
-            "the service cannot be started",
-            "service is disabled",
-            "invalid image hash",
-            "driver blocked",
-            "disable secure boot",
-            "driver failed prior unload",
-        ]
-        return any(sig in stderr_lower for sig in system_signatures)
+        return classify_spawn_failure(exit_code, stderr).is_system
 
     def _aggressive_windivert_cleanup(self):
         """Aggressive WinDivert cleanup via Win API - for cases when normal cleanup doesn't help"""
@@ -447,29 +520,7 @@ class StrategyRunnerBase(ABC):
         """
         if retry_count >= max_retry_count:
             return False
-
-        try:
-            diag = diagnose_winws_exit(exit_code, stderr)
-        except Exception:
-            diag = None
-
-        win32_error = int(getattr(diag, "win32_error", exit_code) or exit_code)
-        if win32_error != 1058:
-            return False
-
-        cause = str(getattr(diag, "cause", "") or "").strip().lower()
-        hard_no_retry_markers = (
-            "base filtering engine",
-            "служба windivert отключена",
-            "отсутствуют файлы windivert",
-            "secure boot",
-            "подпись драйвера",
-            "политика безопасности",
-        )
-        if any(marker in cause for marker in hard_no_retry_markers):
-            return False
-
-        return True
+        return classify_spawn_failure(exit_code, stderr).is_service_transient
 
     def stop(self, *, cleanup_services: bool = True) -> bool:
         """Stops running process.

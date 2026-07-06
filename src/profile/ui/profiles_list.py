@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from types import SimpleNamespace
 from typing import Any
 
 from PyQt6.QtCore import QPoint, QTimer, Qt, QThread, pyqtSignal
 from PyQt6.QtWidgets import QListView, QVBoxLayout, QWidget
 
 from log.log import log
-from profile.display_items import profile_display_sort_key
-from profile.list_view_state import build_profile_list_view_state, group_name_for_key
+from profile.list_view_state import build_profile_list_view_state, moved_profile_display_items
 from profile.ui.profile_list_delegate import ProfileListDelegate
 from profile.ui.profile_list_model import ProfileListModel
 from profile.ui.profile_list_view import ProfileListView
@@ -274,11 +272,28 @@ class ProfilesList(QWidget):
     def collapse_all(self) -> None:
         self._request_all_groups_expanded(False)
 
+    def _display_key_for(self, profile_key: str) -> str:
+        """Переводит стабильную ссылку (persistent_key) в текущий позиционный
+        ключ элемента. Прямое совпадение проходит как раньше; неоднозначная
+        ссылка возвращается как есть — вызывающий уйдёт в полный refresh."""
+        key = str(profile_key or "").strip()
+        if not key:
+            return ""
+        items = self._current_view_state_items()
+        if any(str(getattr(entry, "key", "") or "") == key for entry in items):
+            return key
+        matches = [
+            str(getattr(entry, "key", "") or "")
+            for entry in items
+            if str(getattr(entry, "persistent_key", "") or "") == key
+        ]
+        return matches[0] if len(matches) == 1 else key
+
     def profile_item_for_key(self, profile_key: str):
-        return self._model.profile_item_for_key(profile_key)
+        return self._model.profile_item_for_key(self._display_key_for(profile_key))
 
     def replace_profile_item(self, profile_key: str, item) -> bool:
-        source_key = str(profile_key or "").strip()
+        source_key = self._display_key_for(profile_key)
         replacement_key = str(getattr(item, "key", "") or source_key).strip()
         if not source_key or not replacement_key:
             return False
@@ -337,7 +352,7 @@ class ProfilesList(QWidget):
         return True
 
     def remove_profile_item(self, profile_key: str) -> bool:
-        key = str(profile_key or "").strip()
+        key = self._display_key_for(profile_key)
         if not key:
             return False
         items = self._current_view_state_items()
@@ -646,15 +661,6 @@ class ProfilesList(QWidget):
         return tuple(dict.fromkeys(keys))
 
 
-def _profile_item_with(item: Any, **changes):
-    try:
-        return replace(item, **changes)
-    except Exception:
-        data = dict(getattr(item, "__dict__", {}) or {})
-        data.update(changes)
-        return SimpleNamespace(**data)
-
-
 def _moved_profile_items(
     items: tuple[Any, ...],
     source_profile_key: str,
@@ -662,95 +668,16 @@ def _moved_profile_items(
     destination_profile_key: str = "",
     destination_group_key: str = "",
 ) -> tuple[Any, ...] | None:
-    source_key = str(source_profile_key or "").strip()
-    kind = str(destination_kind or "").strip()
-    if not source_key:
-        return None
-    items = tuple(items or ())
-    source = next((item for item in items if str(getattr(item, "key", "") or "") == source_key), None)
-    if source is None:
-        return None
-
-    destination_key = str(destination_profile_key or "").strip()
-    destination = next((item for item in items if str(getattr(item, "key", "") or "") == destination_key), None)
-    if kind in {"profile", "profile_after"}:
-        if destination is None or str(getattr(destination, "key", "") or "") == source_key:
-            return None
-        target_group = str(
-            destination_group_key
-            or getattr(destination, "group", "")
-            or getattr(source, "group", "")
-            or "common"
-        )
-    elif kind == "folder":
-        target_group = str(destination_group_key or "").strip()
-    elif kind == "end":
-        target_group = str(destination_group_key or getattr(source, "group", "") or "common").strip()
-    else:
-        return None
-    if not target_group:
-        return None
-
-    group_name = group_name_for_key(target_group, items)
-    source_for_target = _profile_item_with(
-        source,
-        group=target_group,
-        group_name=group_name,
-        order_is_manual=True,
+    # Делегирование единственной реализации оптимистичного перемещения
+    # (list_view_state.moved_profile_display_items) — та же математика,
+    # что и у персиста.
+    return moved_profile_display_items(
+        items,
+        source_profile_key,
+        destination_kind,
+        destination_profile_key,
+        destination_group_key,
     )
-    target_items = [
-        item
-        for item in sorted(items, key=profile_display_sort_key)
-        if str(getattr(item, "key", "") or "") != source_key
-        and str(getattr(item, "group", "") or "common") == target_group
-    ]
-
-    if kind == "profile":
-        insert_index = next(
-            (
-                index
-                for index, item in enumerate(target_items)
-                if str(getattr(item, "key", "") or "") == destination_key
-            ),
-            -1,
-        )
-        if insert_index < 0:
-            return None
-        target_items.insert(insert_index, source_for_target)
-    elif kind == "profile_after":
-        insert_index = next(
-            (
-                index
-                for index, item in enumerate(target_items)
-                if str(getattr(item, "key", "") or "") == destination_key
-            ),
-            -1,
-        )
-        if insert_index < 0:
-            return None
-        target_items.insert(insert_index + 1, source_for_target)
-    else:
-        target_items.append(source_for_target)
-
-    target_order = {str(getattr(item, "key", "") or ""): index for index, item in enumerate(target_items)}
-    next_items: list[Any] = []
-    for item in items:
-        item_key = str(getattr(item, "key", "") or "")
-        if item_key == source_key and item_key not in target_order:
-            continue
-        if item_key in target_order:
-            next_items.append(
-                _profile_item_with(
-                    source_for_target if item_key == source_key else item,
-                    group=target_group,
-                    group_name=group_name,
-                    order=target_order[item_key],
-                    order_is_manual=True,
-                )
-            )
-        else:
-            next_items.append(item)
-    return tuple(next_items)
 
 
 def _group_expanded_with_target(

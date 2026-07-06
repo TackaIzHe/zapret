@@ -22,7 +22,7 @@ class HostsServicesCatalogWorkerArchitectureTests(unittest.TestCase):
         self.assertIn("_build_services_catalog_plan", worker_source)
         self.assertIn("_get_catalog_signature", worker_source)
         self.assertNotIn("hosts.commands", worker_source)
-        self.assertIn("read_active_domains_map", command_source)
+        self.assertIn("read_active_domain_ip_map", command_source)
 
 
 if __name__ == "__main__":

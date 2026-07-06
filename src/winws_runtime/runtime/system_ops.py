@@ -509,6 +509,7 @@ def wait_for_windivert_spawn_ready_runtime(
     interval = max(0.05, float(poll_interval))
     last_probe = WinDivertRuntimeProbeResult(installed=True, ready=True, error_code=None, stage="initial")
     restored_service_start_type = False
+    unloaded_drivers_before_bypass = False
 
     while time.monotonic() < deadline:
         last_probe = probe_windivert_state_runtime()
@@ -531,6 +532,19 @@ def wait_for_windivert_spawn_ready_runtime(
 
         blocking_services = find_blocking_windivert_registry_services_runtime()
         if int(last_probe.error_code or 0) in (1058, 1060) and not blocking_services:
+            # Зомби-состояние после недавнего stop: записи SCM уже нет, но драйвер
+            # ещё жив — старт winws2 в этот момент падает с 0xC0000142. Один раз
+            # делаем ту же выгрузку, что и retry-путь; на свежей системе это no-op.
+            if not unloaded_drivers_before_bypass:
+                unloaded_drivers_before_bypass = True
+                unload_known_windivert_drivers_runtime()
+                reprobe = probe_windivert_state_runtime()
+                if reprobe.ready:
+                    return reprobe
+                last_probe = reprobe
+                if int(last_probe.error_code or 0) not in (1058, 1060):
+                    time.sleep(interval)
+                    continue
             log(
                 "WinDivert readiness probe did not find a ready driver, but service registry is clean; "
                 "allowing winws2 to perform the real driver open",

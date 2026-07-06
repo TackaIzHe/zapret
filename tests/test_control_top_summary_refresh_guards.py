@@ -1,10 +1,35 @@
 from __future__ import annotations
 
 import unittest
+from types import SimpleNamespace
 from unittest.mock import Mock
 from unittest.mock import patch
 
 from app.state_store import AppUiState
+
+
+class _FakePresetSwitchTimer:
+    """Замена QTimer из refresh_runtime_state: копит start()/timeout-колбэки."""
+
+    def __init__(self, parent=None) -> None:
+        self.parent = parent
+        self.single_shot = False
+        self.start_calls: list[int] = []
+        self._callbacks: list = []
+        self.timeout = SimpleNamespace(connect=self._callbacks.append)
+
+    def setSingleShot(self, value) -> None:
+        self.single_shot = bool(value)
+
+    def start(self, delay_ms) -> None:
+        self.start_calls.append(int(delay_ms))
+
+    def stop(self) -> None:
+        pass
+
+    def fire(self) -> None:
+        for callback in list(self._callbacks):
+            callback()
 
 
 class ControlTopSummaryRefreshGuardTests(unittest.TestCase):
@@ -75,10 +100,7 @@ class ControlTopSummaryRefreshGuardTests(unittest.TestCase):
         from presets.ui.control.zapret1.page import Zapret1ModeControlPage
         from presets.ui.control.zapret2.page import Zapret2ModeControlPage
 
-        for page_cls, module_name in (
-            (Zapret1ModeControlPage, "presets.ui.control.zapret1.page"),
-            (Zapret2ModeControlPage, "presets.ui.control.zapret2.page"),
-        ):
+        for page_cls in (Zapret1ModeControlPage, Zapret2ModeControlPage):
             with self.subTest(page_cls=page_cls.__name__):
                 page = page_cls.__new__(page_cls)
                 page._cleanup_in_progress = False
@@ -88,10 +110,16 @@ class ControlTopSummaryRefreshGuardTests(unittest.TestCase):
                 page._request_top_summary_worker = Mock()
                 page._schedule_additional_settings_reload_after_preset_switch = Mock()
 
-                callbacks = []
+                timers: list[_FakePresetSwitchTimer] = []
+
+                def _timer_factory(parent=None):
+                    timer = _FakePresetSwitchTimer(parent)
+                    timers.append(timer)
+                    return timer
+
                 with patch(
-                    f"{module_name}.QTimer.singleShot",
-                    side_effect=lambda delay_ms, callback: callbacks.append((delay_ms, callback)),
+                    "presets.ui.control.refresh_runtime_state.QTimer",
+                    new=_timer_factory,
                 ):
                     page_cls._on_ui_state_changed(
                         page,
@@ -105,9 +133,10 @@ class ControlTopSummaryRefreshGuardTests(unittest.TestCase):
                     )
 
                 page._request_top_summary_worker.assert_not_called()
-                self.assertEqual(len(callbacks), 1)
+                self.assertEqual(len(timers), 1)
+                self.assertEqual(len(timers[0].start_calls), 2)
 
-                callbacks[0][1]()
+                timers[0].fire()
 
                 page._request_top_summary_worker.assert_called_once_with()
 
@@ -116,10 +145,7 @@ class ControlTopSummaryRefreshGuardTests(unittest.TestCase):
         from presets.ui.control.zapret1.page import Zapret1ModeControlPage
         from presets.ui.control.zapret2.page import Zapret2ModeControlPage
 
-        for page_cls, module_name in (
-            (Zapret1ModeControlPage, "presets.ui.control.zapret1.page"),
-            (Zapret2ModeControlPage, "presets.ui.control.zapret2.page"),
-        ):
+        for page_cls in (Zapret1ModeControlPage, Zapret2ModeControlPage):
             with self.subTest(page_cls=page_cls.__name__):
                 runtime = ModeControlRefreshRuntime()
                 page = page_cls.__new__(page_cls)
@@ -134,10 +160,16 @@ class ControlTopSummaryRefreshGuardTests(unittest.TestCase):
                 page.update_strategy = Mock()
                 page._refresh_last_status_message = Mock()
 
-                callbacks = []
+                timers: list[_FakePresetSwitchTimer] = []
+
+                def _timer_factory(parent=None):
+                    timer = _FakePresetSwitchTimer(parent)
+                    timers.append(timer)
+                    return timer
+
                 with patch(
-                    f"{module_name}.QTimer.singleShot",
-                    side_effect=lambda delay_ms, callback: callbacks.append((delay_ms, callback)),
+                    "presets.ui.control.refresh_runtime_state.QTimer",
+                    new=_timer_factory,
                 ):
                     page_cls._on_ui_state_changed(
                         page,
@@ -150,12 +182,12 @@ class ControlTopSummaryRefreshGuardTests(unittest.TestCase):
                     )
 
                 page._request_top_summary_worker.assert_not_called()
-                self.assertEqual(callbacks, [])
+                self.assertEqual(timers, [])
                 self.assertTrue(runtime.top_summary_preset_apply_reload_state.has_pending())
 
                 with patch(
-                    f"{module_name}.QTimer.singleShot",
-                    side_effect=lambda delay_ms, callback: callbacks.append((delay_ms, callback)),
+                    "presets.ui.control.refresh_runtime_state.QTimer",
+                    new=_timer_factory,
                 ):
                     page_cls._on_ui_state_changed(
                         page,
@@ -164,8 +196,8 @@ class ControlTopSummaryRefreshGuardTests(unittest.TestCase):
                     )
 
                 self.assertFalse(runtime.top_summary_preset_apply_reload_state.has_pending())
-                self.assertEqual(len(callbacks), 1)
-                callbacks[0][1]()
+                self.assertEqual(len(timers), 1)
+                timers[0].fire()
                 page._request_top_summary_worker.assert_called_once_with()
 
 

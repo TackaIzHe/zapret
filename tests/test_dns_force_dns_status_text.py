@@ -65,7 +65,7 @@ class ForceDnsStatusTextTests(unittest.TestCase):
 
         self.assertEqual(
             plan.text,
-            "Программа пропишет DNS-серверы для обхода блокировок. Это поможет, если провайдер подменяет DNS.",
+            "Выберите DNS из списка или добавьте свой адрес. Программа применит его только по вашему нажатию.",
         )
 
     def test_toggle_success_uses_human_action_descriptions(self) -> None:

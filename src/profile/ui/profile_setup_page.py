@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from PyQt6.QtCore import QEvent, QModelIndex, QPoint, QRect, QSize, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QAction, QFontMetrics, QPainter, QTextCursor
+from PyQt6.QtGui import QAction, QFontMetrics, QKeySequence, QPainter, QShortcut
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QAbstractScrollArea,
@@ -19,10 +19,10 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from lists.core.layered_files import safe_list_file_name
 from log.log import log
 from profile.match_filters import filter_values
 from profile.editable_settings import normalize_filter_value
+from profile.key_resolution import profile_reference_key
 from profile.setup_match_text import build_profile_setup_match_tab_text
 from profile.strategy_list_filter import ProfileStrategyListFilterWorker, ProfileStrategyListPlan
 from profile.ui.profile_setup_controls import (
@@ -49,6 +49,7 @@ from qfluentwidgets import (
     SearchLineEdit,
     SegmentedWidget,
     PushButton,
+    TransparentToolButton,
 )
 from settings.mode import ZAPRET1_MODE, ZAPRET2_MODE, is_preset_launch_method, is_zapret2_launch_method
 from ui.pages.base_page import BasePage
@@ -492,8 +493,13 @@ class ProfileStrategySearchLineEdit(SearchLineEdit):
 
     activate_current_result = pyqtSignal()
     navigate_results = pyqtSignal(int)
+    close_requested = pyqtSignal()
 
     def keyPressEvent(self, event):  # noqa: N802
+        if event.key() == Qt.Key.Key_Escape:
+            self.close_requested.emit()
+            event.accept()
+            return
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             self.activate_current_result.emit()
             event.accept()
@@ -558,7 +564,8 @@ class ProfileStrategyListWidget(QWidget):
         set_control_accessibility(self._search, name="Поиск готовых стратегий")
         set_tooltip(
             self._search,
-            "Поиск по названию, параметрам --lua-desync и описанию готовой стратегии.",
+            "Поиск по названию, параметрам --lua-desync и описанию готовой стратегии. "
+            "Ctrl+F — открыть или закрыть поиск, Esc — закрыть.",
         )
         set_control_accessibility(
             self._search,
@@ -567,11 +574,13 @@ class ProfileStrategyListWidget(QWidget):
                 "Поиск по названию, параметрам --lua-desync и описанию готовой стратегии. "
                 "После ввода перейдите в список клавишей Tab или нажмите Стрелка вниз, "
                 "выберите стратегию стрелками вверх и вниз, "
-                "затем нажмите Enter или Пробел."
+                "затем нажмите Enter или Пробел. "
+                "Esc закрывает поиск и сбрасывает фильтр."
             ),
         )
         remove_line_edit_buttons_from_tab_order(self._search)
         self._search.textChanged.connect(self._apply_filter)
+        self._search.close_requested.connect(self.hide_search)
         top_layout.addWidget(self._search, 1)
 
         self._summary = BodyLabel("")
@@ -580,7 +589,31 @@ class ProfileStrategyListWidget(QWidget):
             "Сколько готовых стратегий сейчас показано после фильтра поиска.",
         )
         top_layout.addWidget(self._summary)
+
+        self._search_close = TransparentToolButton(FluentIcon.CLOSE, top_row)
+        set_tooltip(
+            self._search_close,
+            "Закрыть поиск и показать все стратегии (Esc).",
+        )
+        set_control_accessibility(
+            self._search_close,
+            name="Закрыть поиск стратегий",
+            description="Скрывает строку поиска и сбрасывает фильтр списка стратегий.",
+        )
+        self._search_close.clicked.connect(self.hide_search)
+        top_layout.addWidget(self._search_close)
+
+        # Строка поиска скрыта по умолчанию и не занимает место: открывается по Ctrl+F.
+        self._search_row = top_row
+        self._search_row.hide()
         layout.addWidget(top_row)
+
+        self._search_shortcut = QShortcut(QKeySequence(QKeySequence.StandardKey.Find), self)
+        # WindowShortcut: Ctrl+F работает с любым фокусом в окне; защита от
+        # срабатывания на других страницах — проверка isVisible() в обработчике.
+        self._search_shortcut.setContext(Qt.ShortcutContext.WindowShortcut)
+        self._search_shortcut.activated.connect(self._on_search_shortcut)
+        self._search_shortcut.activatedAmbiguously.connect(self._on_search_shortcut)
 
         self._list = ProfileStrategyListView(self)
         self._list.setItemDelegate(ProfileStrategyListDelegate(self._list))
@@ -593,7 +626,7 @@ class ProfileStrategyListWidget(QWidget):
         set_control_accessibility(
             self._list,
             name="Список готовых стратегий",
-            description="Выберите готовую стратегию стрелками вверх и вниз, затем нажмите Enter или Пробел.",
+            description="Выберите готовую стратегию стрелками вверх и вниз, затем нажмите Enter или Пробел. Ctrl+F открывает поиск по стратегиям.",
         )
         set_state_text(self._list, "Список готовых стратегий: список пока загружается")
         self._list.setMouseTracking(True)
@@ -633,6 +666,27 @@ class ProfileStrategyListWidget(QWidget):
                     event.accept()
                     return True
         return super().eventFilter(watched, event)
+
+    def _on_search_shortcut(self) -> None:
+        if not self.isVisible() or not self.isEnabled():
+            return
+        # Ctrl+F работает как переключатель: повторное нажатие закрывает
+        # поиск и сбрасывает фильтр, как Esc или кнопка закрытия.
+        if self._search_row.isVisible():
+            self.hide_search()
+        else:
+            self.show_search()
+
+    def show_search(self) -> None:
+        self._search_row.show()
+        self._search.setFocus(Qt.FocusReason.ShortcutFocusReason)
+        self._search.selectAll()
+
+    def hide_search(self) -> None:
+        if self._search.text():
+            self._search.clear()
+        self._search_row.hide()
+        self._list.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _activate_current_search_result(self) -> None:
         item = self._list.currentItem()
@@ -1781,8 +1835,9 @@ class ProfileSetupPageBase(BasePage):
         self._list_file_kind = ""
         self._list_file_base_text_snapshot = ""
         self._list_file_text_snapshot = ""
+        self._list_file_server_text_snapshot = None
         self._list_file_text_dirty = True
-        self._list_file_text_cache_update_suspended = False
+        self._list_file_validation_has_error = False
         self._list_file_user_entries_count = 0
         self._list_file_base_entries_count = 0
         self._list_file_normal_style = ""
@@ -1848,20 +1903,36 @@ class ProfileSetupPageBase(BasePage):
             return True
         return False
 
+    @staticmethod
+    def _profile_setup_write_operations_collide(previous: dict, queued: dict) -> bool:
+        """Замещать в очереди можно только операцию над ТЕМ ЖЕ объектом.
+
+        list_file_save-операции с разными (profile_key, filter_kind,
+        filter_value) пишут в разные файлы: замещение по одному только kind
+        молча теряло флаш прежнего профиля/типа фильтра."""
+        if previous.get("kind") != queued.get("kind"):
+            return False
+        if str(queued.get("kind") or "") != "list_file_save":
+            return True
+        return all(
+            str(previous.get(field) or "") == str(queued.get(field) or "")
+            for field in ("profile_key", "filter_kind", "filter_value")
+        )
+
     def _queue_profile_setup_write_operation(self, operation: dict[str, object]) -> None:
         queued = dict(operation)
         scheduled = self.__dict__.get("_scheduled_profile_setup_write_operation")
         if (
             self._profile_setup_write_state_obj().start_scheduled
             and isinstance(scheduled, dict)
-            and scheduled.get("kind") == queued.get("kind")
+            and self._profile_setup_write_operations_collide(scheduled, queued)
         ):
             self._scheduled_profile_setup_write_operation = queued
             return
         pending = self._profile_setup_write_state_obj().pending
         if pending and pending[-1] == queued:
             return
-        if pending and pending[-1].get("kind") == queued.get("kind"):
+        if pending and self._profile_setup_write_operations_collide(pending[-1], queued):
             pending[-1] = queued
             return
         pending.append(queued)
@@ -2014,14 +2085,17 @@ class ProfileSetupPageBase(BasePage):
 
         self._breadcrumb = BreadcrumbBar()
         self._breadcrumb.currentItemChanged.connect(self._on_breadcrumb_item_changed)
-        self.layout.addWidget(self._breadcrumb)
 
         header = QWidget(self)
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(12)
+        # stretch > 0 обязателен: у BreadcrumbBar нет sizeHint, без доли
+        # свободной ширины он получает ~0 px и прячет все элементы в элайд-меню.
+        header_layout.addWidget(self._breadcrumb, 1, Qt.AlignmentFlag.AlignVCenter)
         self._summary = BodyLabel("")
         self._summary.setWordWrap(True)
+        self._summary.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         header_layout.addWidget(self._summary, 1)
 
         self._enabled_checkbox = CheckBox("Включён")
@@ -2121,6 +2195,7 @@ class ProfileSetupPageBase(BasePage):
         self._filter_combo.currentIndexChanged.connect(lambda _index: self._on_filter_kind_changed())
         self._filter_combo.currentIndexChanged.connect(self._update_profile_setup_accessibility)
         self._filter_value.textEdited.connect(lambda _text: self._schedule_settings_autosave())
+        self._filter_value.editingFinished.connect(self._on_filter_value_editing_finished)
         self._in_range_value.textEdited.connect(lambda _text: self._schedule_settings_autosave())
         self._out_range_value.textEdited.connect(lambda _text: self._schedule_settings_autosave())
 
@@ -2313,7 +2388,6 @@ class ProfileSetupPageBase(BasePage):
         self._list_file_text = PlainTextEdit()
         self._list_file_text.setMinimumHeight(320)
         self._list_file_text.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self._list_file_text.document().contentsChange.connect(self._on_list_file_text_contents_changed)
         self._list_file_text.textChanged.connect(self._on_list_file_text_changed)
         set_tooltip(
             self._list_file_text,
@@ -2336,15 +2410,9 @@ class ProfileSetupPageBase(BasePage):
         editor_actions_layout = QHBoxLayout(editor_actions)
         editor_actions_layout.setContentsMargins(0, 0, 0, 0)
         editor_actions_layout.setSpacing(12)
-        self._list_file_save_button = PushButton("Сохранить список", icon=FluentIcon.SAVE)
-        set_control_accessibility(
-            self._list_file_save_button,
-            name="Сохранить список profile",
-            description="Проверяет и сохраняет пользовательскую часть списка profile.",
-        )
-        set_state_text(self._list_file_save_button, "Сохранить список profile")
-        self._list_file_save_button.clicked.connect(self._on_list_file_save_clicked)
-        editor_actions_layout.addWidget(self._list_file_save_button)
+        # Кнопки «Сохранить» больше нет: валидный текст сохраняется сам
+        # (_maybe_autosave_list_file), статус показывает результат.
+        self._list_file_save_button = None
         self._list_file_status_label = CaptionLabel("Загрузка файла списка...")
         set_state_text(self._list_file_status_label, "Статус списка profile: Загрузка файла списка...")
         self._list_file_status_label.setWordWrap(True)
@@ -2390,7 +2458,7 @@ class ProfileSetupPageBase(BasePage):
             description="Сырой текст profile. Сохраняется только в текущий preset.",
         )
         set_state_text(self._raw_profile_text, "Текст profile в текущем preset")
-        self._raw_profile_text.document().contentsChange.connect(self._on_raw_profile_text_contents_changed)
+        self._raw_profile_text.textChanged.connect(self._on_raw_profile_text_changed)
         match_layout.addWidget(self._raw_profile_text)
 
         raw_actions = QWidget(match_tab)
@@ -2481,45 +2549,40 @@ class ProfileSetupPageBase(BasePage):
 
     def _set_raw_profile_text_from_payload(self, text: str) -> None:
         value = str(text or "")
-        if self.__dict__.get("_raw_profile_text_cache") == value:
-            return
         editor = self.__dict__.get("_raw_profile_text")
         if editor is None:
             self._raw_profile_text_cache = value
             return
-        self._raw_profile_text_cache_update_suspended = True
-        try:
-            editor.setPlainText(value)
-        finally:
-            self._raw_profile_text_cache_update_suspended = False
+        if self._current_raw_profile_text() == value:
+            return
+        editor.setPlainText(value)
         self._raw_profile_text_cache = value
 
     def _on_raw_profile_text_changed(self) -> None:
+        # \u041f\u0440\u0430\u0432\u043a\u0430 \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044f \u0438\u043d\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u043c\u0435\u043c\u043e: \u0442\u0435\u043a\u0441\u0442 \u043f\u0435\u0440\u0435\u0447\u0438\u0442\u0430\u0435\u0442\u0441\u044f \u0438\u0437
+        # \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430 \u043f\u0440\u0438 \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0435\u043c \u043e\u0431\u0440\u0430\u0449\u0435\u043d\u0438\u0438 (_current_raw_profile_text).
         self._raw_profile_text_cache = None
 
-    def _on_raw_profile_text_contents_changed(self, position: int, chars_removed: int, chars_added: int) -> None:
-        if self._loading or bool(self.__dict__.get("_raw_profile_text_cache_update_suspended", False)):
-            return
-        current = str(self.__dict__.get("_raw_profile_text_cache", "") or "")
-        start = max(0, min(int(position or 0), len(current)))
-        removed = max(0, int(chars_removed or 0))
-        inserted = self._raw_profile_inserted_text(start, max(0, int(chars_added or 0)))
-        self._raw_profile_text_cache = f"{current[:start]}{inserted}{current[start + removed:]}"
+    def _current_raw_profile_text(self) -> str:
+        """\u0422\u0435\u043a\u0443\u0449\u0438\u0439 \u0442\u0435\u043a\u0441\u0442 raw-\u0440\u0435\u0434\u0430\u043a\u0442\u043e\u0440\u0430 profile.
 
-    def _raw_profile_inserted_text(self, position: int, chars_added: int) -> str:
-        if chars_added <= 0:
-            return ""
+        \u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442 QPlainTextEdit \u2014 \u0435\u0434\u0438\u043d\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439 \u0438\u0441\u0442\u043e\u0447\u043d\u0438\u043a \u043f\u0440\u0430\u0432\u0434\u044b; \u043a\u044d\u0448 \u2014 \u0442\u043e\u043b\u044c\u043a\u043e
+        \u043c\u0435\u043c\u043e\u0438\u0437\u0430\u0446\u0438\u044f \u0441 \u0438\u043d\u0432\u0430\u043b\u0438\u0434\u0430\u0446\u0438\u0435\u0439 \u043f\u043e textChanged. \u0418\u043d\u043a\u0440\u0435\u043c\u0435\u043d\u0442\u0430\u043b\u044c\u043d\u043e\u0433\u043e \u043f\u0430\u0442\u0447\u0438\u043d\u0433\u0430 \u043f\u043e
+        contentsChange \u0437\u0434\u0435\u0441\u044c \u0431\u044b\u0442\u044c \u043d\u0435 \u0434\u043e\u043b\u0436\u043d\u043e: Qt \u0443\u0447\u0438\u0442\u044b\u0432\u0430\u0435\u0442 \u0444\u0438\u043d\u0430\u043b\u044c\u043d\u044b\u0439 \u0440\u0430\u0437\u0434\u0435\u043b\u0438\u0442\u0435\u043b\u044c
+        \u0431\u043b\u043e\u043a\u0430 \u0432 charsAdded/charsRemoved, \u0438 \u043f\u043e\u0437\u0438\u0446\u0438\u043e\u043d\u043d\u0430\u044f \u043c\u0430\u0442\u0435\u043c\u0430\u0442\u0438\u043a\u0430 \u043c\u043e\u043b\u0447\u0430 \u0442\u0435\u0440\u044f\u043b\u0430
+        \u0432\u0441\u0442\u0430\u0432\u043b\u0435\u043d\u043d\u044b\u0439 \u0438\u0437 \u0431\u0443\u0444\u0435\u0440\u0430 \u0442\u0435\u043a\u0441\u0442."""
+        cached = self.__dict__.get("_raw_profile_text_cache")
+        if cached is not None:
+            return str(cached or "")
         editor = self.__dict__.get("_raw_profile_text")
         if editor is None:
             return ""
         try:
-            document = editor.document()
-            cursor = QTextCursor(document)
-            cursor.setPosition(max(0, int(position or 0)))
-            cursor.setPosition(max(0, int(position or 0)) + int(chars_added or 0), QTextCursor.MoveMode.KeepAnchor)
-            return str(cursor.selectedText() or "").replace("\u2029", "\n")
+            text = str(editor.toPlainText() or "")
         except Exception:
             return ""
+        self._raw_profile_text_cache = text
+        return text
 
     def _request_list_file_editor_state(self) -> None:
         if not self._editor_tab_built or not self._profile_key:
@@ -2533,12 +2596,16 @@ class ProfileSetupPageBase(BasePage):
             set_profile_list_status_text(self._list_file_status_label, "Загрузка файла списка...")
         self._list_file_load_request_id = int(self.__dict__.get("_list_file_load_request_id", 0) or 0) + 1
         request_id = self._list_file_load_request_id
+        # Пара фильтра, под которую загружается редактор. Автосохранение пишет
+        # ТОЛЬКО в этот файл: текущее значение поля могло уже указывать на
+        # другой файл, и сохранение по нему пересадило бы текст в чужой список.
+        self._list_file_editor_filter = (self._current_filter_kind(), self._current_filter_value())
         runtime.start_qthread_worker(
             worker_factory=lambda _runtime_request_id: self.create_profile_list_file_load_worker(
                 request_id,
                 self._profile_key,
-                filter_kind=self._current_filter_kind(),
-                filter_value=self._current_filter_value(),
+                filter_kind=self._list_file_editor_filter[0],
+                filter_value=self._list_file_editor_filter[1],
                 parent=self,
             ),
             on_loaded=self._on_list_file_editor_state_loaded,
@@ -2555,25 +2622,33 @@ class ProfileSetupPageBase(BasePage):
             return
         state = getattr(result, "state", None)
         if state is None:
+            # Профиль не разрешился (удалён/переименован во время загрузки):
+            # молчание оставляло бы «Загрузка файла списка...» навсегда.
+            if self._list_file_status_label is not None:
+                set_profile_list_status_text(
+                    self._list_file_status_label,
+                    "Ошибка загрузки файла списка: profile не найден.",
+                )
             return
         self._list_file_dirty = False
         self._schedule_list_file_editor_state_apply(state)
 
     def _list_file_load_result_is_current(self, result) -> bool:
+        # Результат — эхо ПОСЛЕДНЕГО запроса (контекст редактирования меняется
+        # только через _request_list_file_editor_state: каждая мутация комбо,
+        # поля значения и payload планирует перезагрузку). Сверять его с
+        # текущими виджетами по именам файлов нельзя: сервис легитимно ремапит
+        # пару при kind-switch превью (netrogat.txt → ipset-ru/dns/exclude),
+        # и сравнение имён не сходилось бы никогда — вечная «Загрузка...».
         result_profile_key = str(getattr(result, "profile_key", "") or "").strip()
         if result_profile_key != str(self.__dict__.get("_profile_key", "") or "").strip():
             return False
+        captured_kind, captured_value = self._list_file_target_filter()
         result_filter_kind = str(getattr(result, "filter_kind", "") or "").strip().lower()
-        if result_filter_kind != str(self._current_filter_kind() or "").strip().lower():
-            return False
-        result_file_name = str(getattr(result, "file_name", "") or "").strip()
-        result_filter_file_name = safe_list_file_name(getattr(result, "filter_value", ""))
-        current_file_name = safe_list_file_name(self._current_filter_value())
-        return bool(
-            result_file_name
-            and result_filter_file_name
-            and current_file_name
-            and result_file_name == result_filter_file_name == current_file_name
+        result_filter_value = str(getattr(result, "filter_value", "") or "").strip()
+        return (
+            result_filter_kind == str(captured_kind or "").strip().lower()
+            and result_filter_value == str(captured_value or "").strip()
         )
 
     def _schedule_list_file_editor_state_apply(self, state) -> None:
@@ -2801,12 +2876,14 @@ class ProfileSetupPageBase(BasePage):
             self._breadcrumb.blockSignals(False)
 
     def _on_breadcrumb_item_changed(self, key: str) -> None:
+        # Клик по крошке уже удалил из BreadcrumbBar элементы правее выбранного —
+        # восстанавливаем полный путь до навигации, иначе при возврате на эту же
+        # страницу крошки остаются обрезанными.
+        self._rebuild_breadcrumb()
         if key == "control":
             self._open_root()
         elif key == "profiles":
             self._open_profiles()
-        elif key == "profile":
-            self._rebuild_breadcrumb()
 
     def _on_update_user_profile_clicked(self) -> None:
         if self._payload is None:
@@ -3308,13 +3385,18 @@ class ProfileSetupPageBase(BasePage):
         if next_key and next_key == current_key and self._payload is not None:
             return
         if next_key != current_key:
+            self._flush_list_file_autosave_before_switch(current_key)
             self._payload = None
             self._pending_profile_setup_payload_apply = None
             self._profile_setup_payload_apply_scheduled = False
-            self._last_profile_setup_payload_apply_signature = None
             self._pending_list_file_state_apply = None
+            self._last_profile_setup_payload_apply_signature = None
             self._list_file_state_apply_scheduled = False
             self._list_file_dirty = True
+            # Новый профиль — прежние правки редактора списка не его: baseline
+            # в «незнание», чтобы первое состояние применилось. Снапшот НЕ
+            # трогаем: он обязан зеркалить редактор для инкрементальных патчей.
+            self._list_file_server_text_snapshot = None
         self._profile_key = next_key
         self.reload_current_profile()
 
@@ -3326,6 +3408,14 @@ class ProfileSetupPageBase(BasePage):
 
     def reload_current_profile(self) -> None:
         self._request_profile_setup_payload()
+
+    def _profile_result_reference(self, payload, profile_key: str) -> str:
+        """Единая валюта ссылок страницы: стабильная ссылка из payload-элемента,
+        и только при её отсутствии — ключ из результата операции. Позиционный
+        "profile:N" в self._profile_key протухает при сдвиге соседей."""
+        item = getattr(payload, "item", None) if payload is not None else None
+        reference = profile_reference_key(item) if item is not None else ""
+        return reference or str(profile_key or "").strip()
 
     def create_profile_setup_load_worker(self, request_id: int, profile_key: str, parent=None):
         return self._create_profile_setup_load_worker_fn(
@@ -3552,6 +3642,10 @@ class ProfileSetupPageBase(BasePage):
             self._restore_loaded_payload_header(payload)
             return
         self._payload = payload
+        self._profile_key = self._profile_result_reference(
+            payload,
+            str(self.__dict__.get("_profile_key", "") or ""),
+        )
         self._schedule_profile_setup_payload_apply(payload, apply_signature=apply_signature)
 
     def _schedule_profile_setup_payload_apply(self, payload, *, apply_signature=None) -> None:
@@ -3806,7 +3900,7 @@ class ProfileSetupPageBase(BasePage):
             set_tab_item_text_if_changed(self._strategy_tabs, "editor", editor_title)
             set_tooltip(
                 self._strategy_tabs,
-                f"Готовые стратегии меняют строки --lua-desync. «{editor_title}» меняет файл hostlist/ipset. «Когда применяется» показывает условия profile и итоговый текст.",
+                f"Готовые стратегии меняют строки --lua-desync. «{editor_title}» меняет файл hostlist/ipset. «Когда применяется» показывает условия profile и итоговый текст. Ctrl+F — поиск по готовым стратегиям.",
             )
             self._update_strategy_tabs_accessibility()
 
@@ -3824,7 +3918,30 @@ class ProfileSetupPageBase(BasePage):
         self._list_file_kind = kind
         visible_user_text = user_text if editable else text
         base_text_changed = self.__dict__.get("_list_file_base_text_snapshot", "") != base_text
-        user_text_changed = self.__dict__.get("_list_file_text_snapshot", "") != visible_user_text
+        current_user_text = self._current_list_file_text()
+        user_text_changed = current_user_text != visible_user_text
+        # «Есть несохранённые правки» — производное состояние: текст редактора
+        # отличается от последнего подтверждённого сервером. Флаг здесь не
+        # годится: его сбрасывал цикл валидации, и поздний ответ воркера
+        # затирал набранные домены — они «не сохранялись».
+        server_snapshot = self.__dict__.get("_list_file_server_text_snapshot")
+        # None — «сервер неизвестен» (первая загрузка, смена профиля или типа
+        # фильтра): пришедшее состояние применяется безусловно.
+        has_unsaved_edits = (
+            isinstance(server_snapshot, str)
+            and current_user_text != server_snapshot
+        )
+        # Удерживать пользовательский текст можно только против состояния ТОГО
+        # ЖЕ файла: state другого файла (смена типа/значения фильтра) обязан
+        # примениться, иначе текст «переедет» в чужой список при автосейве.
+        incoming_identity = (kind, display_path)
+        same_file = self.__dict__.get("_list_file_applied_identity") == incoming_identity
+        keep_user_edits = user_text_changed and has_unsaved_edits and same_file
+        self._list_file_applied_identity = incoming_identity
+        if editable and display_path:
+            # Актуализируем целевую пару автосейва по фактически показанному
+            # файлу — поле значения фильтра могло уже указывать на другой.
+            self._list_file_editor_filter = (kind, display_path)
         self._list_file_base_entries_count = (
             _non_negative_int(getattr(state, "base_entries_count", 0))
             if editable
@@ -3866,9 +3983,8 @@ class ProfileSetupPageBase(BasePage):
             )
         if self._list_file_text is not None:
             self._list_file_text.blockSignals(True)
-            self._list_file_text_cache_update_suspended = True
             try:
-                if user_text_changed:
+                if user_text_changed and not keep_user_edits:
                     self._list_file_text.setPlainText(visible_user_text)
                 set_read_only_if_changed(self._list_file_text, not editable)
                 if kind == "ipset":
@@ -3876,10 +3992,13 @@ class ProfileSetupPageBase(BasePage):
                 else:
                     set_placeholder_text_if_changed(self._list_file_text, "Домены по одному на строку:\nexample.com\nsub.example.org")
             finally:
-                self._list_file_text_cache_update_suspended = False
                 self._list_file_text.blockSignals(False)
-        self._list_file_text_snapshot = visible_user_text
-        self._list_file_text_dirty = False
+        # Что сервер знает — фиксируем всегда; текст пользователя — только
+        # когда его правки не старше пришедшего состояния.
+        self._list_file_server_text_snapshot = visible_user_text
+        if not keep_user_edits:
+            self._list_file_text_snapshot = visible_user_text
+            self._list_file_text_dirty = False
         if self._list_file_save_button is not None:
             set_widget_enabled_if_changed(self._list_file_save_button, editable and not invalid_lines)
         if self._list_file_status_label is not None:
@@ -3895,6 +4014,7 @@ class ProfileSetupPageBase(BasePage):
                     self._list_file_status_label,
                     error_text or "Файл списка недоступен для редактирования.",
                 )
+        self._list_file_validation_has_error = bool(invalid_lines)
         self._render_list_file_validation(invalid_lines, fallback_error=error_text if not editable else "")
 
     def _on_list_file_text_changed(self) -> None:
@@ -3916,31 +4036,28 @@ class ProfileSetupPageBase(BasePage):
             return
         self._run_scheduled_list_file_validation()
 
-    def _on_list_file_text_contents_changed(self, position: int, chars_removed: int, chars_added: int) -> None:
-        if self._loading or bool(self.__dict__.get("_list_file_text_cache_update_suspended", False)):
-            return
-        current = str(self.__dict__.get("_list_file_text_snapshot", "") or "")
-        start = max(0, min(int(position or 0), len(current)))
-        removed = max(0, int(chars_removed or 0))
-        inserted = self._list_file_inserted_text(start, max(0, int(chars_added or 0)))
-        self._list_file_text_snapshot = f"{current[:start]}{inserted}{current[start + removed:]}"
-        self._list_file_text_dirty = True
-        self._list_file_text_snapshot_from_change = True
+    def _current_list_file_text(self) -> str:
+        """\u0422\u0435\u043a\u0443\u0449\u0438\u0439 \u0442\u0435\u043a\u0441\u0442 \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044c\u0441\u043a\u043e\u0433\u043e \u0440\u0435\u0434\u0430\u043a\u0442\u043e\u0440\u0430 \u0441\u043f\u0438\u0441\u043a\u0430.
 
-    def _list_file_inserted_text(self, position: int, chars_added: int) -> str:
-        if chars_added <= 0:
-            return ""
+        \u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442 QPlainTextEdit \u2014 \u0435\u0434\u0438\u043d\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439 \u0438\u0441\u0442\u043e\u0447\u043d\u0438\u043a \u043f\u0440\u0430\u0432\u0434\u044b; \u0441\u043d\u0430\u043f\u0448\u043e\u0442 \u2014 \u0442\u043e\u043b\u044c\u043a\u043e
+        \u043c\u0435\u043c\u043e\u0438\u0437\u0430\u0446\u0438\u044f \u0441 \u0438\u043d\u0432\u0430\u043b\u0438\u0434\u0430\u0446\u0438\u0435\u0439 \u043f\u043e textChanged (_list_file_text_dirty).
+        \u0418\u043d\u043a\u0440\u0435\u043c\u0435\u043d\u0442\u0430\u043b\u044c\u043d\u043e\u0433\u043e \u043f\u0430\u0442\u0447\u0438\u043d\u0433\u0430 \u043f\u043e contentsChange \u0437\u0434\u0435\u0441\u044c \u0431\u044b\u0442\u044c \u043d\u0435 \u0434\u043e\u043b\u0436\u043d\u043e: Qt
+        \u0443\u0447\u0438\u0442\u044b\u0432\u0430\u0435\u0442 \u0444\u0438\u043d\u0430\u043b\u044c\u043d\u044b\u0439 \u0440\u0430\u0437\u0434\u0435\u043b\u0438\u0442\u0435\u043b\u044c \u0431\u043b\u043e\u043a\u0430 \u0432 charsAdded/charsRemoved, \u0438
+        \u043f\u043e\u0437\u0438\u0446\u0438\u043e\u043d\u043d\u0430\u044f \u043c\u0430\u0442\u0435\u043c\u0430\u0442\u0438\u043a\u0430 \u043c\u043e\u043b\u0447\u0430 \u0442\u0435\u0440\u044f\u043b\u0430 \u0432\u0441\u0442\u0430\u0432\u043b\u0435\u043d\u043d\u044b\u0439 \u0438\u0437 \u0431\u0443\u0444\u0435\u0440\u0430 \u0442\u0435\u043a\u0441\u0442 \u2014
+        \u0432\u0430\u043b\u0438\u0434\u0430\u0446\u0438\u044f \u0440\u0443\u0433\u0430\u043b\u0430\u0441\u044c \u043d\u0430 \u0444\u0430\u043d\u0442\u043e\u043c\u043d\u044b\u0435 \u0441\u0442\u0440\u043e\u043a\u0438, \u0430 \u0430\u0432\u0442\u043e\u0441\u0435\u0439\u0432 \u043f\u0438\u0441\u0430\u043b \u0431\u0438\u0442\u044b\u0439 \u0441\u043d\u0430\u043f\u0448\u043e\u0442."""
+        snapshot = str(self.__dict__.get("_list_file_text_snapshot", "") or "")
+        if not bool(self.__dict__.get("_list_file_text_dirty", True)):
+            return snapshot
         editor = self.__dict__.get("_list_file_text")
         if editor is None:
-            return ""
+            return snapshot
         try:
-            document = editor.document()
-            cursor = QTextCursor(document)
-            cursor.setPosition(max(0, int(position or 0)))
-            cursor.setPosition(max(0, int(position or 0)) + int(chars_added or 0), QTextCursor.MoveMode.KeepAnchor)
-            return str(cursor.selectedText() or "").replace("\u2029", "\n")
+            text = str(editor.toPlainText() or "")
         except Exception:
-            return ""
+            return snapshot
+        self._list_file_text_snapshot = text
+        self._list_file_text_dirty = False
+        return text
 
     def _run_scheduled_list_file_validation(self) -> None:
         if self._loading or self._list_file_text is None:
@@ -3961,12 +4078,9 @@ class ProfileSetupPageBase(BasePage):
         request = dict(request or {})
         raw_text = request.get("text")
         if raw_text is None:
-            text = str(self.__dict__.get("_list_file_text_snapshot", "") or "")
+            text = self._current_list_file_text()
         else:
             text = str(raw_text or "")
-        self._list_file_text_snapshot = text
-        self._list_file_text_dirty = False
-        self._list_file_text_snapshot_from_change = False
         return {
             "kind": str(request.get("kind") or ""),
             "text": text,
@@ -4003,8 +4117,10 @@ class ProfileSetupPageBase(BasePage):
             return
         if str(kind or "").strip() != str(getattr(self, "_list_file_kind", "") or "").strip():
             return
-        current_text = str(self.__dict__.get("_list_file_text_snapshot", "") or "")
-        if str(text or "") != current_text:
+        # Поздний результат по устаревшему тексту отбрасывается: пока воркер
+        # работал, пользователь мог успеть напечатать новое — сравниваем с
+        # живым текстом редактора, а не с моментом запуска валидации.
+        if str(text or "") != self._current_list_file_text():
             return
         validation_result = invalid_lines
         if isinstance(validation_result, dict):
@@ -4015,6 +4131,10 @@ class ProfileSetupPageBase(BasePage):
                 self._list_file_user_entries_count = 0
         else:
             invalid_lines = tuple(validation_result or ())
+        # Флаг означает «ТЕКСТ невалиден» и выставляется только валидацией.
+        # Ошибка ЗАПИСИ его не трогает: валидные правки при неудавшемся
+        # сохранении обязаны уйти на диск при следующем флаше.
+        self._list_file_validation_has_error = bool(invalid_lines)
         self._render_list_file_validation(tuple(invalid_lines or ()))
         if self._list_file_save_button is not None:
             editable = self._list_file_text is not None and not self._list_file_text.isReadOnly()
@@ -4032,6 +4152,66 @@ class ProfileSetupPageBase(BasePage):
                     self._list_file_status_label,
                     f"Записей всего: {base_count + user_count} • ваших: {user_count} • есть несохранённые изменения",
                 )
+        if not invalid_lines:
+            self._maybe_autosave_list_file()
+
+    def _unsaved_list_file_text(self) -> str | None:
+        """Текст редактора, ещё не подтверждённый сервером, либо None.
+
+        Пока серверный текст неизвестен (None), сохранять нечего: снапшот
+        может относиться к ещё не загруженному файлу."""
+        editor = self.__dict__.get("_list_file_text")
+        if editor is None or editor.isReadOnly():
+            return None
+        server_snapshot = self.__dict__.get("_list_file_server_text_snapshot")
+        if not isinstance(server_snapshot, str):
+            return None
+        snapshot = self._current_list_file_text()
+        return None if snapshot == server_snapshot else snapshot
+
+    def _list_file_target_filter(self) -> tuple[str, str]:
+        """Пара (kind, value), под которую загружен текущий текст редактора."""
+        pair = self.__dict__.get("_list_file_editor_filter")
+        if isinstance(pair, tuple) and len(pair) == 2:
+            return str(pair[0] or ""), str(pair[1] or "")
+        return self._current_filter_kind(), self._current_filter_value()
+
+    def _maybe_autosave_list_file(self) -> None:
+        """Автосохранение вместо кнопки: валидный текст с несохранёнными
+        правками уходит на диск сам. «Несохранённость» — производная от
+        server_text_snapshot, поэтому цикл сохранений не возникает: после
+        успешной записи снапшоты совпадают и повторный вызов — no-op."""
+        if bool(self.__dict__.get("_loading", False)) or not str(self.__dict__.get("_profile_key", "") or ""):
+            return
+        snapshot = self._unsaved_list_file_text()
+        if snapshot is None:
+            return
+        target_kind, target_value = self._list_file_target_filter()
+        self._request_list_file_save(
+            self._profile_key,
+            snapshot,
+            filter_kind=target_kind,
+            filter_value=target_value,
+        )
+
+    def _flush_list_file_autosave_before_switch(self, previous_key: str) -> None:
+        """Уход с профиля не должен терять валидные несохранённые домены:
+        отправляем их на запись по СТАРОЙ ссылке до сброса снапшотов.
+        Результат к редактору нового профиля не применится — его отсечёт
+        guard по _list_file_save_profile_key."""
+        previous = str(previous_key or "").strip()
+        if not previous or bool(self.__dict__.get("_list_file_validation_has_error", False)):
+            return
+        snapshot = self._unsaved_list_file_text()
+        if snapshot is None:
+            return
+        target_kind, target_value = self._list_file_target_filter()
+        self._request_list_file_save(
+            previous,
+            snapshot,
+            filter_kind=target_kind,
+            filter_value=target_value,
+        )
 
     def _on_list_file_validation_failed(self, request_id: int, error: str) -> None:
         if request_id != int(getattr(self, "_list_file_validation_request_id", 0) or 0):
@@ -4039,6 +4219,8 @@ class ProfileSetupPageBase(BasePage):
         if self._list_file_validation_state_obj().has_pending():
             return
         log(f"{self.__class__.__name__}: не удалось проверить файл списка profile: {error}", "ERROR")
+        # Валидность неизвестна — консервативно блокируем автосейв/флаш.
+        self._list_file_validation_has_error = True
         self._render_list_file_validation((), fallback_error=str(error))
         if self._list_file_save_button is not None:
             set_widget_enabled_if_changed(self._list_file_save_button, False)
@@ -4114,7 +4296,7 @@ class ProfileSetupPageBase(BasePage):
             return
         self._request_list_file_save(
             self._profile_key,
-            str(self.__dict__.get("_list_file_text_snapshot", "") or ""),
+            self._current_list_file_text(),
             filter_kind=self._current_filter_kind(),
             filter_value=self._current_filter_value(),
         )
@@ -4161,6 +4343,8 @@ class ProfileSetupPageBase(BasePage):
         runtime = self._worker_runtime("_list_file_save_runtime")
         self._list_file_save_request_id += 1
         request_id = self._list_file_save_request_id
+        self._list_file_save_profile_key = str(profile_key or "").strip()
+        self._list_file_save_filter = (str(filter_kind or "").strip(), str(filter_value or "").strip())
         if self._list_file_status_label is not None:
             set_profile_list_status_text(self._list_file_status_label, "Сохранение списка...")
         if self._list_file_save_button is not None:
@@ -4184,6 +4368,19 @@ class ProfileSetupPageBase(BasePage):
         if request_id != self._list_file_save_request_id:
             return
         if self._list_file_save_state_obj().has_pending():
+            return
+        saved_for = str(self.__dict__.get("_list_file_save_profile_key", "") or "")
+        if saved_for and saved_for != str(self.__dict__.get("_profile_key", "") or ""):
+            # Флаш при переключении профиля: запись на диск состоялась, но её
+            # state нельзя применять к редактору другого профиля. Остальные
+            # страницы всё же должны узнать об изменении файла.
+            self._on_profile_changed_callback(saved_for, "list_file")
+            return
+        saved_filter = self.__dict__.get("_list_file_save_filter")
+        if isinstance(saved_filter, tuple) and saved_filter != self._list_file_target_filter():
+            # Флаш при смене фильтра: state старого файла не должен откатывать
+            # редактор, уже показывающий другой файл.
+            self._on_profile_changed_callback(self._profile_key, "list_file")
             return
         payload, apply_signature = _profile_setup_payload_and_apply_signature(payload)
         if state is not None:
@@ -4523,10 +4720,45 @@ class ProfileSetupPageBase(BasePage):
         self._schedule_settings_autosave()
 
     def _on_filter_kind_changed(self) -> None:
+        # Несохранённые правки принадлежат ПРЕЖНЕМУ файлу: дописываем их туда
+        # (тип — из отображённого состояния, значение поля — до синхронизации)
+        # и сбрасываем baseline, чтобы состояние нового типа применилось.
+        self._flush_list_file_autosave_before_filter_switch()
         self._sync_filter_value_for_kind()
         if self._editor_tab_built and self._strategy_stack.currentIndex() == 1:
             self._request_list_file_editor_state()
         self._schedule_settings_autosave()
+
+    def _on_filter_value_editing_finished(self) -> None:
+        # Правка пути в поле — такая же мутация контекста редактора, как смена
+        # типа: без перезагрузки последний загруженный результат навсегда
+        # остался бы про другой файл.
+        if self._loading:
+            return
+        current_pair = (self._current_filter_kind(), self._current_filter_value())
+        if current_pair == tuple(self._list_file_target_filter()):
+            return
+        self._flush_list_file_autosave_before_filter_switch()
+        if self._editor_tab_built and self._strategy_stack.currentIndex() == 1:
+            self._request_list_file_editor_state()
+
+    def _flush_list_file_autosave_before_filter_switch(self) -> None:
+        if bool(self.__dict__.get("_list_file_validation_has_error", False)):
+            self._list_file_server_text_snapshot = None
+            return
+        snapshot = self._unsaved_list_file_text()
+        self._list_file_server_text_snapshot = None
+        if snapshot is None or not str(self.__dict__.get("_profile_key", "") or ""):
+            return
+        # Пара, под которую редактор был загружен, — не текущие значения
+        # виджетов: они уже могли смениться.
+        target_kind, target_value = self._list_file_target_filter()
+        self._request_list_file_save(
+            self._profile_key,
+            snapshot,
+            filter_kind=target_kind,
+            filter_value=target_value,
+        )
 
     def _current_filter_kind(self) -> str:
         return str(self._filter_combo.itemData(self._filter_combo.currentIndex()) or "hostlist")
@@ -4615,7 +4847,7 @@ class ProfileSetupPageBase(BasePage):
         if self._settings_save_state_obj().has_pending():
             return
         payload, apply_signature = _profile_setup_payload_and_apply_signature(payload)
-        new_key = str(profile_key or "").strip()
+        new_key = self._profile_result_reference(payload, profile_key)
         old_key = str(self._profile_key or "").strip()
         if new_key:
             self._profile_key = new_key
@@ -4683,10 +4915,7 @@ class ProfileSetupPageBase(BasePage):
     def _resolve_raw_profile_save_text(self, raw_text) -> str:
         if raw_text is not None:
             return str(raw_text or "")
-        cached = self.__dict__.get("_raw_profile_text_cache")
-        if cached is not None:
-            return str(cached or "")
-        return ""
+        return self._current_raw_profile_text()
 
     def _request_raw_profile_save(self, profile_key: str, raw_text: str | None) -> None:
         profile_key = str(profile_key or "").strip()
@@ -4727,7 +4956,7 @@ class ProfileSetupPageBase(BasePage):
             return
         payload, apply_signature = _profile_setup_payload_and_apply_signature(payload)
         old_key = str(self._profile_key or "").strip()
-        new_key = str(profile_key or "").strip()
+        new_key = self._profile_result_reference(payload, profile_key)
         if new_key:
             self._profile_key = new_key
         if payload is None:
@@ -4852,7 +5081,7 @@ class ProfileSetupPageBase(BasePage):
             return
         payload, apply_signature = _profile_setup_payload_and_apply_signature(payload)
         old_key = str(self._profile_key or "").strip()
-        new_key = str(profile_key or "").strip()
+        new_key = self._profile_result_reference(payload, profile_key)
         if payload is not None:
             if self.__dict__.get("_payload") is payload and (not new_key or new_key == old_key):
                 return
@@ -5057,7 +5286,12 @@ class ProfileSetupPageBase(BasePage):
     ) -> None:
         if request_id != int(getattr(self, "_strategy_apply_request_id", 0) or 0):
             return
-        if str(requested_profile_key or "").strip() != str(self._profile_key or "").strip():
+        requested = str(requested_profile_key or "").strip()
+        current = str(self._profile_key or "").strip()
+        # Страница могла принять persistent-ссылку уже после старта запроса —
+        # позиционный ключ того же профиля не повод выбрасывать результат.
+        item_key = str(getattr(getattr(self.__dict__.get("_payload"), "item", None), "key", "") or "").strip()
+        if requested not in {current, item_key}:
             return
         pending = self._strategy_apply_state_obj().pending
         pending_strategy_id = ""
@@ -5074,7 +5308,7 @@ class ProfileSetupPageBase(BasePage):
             else (None, None)
         )
         previous_key = self._profile_key
-        new_key = str(profile_key or "").strip()
+        new_key = self._profile_result_reference(result_payload, profile_key)
         if new_key:
             self._profile_key = new_key
         if apply_result is not None and bool(getattr(apply_result, "should_reload", False)):

@@ -7,7 +7,6 @@ from PyQt6.QtGui import QAction
 from qfluentwidgets import MenuAnimationType
 
 from ui.accessibility import set_accessible_description, set_control_accessibility, set_state_text
-from ui.popup_menu_style import suppress_round_menu_hairline
 
 
 def _clean_text(text: object) -> str:
@@ -130,7 +129,6 @@ def install_accessible_combo_menu(combo) -> None:
 
     def _create_accessible_combo_menu(self):
         menu = self._createComboMenu()
-        suppress_round_menu_hairline(menu)
         for index, item in enumerate(getattr(self, "items", []) or []):
             action = QAction(item.icon, item.text, triggered=lambda _checked=False, row=index: self._onItemClicked(row))
             action.setEnabled(item.isEnabled)

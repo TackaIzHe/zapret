@@ -101,14 +101,21 @@ def build_dc_endpoint_overrides():
     return _build_dc_endpoint_overrides()
 
 
-def copy_text(text: str, *, success_title: str, success_content: str, success_log: str = "") -> TelegramProxyActionResult:
-    from PyQt6.QtGui import QGuiApplication
-
+def copy_text(
+    text: str,
+    *,
+    success_title: str,
+    success_content: str,
+    success_log: str = "",
+    clipboard_writer=None,
+) -> TelegramProxyActionResult:
     payload = str(text or "")
-    clipboard = QGuiApplication.clipboard()
-    if clipboard is None or not payload:
+    if clipboard_writer is None or not payload:
         return TelegramProxyActionResult(False, "", "", "")
-    clipboard.setText(payload)
+    try:
+        clipboard_writer(payload)
+    except Exception:
+        return TelegramProxyActionResult(False, "", "", "")
     return TelegramProxyActionResult(
         ok=True,
         log_line=success_log,

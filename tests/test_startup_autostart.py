@@ -417,13 +417,13 @@ class StartupAutostartTests(unittest.TestCase):
             with (
                 patch(
                     "winws_runtime.runtime.preset_launch_service.ensure_required_files_fast",
-                    side_effect=lambda: calls.append("lists") or True,
+                    side_effect=lambda *, active_preset_path="": calls.append(active_preset_path) or True,
                 ),
                 patch("winws_runtime.runners.runner_factory.get_strategy_runner", return_value=runner),
             ):
                 worker.run()
 
-        self.assertEqual(calls, ["lists"])
+        self.assertEqual(calls, [str(preset_path)])
         runner.start_from_preset_file.assert_called_once_with(
             str(preset_path),
             "Пресет",

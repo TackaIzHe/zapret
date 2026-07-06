@@ -10,19 +10,17 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from log.log import log
-from lists.core.layered_runtime import LayeredListPaths, rebuild_layered_list, reset_user_layer
+from lists.core.files import write_text_file
+from lists.core.layered_files import rebuild_profile_list_file
 from lists.core.paths import get_list_base_path, get_list_final_path, get_list_user_path
 
 OTHER_PATH = get_list_final_path("other")
 OTHER_BASE_PATH = get_list_base_path("other")
 OTHER_USER_PATH = get_list_user_path("other")
-OTHER_LIST_PATHS = LayeredListPaths(
-    base_path=OTHER_BASE_PATH,
-    user_path=OTHER_USER_PATH,
-    final_path=OTHER_PATH,
-)
+LISTS_ROOT = Path(OTHER_PATH).parent
 
 
 def _read_effective_entries(path: str) -> list[str]:
@@ -69,15 +67,8 @@ def get_user_domains() -> list[str]:
 def rebuild_other_files() -> bool:
     """Пересобирает other.txt из системной базы и пользовательских правок."""
     try:
-        return rebuild_layered_list(
-            OTHER_LIST_PATHS,
-            get_base_entries=get_base_domains,
-            read_entries=_read_effective_entries,
-            log_func=log,
-            user_error_message="Ошибка подготовки lists/user/other.txt",
-            final_error_label="Ошибка генерации other.txt",
-            require_non_empty=True,
-        )
+        rebuild_profile_list_file(LISTS_ROOT, "other.txt")
+        return bool(_read_effective_entries(OTHER_PATH))
     except Exception as exc:
         log(f"Ошибка rebuild_other_files: {exc}", "ERROR")
         return False
@@ -85,13 +76,15 @@ def rebuild_other_files() -> bool:
 
 def reset_other_user_file() -> bool:
     """Очищает lists/user/other.txt и пересобирает other.txt из системной базы."""
-    return reset_user_layer(
-        OTHER_LIST_PATHS,
-        rebuild_fn=rebuild_other_files,
-        log_func=log,
-        reset_error_label="Ошибка сброса my hostlist",
-        success_message="lists/user/other.txt очищен, other.txt пересобран из системной базы",
-    )
+    try:
+        write_text_file(OTHER_USER_PATH, "")
+        ok = rebuild_other_files()
+        if ok:
+            log("lists/user/other.txt очищен, other.txt пересобран из системной базы", "SUCCESS")
+        return ok
+    except Exception as exc:
+        log(f"Ошибка сброса my hostlist: {exc}", "ERROR")
+        return False
 
 
 def ensure_hostlists_exist() -> bool:

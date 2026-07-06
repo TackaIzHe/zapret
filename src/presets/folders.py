@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from folders.defaults import COMMON_FOLDER_KEY, PINNED_FOLDER_KEY, build_default_preset_folders, classify_preset_folder
-from folders.ordering import build_folder_rows
+from folders.ordering import build_folder_rows, plan_item_move
 from folders.store import FolderLibraryStore, normalize_folder_state
 from settings import store as settings_store
 from settings.mode import ENGINE_WINWS1, ENGINE_WINWS2
@@ -106,9 +106,14 @@ def reset_preset_folders(scope_key: str) -> dict[str, Any] | bool:
     return save_preset_folder_state(scope, default_state)
 
 
-def move_preset_to_folder(scope_key: str, file_name: str, folder_key: str) -> bool:
+def move_preset_to_folder(
+    scope_key: str,
+    file_name: str,
+    folder_key: str,
+    *,
+    live_items: list[dict[str, Any]] | None = None,
+) -> bool:
     state = load_preset_folder_state(scope_key)
-    scope = _normalize_scope(scope_key)
     key = str(file_name or "").strip()
     if not key:
         return False
@@ -116,18 +121,23 @@ def move_preset_to_folder(scope_key: str, file_name: str, folder_key: str) -> bo
     target_folder = str(folder_key or "").strip() or COMMON_FOLDER_KEY
     if not isinstance(folders, dict) or target_folder not in folders:
         target_folder = COMMON_FOLDER_KEY
-    current_meta = state.get("items", {}).get(key) if isinstance(state.get("items"), dict) else None
-    store = FolderLibraryStore(state, default_state=build_default_preset_folders(scope))
-    if not store.set_item_folder(key, target_folder):
-        if isinstance(current_meta, dict):
-            return False
-        next_state = store.to_dict()
-        next_state.setdefault("items", {})[key] = {"folder_key": target_folder, "order": None, "rating": 0}
-    else:
-        next_state = store.to_dict()
-    _move_item_to_end(next_state, key, target_folder)
-    if next_state == normalize_folder_state(state, build_default_preset_folders(scope)):
+    if _plan_and_save_preset_move(
+        scope_key,
+        state,
+        live_items,
+        action="folder",
+        source_key=key,
+        destination_folder_key=target_folder,
+    ):
+        return True
+    # Пресет без meta, уже отображаемый в целевой папке: отображаемый порядок
+    # не меняется (для планировщика это no-op), но привязку нужно
+    # материализовать — иначе повторные операции считают её неизвестной.
+    items = state.get("items") if isinstance(state.get("items"), dict) else {}
+    if key in items:
         return False
+    next_state = normalize_folder_state(state, build_default_preset_folders(_normalize_scope(scope_key)))
+    next_state.setdefault("items", {})[key] = {"folder_key": target_folder, "order": None, "rating": 0}
     save_preset_folder_state(scope_key, next_state)
     return True
 
@@ -138,34 +148,17 @@ def move_preset_before(
     destination_file_name: str,
     *,
     destination_folder_key: str = "",
+    live_items: list[dict[str, Any]] | None = None,
 ) -> bool:
-    state = load_preset_folder_state(scope_key)
-    source = str(source_file_name or "").strip()
-    destination = str(destination_file_name or "").strip()
-    items = state.setdefault("items", {})
-    if not source or not destination or source == destination:
-        return False
-    scope = _normalize_scope(scope_key)
-    before_state = normalize_folder_state(state, build_default_preset_folders(scope))
-    destination_meta = items.setdefault(destination, {"folder_key": "common", "order": None, "rating": 0})
-    folder_key = str(destination_folder_key or destination_meta.get("folder_key") or "common")
-    destination_meta["folder_key"] = folder_key
-    source_meta = items.setdefault(source, {"folder_key": folder_key, "order": None, "rating": 0})
-    source_meta["folder_key"] = folder_key
-    ordered = [
-        key
-        for key, meta in _ordered_item_meta(items)
-        if str(meta.get("folder_key") or "common") == folder_key and key != source
-    ]
-    if destination not in ordered:
-        ordered.append(destination)
-    ordered.insert(ordered.index(destination), source)
-    for index, key in enumerate(ordered):
-        items.setdefault(key, {"folder_key": folder_key, "order": None, "rating": 0})["order"] = index
-    if normalize_folder_state(state, build_default_preset_folders(scope)) == before_state:
-        return False
-    save_preset_folder_state(scope_key, state)
-    return True
+    return _plan_and_save_preset_move(
+        scope_key,
+        load_preset_folder_state(scope_key),
+        live_items,
+        action="before",
+        source_key=str(source_file_name or "").strip(),
+        destination_key=str(destination_file_name or "").strip(),
+        destination_folder_key=str(destination_folder_key or "").strip(),
+    )
 
 
 def move_preset_after(
@@ -174,51 +167,32 @@ def move_preset_after(
     destination_file_name: str,
     *,
     destination_folder_key: str = "",
+    live_items: list[dict[str, Any]] | None = None,
 ) -> bool:
-    state = load_preset_folder_state(scope_key)
-    source = str(source_file_name or "").strip()
-    destination = str(destination_file_name or "").strip()
-    items = state.setdefault("items", {})
-    if not source or not destination or source == destination:
-        return False
-    scope = _normalize_scope(scope_key)
-    before_state = normalize_folder_state(state, build_default_preset_folders(scope))
-    destination_meta = items.setdefault(destination, {"folder_key": "common", "order": None, "rating": 0})
-    folder_key = str(destination_folder_key or destination_meta.get("folder_key") or "common")
-    destination_meta["folder_key"] = folder_key
-    source_meta = items.setdefault(source, {"folder_key": folder_key, "order": None, "rating": 0})
-    source_meta["folder_key"] = folder_key
-    ordered = [
-        key
-        for key, meta in _ordered_item_meta(items)
-        if str(meta.get("folder_key") or "common") == folder_key and key != source
-    ]
-    if destination not in ordered:
-        ordered.append(destination)
-    ordered.insert(ordered.index(destination) + 1, source)
-    for index, key in enumerate(ordered):
-        items.setdefault(key, {"folder_key": folder_key, "order": None, "rating": 0})["order"] = index
-    if normalize_folder_state(state, build_default_preset_folders(scope)) == before_state:
-        return False
-    save_preset_folder_state(scope_key, state)
-    return True
+    return _plan_and_save_preset_move(
+        scope_key,
+        load_preset_folder_state(scope_key),
+        live_items,
+        action="after",
+        source_key=str(source_file_name or "").strip(),
+        destination_key=str(destination_file_name or "").strip(),
+        destination_folder_key=str(destination_folder_key or "").strip(),
+    )
 
 
-def move_preset_to_end(scope_key: str, file_name: str) -> bool:
-    state = load_preset_folder_state(scope_key)
-    source = str(file_name or "").strip()
-    items = state.setdefault("items", {})
-    if not source:
-        return False
-    scope = _normalize_scope(scope_key)
-    before_state = normalize_folder_state(state, build_default_preset_folders(scope))
-    meta = items.setdefault(source, {"folder_key": "common", "order": None, "rating": 0})
-    folder_key = str(meta.get("folder_key") or "common")
-    _move_item_to_end(state, source, folder_key)
-    if normalize_folder_state(state, build_default_preset_folders(scope)) == before_state:
-        return False
-    save_preset_folder_state(scope_key, state)
-    return True
+def move_preset_to_end(
+    scope_key: str,
+    file_name: str,
+    *,
+    live_items: list[dict[str, Any]] | None = None,
+) -> bool:
+    return _plan_and_save_preset_move(
+        scope_key,
+        load_preset_folder_state(scope_key),
+        live_items,
+        action="end",
+        source_key=str(file_name or "").strip(),
+    )
 
 
 def move_preset_by_step(
@@ -250,14 +224,73 @@ def move_preset_by_step(
     if target_index < 0 or target_index >= len(ordered):
         return False
     if step < 0:
-        return move_preset_before(scope_key, source, ordered[target_index])
+        return move_preset_before(scope_key, source, ordered[target_index], live_items=live_items)
 
     without_source = [key for key in ordered if key != source]
     target = ordered[target_index]
     after_target_index = without_source.index(target) + 1
     if after_target_index < len(without_source):
-        return move_preset_before(scope_key, source, without_source[after_target_index])
-    return move_preset_to_end(scope_key, source)
+        return move_preset_before(scope_key, source, without_source[after_target_index], live_items=live_items)
+    return move_preset_to_end(scope_key, source, live_items=live_items)
+
+
+def _plan_and_save_preset_move(
+    scope_key: str,
+    state: dict[str, Any],
+    live_items: list[dict[str, Any]] | None,
+    *,
+    action: str,
+    source_key: str,
+    destination_key: str = "",
+    destination_folder_key: str = "",
+) -> bool:
+    """Единый путь перемещения пресетов: та же база (отображаемый порядок) и
+    тот же планировщик, что у папок профилей."""
+    planned = plan_item_move(
+        state,
+        _live_items_for_plan(state, live_items, required_keys=(source_key, destination_key)),
+        action=action,
+        source_key=source_key,
+        destination_key=destination_key,
+        destination_folder_key=destination_folder_key,
+    )
+    if planned is None:
+        return False
+    save_preset_folder_state(scope_key, planned)
+    return True
+
+
+def _live_items_for_plan(
+    state: dict[str, Any],
+    live_items: list[dict[str, Any]] | None,
+    *,
+    required_keys: tuple[str, ...] = (),
+) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for live_item in live_items or []:
+        key = str(live_item.get("key") or "").strip()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        result.append(live_item)
+    # Пресеты, известные только по meta (нет в live-списке), всё равно должны
+    # участвовать в базе порядка — иначе перенумерация их «перепрыгнет».
+    items = state.get("items") if isinstance(state, dict) else None
+    if isinstance(items, dict):
+        for key in items:
+            clean_key = str(key or "").strip()
+            if clean_key and clean_key not in seen:
+                seen.add(clean_key)
+                result.append({"key": clean_key, "name": clean_key})
+    # Источник/цель перемещения могут ещё не иметь meta (первое действие
+    # с пресетом) — они обязаны присутствовать в базе.
+    for key in required_keys:
+        clean_key = str(key or "").strip()
+        if clean_key and clean_key not in seen:
+            seen.add(clean_key)
+            result.append({"key": clean_key, "name": clean_key})
+    return result
 
 
 def get_preset_item_meta(scope_key: str, file_name: str) -> dict[str, Any]:
@@ -481,35 +514,6 @@ def _ensure_item_meta(
 def _normalize_scope(scope_key: str) -> str:
     scope = str(scope_key or "").strip().lower()
     return scope if scope in {ENGINE_WINWS1, ENGINE_WINWS2} else ENGINE_WINWS2
-
-
-def _move_item_to_end(state: dict[str, Any], file_name: str, folder_key: str) -> None:
-    items = state.setdefault("items", {})
-    folder_items = [
-        key
-        for key, meta in _ordered_item_meta(items)
-        if str(meta.get("folder_key") or "common") == folder_key and key != file_name
-    ]
-    folder_items.append(file_name)
-    for index, key in enumerate(folder_items):
-        meta = items.setdefault(key, {"folder_key": folder_key, "order": None, "rating": 0})
-        meta["folder_key"] = folder_key
-        meta["order"] = index
-
-
-def _ordered_item_meta(items: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
-    normalized: list[tuple[str, dict[str, Any]]] = []
-    for key, meta in items.items():
-        if isinstance(meta, dict):
-            normalized.append((str(key), meta))
-    return sorted(
-        normalized,
-        key=lambda pair: (
-            0 if pair[1].get("order") is not None else 1,
-            int(pair[1].get("order") or 0),
-            str(pair[0]).lower(),
-        ),
-    )
 
 
 __all__ = [

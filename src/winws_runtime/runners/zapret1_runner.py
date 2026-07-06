@@ -308,8 +308,8 @@ class Winws1StrategyRunner(StrategyRunnerBase):
             message = self._format_missing_windows_system_dependency_error(missing_dlls)
             self._last_spawn_exit_code = -1
             self._last_spawn_stderr = message
-            self._set_last_error(message, notify=notify_failure)
-            log(message, "ERROR" if notify_failure else "WARNING")
+            self._set_last_error(message, notify=False)
+            log(message, "WARNING")
             return False
 
         try:
@@ -328,15 +328,15 @@ class Winws1StrategyRunner(StrategyRunnerBase):
             message = "Проверка preset для winws зависла"
             self._last_spawn_exit_code = -1
             self._last_spawn_stderr = message
-            self._set_last_error(message, notify=notify_failure)
-            log(message, "ERROR" if notify_failure else "WARNING")
+            self._set_last_error(message, notify=False)
+            log(message, "WARNING")
             return False
         except Exception as e:
             message = f"Не удалось проверить preset перед запуском: {e}"
             self._last_spawn_exit_code = -1
             self._last_spawn_stderr = message
-            self._set_last_error(message, notify=notify_failure)
-            log(message, "ERROR" if notify_failure else "WARNING")
+            self._set_last_error(message, notify=False)
+            log(message, "WARNING")
             return False
 
         output = self._decode_dry_run_output(completed.stdout, completed.stderr)
@@ -348,11 +348,11 @@ class Winws1StrategyRunner(StrategyRunnerBase):
         first_line = next((line.strip() for line in output.splitlines() if line.strip()), "")
         detail = f": {first_line[:200]}" if first_line else ""
         message = f"Проверка preset для winws не прошла (код {completed.returncode}){detail}"
-        self._set_last_error(message, notify=notify_failure)
+        self._set_last_error(message, notify=False)
         if output:
-            log(f"Winws1 dry-run error: {output[:500]}", "ERROR" if notify_failure else "WARNING")
+            log(f"Winws1 dry-run error: {output[:500]}", "WARNING")
         else:
-            log(message, "ERROR" if notify_failure else "WARNING")
+            log(message, "WARNING")
         return False
 
     @staticmethod
@@ -383,10 +383,16 @@ class Winws1StrategyRunner(StrategyRunnerBase):
         notify_failure: bool = True,
         stable_start_window_seconds: float = 1.0,
     ) -> bool:
+        """One quiet spawn attempt (see Winws2StrategyRunner._spawn_process_locked).
+
+        Failure details go to `_last_spawn_exit_code` / `_last_spawn_stderr` and
+        `last_error`; user-facing publication happens once at the operation level.
+        `notify_failure` is kept for signature compatibility only.
+        """
         if not artifact.launch_args:
             self._set_last_error(
                 "Не удалось подготовить аргументы запуска из preset файла",
-                notify=notify_failure,
+                notify=False,
             )
             return False
 
@@ -430,24 +436,27 @@ class Winws1StrategyRunner(StrategyRunnerBase):
                     "SUCCESS",
                 )
                 self._set_last_error(None)
+                self._start_process_exit_watcher(self.running_process)
                 return True
 
             exit_code = self.running_process.returncode
-            failure_log_level = "ERROR" if notify_failure else "WARNING"
+            # A single failed attempt is not yet a failed operation: retries may
+            # follow, so log at WARNING and defer user-facing publication to
+            # _publish_final_launch_failure at the end of the whole operation.
             stderr_output = self._read_process_startup_output(self.running_process)
             if stderr_output:
-                log(f"Error: {stderr_output[:500]}", failure_log_level)
+                log(f"Error: {stderr_output[:500]}", "WARNING")
 
             self._last_spawn_exit_code = int(exit_code)
             self._last_spawn_stderr = str(stderr_output or "")
-            log(f"Strategy '{strategy_name}' exited immediately (code: {exit_code})", failure_log_level)
+            log(f"Strategy '{strategy_name}' exited immediately (code: {exit_code})", "WARNING")
             self._set_runner_state_locked(
                 PresetRunnerState.FAILED,
                 preset_path=artifact.preset_path,
                 strategy_name=strategy_name,
                 error=str(stderr_output or ""),
                 reason="process_exited_during_start",
-                publish_failure=notify_failure,
+                publish_failure=False,
             )
 
             from winws_runtime.health.process_health_check import diagnose_winws_exit
@@ -455,7 +464,7 @@ class Winws1StrategyRunner(StrategyRunnerBase):
             diag = diagnose_winws_exit(exit_code, stderr_output)
             if diag:
                 prefix = f"[AUTOFIX:{diag.auto_fix}]" if diag.auto_fix else ""
-                self._set_last_error(f"{prefix}{diag.cause}. {diag.solution}", notify=notify_failure)
+                self._set_last_error(f"{prefix}{diag.cause}. {diag.solution}", notify=False)
                 log(f"Diagnosis: {diag.cause} | Fix: {diag.solution} | auto_fix={diag.auto_fix}", "INFO")
             else:
                 first_line = ""
@@ -466,29 +475,28 @@ class Winws1StrategyRunner(StrategyRunnerBase):
                 if first_line:
                     self._set_last_error(
                         f"winws завершился сразу (код {exit_code}): {first_line[:200]}",
-                        notify=notify_failure,
+                        notify=False,
                     )
                 else:
-                    self._set_last_error(f"winws завершился сразу (код {exit_code})", notify=notify_failure)
+                    self._set_last_error(f"winws завершился сразу (код {exit_code})", notify=False)
 
             self._clear_process_state_locked()
             return False
         except Exception as e:
             diagnosis = diagnose_startup_error(e, self.winws_exe)
-            failure_log_level = "ERROR" if notify_failure else "WARNING"
             for line in diagnosis.split('\n'):
-                log(line, failure_log_level)
+                log(line, "WARNING")
             try:
-                self._set_last_error(diagnosis.split("\n")[0].strip(), notify=notify_failure)
+                self._set_last_error(diagnosis.split("\n")[0].strip(), notify=False)
             except Exception:
-                self._set_last_error(None, notify=notify_failure)
+                self._set_last_error(None, notify=False)
             self._set_runner_state_locked(
                 PresetRunnerState.FAILED,
                 preset_path=artifact.preset_path,
                 strategy_name=strategy_name,
                 error=diagnosis.split("\n")[0].strip(),
                 reason="spawn_exception",
-                publish_failure=notify_failure,
+                publish_failure=False,
             )
             import traceback
             log(traceback.format_exc(), "DEBUG")
@@ -596,20 +604,33 @@ class Winws1StrategyRunner(StrategyRunnerBase):
         max_retries = 2
 
         if not os.path.exists(preset_path):
-            log(f"Preset file not found: {preset_path}", "ERROR")
-            self._set_last_error(f"Preset файл не найден: {preset_path}")
+            log(f"Preset file not found: {preset_path}", "WARNING")
+            self._set_last_error(f"Preset файл не найден: {preset_path}", notify=False)
+            self._publish_final_launch_failure(
+                launch_method=ZAPRET1_MODE,
+                fallback_message=f"{EXE_NAME_WINWS1} не запустился",
+            )
             return False
 
         self._set_last_error(None)
 
         with self._state_lock:
-            return self._start_from_preset_file_locked(
+            success = self._start_from_preset_file_locked(
                 preset_path,
                 strategy_name,
                 retry_count=int(_retry_count),
                 max_retries=int(max_retries),
                 stable_start_window_seconds=float(_stable_start_window_seconds),
             )
+
+        if not success:
+            # Single user-facing publication for the whole operation,
+            # after every retry inside the locked flow has been exhausted.
+            self._publish_final_launch_failure(
+                launch_method=ZAPRET1_MODE,
+                fallback_message=f"{EXE_NAME_WINWS1} не запустился",
+            )
+        return success
 
     def _prepare_cleanup_before_spawn_locked(self, *, retry_count: int) -> None:
         if retry_count > 0:
@@ -722,8 +743,9 @@ class Winws1StrategyRunner(StrategyRunnerBase):
                 strategy_name=strategy_name,
                 error=artifact.validation_report,
                 reason="launch_compile_failed",
+                publish_failure=False,
             )
-            self._set_last_error(artifact.validation_report)
+            self._set_last_error(artifact.validation_report, notify=False)
             return False
 
         if self.running_process and self.is_running():
@@ -734,12 +756,12 @@ class Winws1StrategyRunner(StrategyRunnerBase):
         if not self._ensure_windivert_ready_before_spawn():
             self._last_spawn_exit_code = 34
             self._last_spawn_stderr = "windivert: readiness probe failed before spawn"
-            self._set_last_error("WinDivert ещё не готов к открытию фильтра")
+            self._set_last_error("WinDivert ещё не готов к открытию фильтра", notify=False)
             return False
 
         if not os.path.exists(self.winws_exe):
-            log(f"{EXE_NAME_WINWS1} disappeared: {self.winws_exe}", "ERROR")
-            self._set_last_error(f"{EXE_NAME_WINWS1} не найден: {self.winws_exe}")
+            log(f"{EXE_NAME_WINWS1} disappeared: {self.winws_exe}", "WARNING")
+            self._set_last_error(f"{EXE_NAME_WINWS1} не найден: {self.winws_exe}", notify=False)
             return False
 
         if not self._run_preset_dry_run_locked(artifact):

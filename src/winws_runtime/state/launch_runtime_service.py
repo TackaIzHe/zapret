@@ -107,9 +107,19 @@ class LaunchRuntimeService:
             single_source_of_truth="app.state_store.MainWindowStateStore",
         )
 
-    def __init__(self, store: MainWindowStateStore) -> None:
+    def __init__(
+        self,
+        store: MainWindowStateStore,
+        *,
+        unexpected_exit_diagnoser=None,
+    ) -> None:
         self._store_ref = store
         self._tracking_state = _LaunchRuntimeTrackingState()
+        # Optional callable() -> str: builds a user-facing cause when the
+        # tracked process disappears mid-run (post-mortem diagnosis). The
+        # state layer stays runner-agnostic: the callback is wired at
+        # composition time and an empty result keeps the generic message.
+        self._unexpected_exit_diagnoser = unexpected_exit_diagnoser
 
     def _store(self) -> MainWindowStateStore | None:
         store = self._store_ref
@@ -307,7 +317,10 @@ class LaunchRuntimeService:
             if miss_count < 3:
                 return False
             if expected:
-                return self.mark_start_failed(f"{expected} не найден среди активных процессов")
+                message = self._diagnose_unexpected_exit()
+                return self.mark_start_failed(
+                    message or f"{expected} не найден среди активных процессов"
+                )
             return False
 
         if snap.phase == "stopping":
@@ -325,6 +338,15 @@ class LaunchRuntimeService:
             return self.mark_stopped(clear_error=True)
 
         return False
+
+    def _diagnose_unexpected_exit(self) -> str:
+        diagnoser = self._unexpected_exit_diagnoser
+        if not callable(diagnoser):
+            return ""
+        try:
+            return str(diagnoser() or "").strip()
+        except Exception:
+            return ""
 
     def _apply(self, **changes) -> bool:
         store = self._store()

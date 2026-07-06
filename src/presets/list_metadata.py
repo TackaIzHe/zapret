@@ -80,3 +80,27 @@ def read_preset_list_metadata(path: Path) -> dict[str, str]:
             pass
 
     return result
+
+
+def read_preset_stat_metadata(path: Path) -> dict[str, str]:
+    try:
+        return build_preset_stat_metadata(path.stat())
+    except Exception:
+        return {
+            "description": "",
+            "modified_display": "",
+            "icon_color": "",
+        }
+
+
+def build_preset_stat_metadata(stat_result) -> dict[str, str]:
+    result = {
+        "description": "",
+        "modified_display": "",
+        "icon_color": "",
+    }
+    try:
+        result["modified_display"] = _format_file_modified_display(stat_result)
+    except Exception:
+        pass
+    return result

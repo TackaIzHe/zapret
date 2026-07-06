@@ -78,13 +78,13 @@ PAGE_DEPS_BUILDERS: dict[PageName, PageDepsSpec] = {
     PageName.ZAPRET2_USER_PRESETS: PageDepsSpec(
         build_user_presets_page_kwargs,
         features=("presets", "external_actions"),
-        actions=("open_preset_raw_editor",),
+        actions=("open_preset_raw_editor", "notify"),
         include_ui_state_store=True,
     ),
     PageName.ZAPRET1_USER_PRESETS: PageDepsSpec(
         build_user_presets_page_kwargs,
         features=("presets", "external_actions"),
-        actions=("open_preset_raw_editor",),
+        actions=("open_preset_raw_editor", "notify"),
         include_ui_state_store=True,
     ),
     PageName.ZAPRET2_PRESET_RAW_EDITOR: PageDepsSpec(

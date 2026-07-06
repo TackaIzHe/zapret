@@ -8,9 +8,10 @@ from winws_runtime.runtime.process_probe import get_canonical_winws_process_pids
 class ProcessMonitorManager(QObject):
     """Менеджер для мониторинга процессов DPI"""
     
-    def __init__(self, *, observe_process_details):
+    def __init__(self, *, observe_process_details, observe_foreign_processes=None):
         super().__init__()
         self._observe_process_details = observe_process_details
+        self._observe_foreign_processes = observe_foreign_processes
         self.process_monitor = None
         self._retired_process_monitors = []
         self._process_details: dict[str, list[int]] = {}
@@ -19,16 +20,18 @@ class ProcessMonitorManager(QObject):
         """Инициализирует поток мониторинга процесса"""
         if self.process_monitor is not None:
             self._retire_process_monitor(self.process_monitor)
-        
+
         from winws_runtime.monitoring.process_monitor import ProcessMonitorThread
-        
+
         # 2000 ms хватает для обнаружения падения; start/stop режима preset обновляет UI сразу.
         self.process_monitor = ProcessMonitorThread(interval_ms=2000)
-        
+
         if hasattr(self.process_monitor, "processDetailsChanged"):
             self.process_monitor.processDetailsChanged.connect(self._on_process_details_changed)
+        if hasattr(self.process_monitor, "foreignProcessesChanged"):
+            self.process_monitor.foreignProcessesChanged.connect(self._on_foreign_processes_changed)
         self.process_monitor.start()
-        
+
         log("Process Monitor инициализирован", "INFO")
 
     def _apply_process_details(self, details: dict | None) -> dict[str, list[int]]:
@@ -54,6 +57,15 @@ class ProcessMonitorManager(QObject):
             self._apply_process_details(details)
         except Exception as e:
             log(f"Ошибка в _on_process_details_changed: {e}", level="❌ ERROR")
+
+    def _on_foreign_processes_changed(self, foreign: dict):
+        """Передаёт набор посторонних winws-процессов наблюдателю."""
+        if not callable(self._observe_foreign_processes):
+            return
+        try:
+            self._observe_foreign_processes(dict(foreign or {}))
+        except Exception as e:
+            log(f"Ошибка в _on_foreign_processes_changed: {e}", level="DEBUG")
 
     def stop_monitoring(self):
         """Останавливает мониторинг процесса"""

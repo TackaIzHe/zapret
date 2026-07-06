@@ -40,6 +40,25 @@ def set_servers_section_title_accessibility(label) -> None:
     set_state_text(label, text)
 
 
+def rebuild_servers_breadcrumb(breadcrumb, *, tr_fn) -> None:
+    breadcrumb.blockSignals(True)
+    try:
+        breadcrumb.clear()
+        breadcrumb.addItem("about", tr_fn("page.servers.breadcrumb.about", "О программе"))
+        breadcrumb.addItem("servers", tr_fn("page.servers.title", "Серверы"))
+    finally:
+        breadcrumb.blockSignals(False)
+
+
+def handle_servers_breadcrumb_item_changed(key, *, breadcrumb, tr_fn, on_about_clicked) -> None:
+    # Клик по крошке уже удалил из BreadcrumbBar элементы правее выбранного —
+    # восстанавливаем полный путь до навигации, иначе при возврате на страницу
+    # серверов крошка "Серверы" остаётся обрезанной навсегда.
+    rebuild_servers_breadcrumb(breadcrumb, tr_fn=tr_fn)
+    if key == "about":
+        on_about_clicked()
+
+
 @dataclass(slots=True)
 class ServersHeaderWidgets:
     header_widget: QWidget
@@ -57,9 +76,15 @@ def build_servers_header_widgets(*, tr_fn, parent, on_about_clicked) -> ServersH
     header_layout.setSpacing(4)
 
     breadcrumb = BreadcrumbBar(parent)
-    breadcrumb.addItem("about", tr_fn("page.servers.breadcrumb.about", "О программе"))
-    breadcrumb.addItem("servers", tr_fn("page.servers.title", "Серверы"))
-    breadcrumb.currentItemChanged.connect(lambda key: on_about_clicked() if key == "about" else None)
+    rebuild_servers_breadcrumb(breadcrumb, tr_fn=tr_fn)
+    breadcrumb.currentItemChanged.connect(
+        lambda key: handle_servers_breadcrumb_item_changed(
+            key,
+            breadcrumb=breadcrumb,
+            tr_fn=tr_fn,
+            on_about_clicked=on_about_clicked,
+        )
+    )
     header_layout.addWidget(breadcrumb)
 
     page_title_label = TitleLabel(tr_fn("page.servers.title", "Серверы"))

@@ -9,14 +9,13 @@ from log.log import log
 from main.post_startup_gate import bind_startup_gate, is_startup_host_alive
 from main.post_startup_threading import enqueue_subsystem_task, schedule_after
 from settings.dpi.strategy_settings import get_strategy_launch_method
-from settings.mode import ZAPRET1_MODE, ZAPRET2_MODE, is_preset_launch_method, normalize_launch_method
+from settings.mode import ZAPRET2_MODE, is_preset_launch_method, normalize_launch_method
 from ui.navigation_pages import resolve_preset_setup_page_for_method, resolve_profile_setup_page_for_method
 from ui.performance_metrics import log_ui_timing_since
 
 
-DEFAULT_PROFILE_WARMUP_METHODS: tuple[str, ...] = (ZAPRET2_MODE, ZAPRET1_MODE)
+DEFAULT_PROFILE_WARMUP_METHOD = ZAPRET2_MODE
 PROFILE_WARMUP_DELAY_MS = 0
-PROFILE_SECONDARY_WARMUP_DELAY_MS = 1_800
 PRESET_SETUP_PAGE_WARMUP_DELAY_MS = 2_200
 PROFILE_SETUP_PAGE_WARMUP_DELAY_MS = 1_000
 
@@ -25,11 +24,12 @@ class _ProfileWarmupBridge(QObject):
     method_ready = pyqtSignal(str)
 
 
-def profile_warmup_methods(current_method: str) -> tuple[str, ...]:
+def profile_warmup_method(current_method: str) -> str:
+    """Греем только активный метод: неактивный прогреется при переключении режима."""
     current = normalize_launch_method(current_method)
     if not is_preset_launch_method(current):
-        return DEFAULT_PROFILE_WARMUP_METHODS
-    return (current, *(method for method in DEFAULT_PROFILE_WARMUP_METHODS if method != current))
+        return DEFAULT_PROFILE_WARMUP_METHOD
+    return current
 
 
 def install_profile_warmup(
@@ -38,7 +38,6 @@ def install_profile_warmup(
     profile_feature,
     log_startup_metric,
     delay_ms: int = PROFILE_WARMUP_DELAY_MS,
-    secondary_delay_ms: int = PROFILE_SECONDARY_WARMUP_DELAY_MS,
     preset_setup_page_delay_ms: int = PRESET_SETUP_PAGE_WARMUP_DELAY_MS,
     profile_setup_page_delay_ms: int = PROFILE_SETUP_PAGE_WARMUP_DELAY_MS,
     on_profile_warmup_ready: Callable[[str], None] | None = None,
@@ -104,37 +103,25 @@ def install_profile_warmup(
             return
         log_ui_timing_since("warmup", page_name, "ui_page.profile_setup", started_at, important=True)
 
-    def _start_profile_warmup(methods: tuple[str, ...]) -> None:
-        log_startup_metric("StartupProfileWarmupStarted", ", ".join(methods))
-        for method in methods:
-            enqueue_subsystem_task(
-                "profile",
-                f"ProfileWarmup-{method}",
-                lambda method=method: _run_profile_warmup_method(method),
-            )
+    def _start_profile_warmup(method: str) -> None:
+        log_startup_metric("StartupProfileWarmupStarted", method)
+        enqueue_subsystem_task(
+            "profile",
+            f"ProfileWarmup-{method}",
+            lambda: _run_profile_warmup_method(method),
+        )
 
     def _schedule_profile_warmup() -> None:
         if not is_startup_host_alive(startup_host):
             return
         delay = max(0, int(delay_ms))
-        methods = profile_warmup_methods(get_strategy_launch_method())
-        current_methods = methods[:1]
-        secondary_methods = methods[1:]
-        secondary_delay = max(delay, int(secondary_delay_ms))
-        detail = f"{delay}ms current after interactive"
-        if secondary_methods:
-            detail = f"{detail}; {secondary_delay}ms secondary after interactive"
-        log_startup_metric("StartupProfileWarmupQueued", detail)
+        method = profile_warmup_method(get_strategy_launch_method())
+        log_startup_metric("StartupProfileWarmupQueued", f"{delay}ms current after interactive")
         log(f"Фоновый прогрев профилей отложен на {delay}ms", "DEBUG")
         schedule_after(
             delay,
-            lambda: is_startup_host_alive(startup_host) and _start_profile_warmup(current_methods),
+            lambda: is_startup_host_alive(startup_host) and _start_profile_warmup(method),
         )
-        if secondary_methods:
-            schedule_after(
-                secondary_delay,
-                lambda: is_startup_host_alive(startup_host) and _start_profile_warmup(secondary_methods),
-            )
         profile_page_delay = max(delay, int(profile_setup_page_delay_ms))
         log_startup_metric("StartupProfileSetupUiWarmupQueued", f"{profile_page_delay}ms after interactive")
         schedule_after(
@@ -156,11 +143,10 @@ def install_profile_warmup(
 
 
 __all__ = [
-    "DEFAULT_PROFILE_WARMUP_METHODS",
+    "DEFAULT_PROFILE_WARMUP_METHOD",
     "PRESET_SETUP_PAGE_WARMUP_DELAY_MS",
     "PROFILE_SETUP_PAGE_WARMUP_DELAY_MS",
-    "PROFILE_SECONDARY_WARMUP_DELAY_MS",
     "PROFILE_WARMUP_DELAY_MS",
     "install_profile_warmup",
-    "profile_warmup_methods",
+    "profile_warmup_method",
 ]

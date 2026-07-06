@@ -1,6 +1,15 @@
+"""
+Legacy-ярлык автозагрузки ZapretGUI.lnk.
+
+Раньше автозапуск GUI делался ярлыком в папке автозагрузки пользователя,
+но Windows молча игнорирует такие ярлыки для программ с requireAdministrator
+при включённом UAC. Теперь автозапуск идёт через Планировщик задач
+(см. autostart/scheduled_task_api.py), а этот модуль оставлен только для
+поиска и удаления старого ярлыка.
+"""
+
 from __future__ import annotations
 
-import ntpath
 import os
 from pathlib import Path
 
@@ -26,38 +35,6 @@ def get_user_startup_dir() -> Path:
 
 def get_startup_shortcut_path() -> Path:
     return get_user_startup_dir() / STARTUP_SHORTCUT_NAME
-
-
-def _dispatch_shell():
-    import win32com.client
-
-    return win32com.client.Dispatch("WScript.Shell")
-
-
-def create_or_update_startup_shortcut(
-    exe_path: str,
-    *,
-    shortcut_path: str | os.PathLike[str] | None = None,
-) -> bool:
-    """Создаёт ярлык ZapretGUI в автозагрузке текущего пользователя."""
-    exe_path = str(exe_path or "").strip()
-    if not exe_path:
-        log("Startup shortcut create failed: empty exe path", "ERROR")
-        return False
-
-    path = Path(shortcut_path) if shortcut_path is not None else get_startup_shortcut_path()
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        shortcut = _dispatch_shell().CreateShortcut(str(path))
-        shortcut.TargetPath = exe_path
-        shortcut.Arguments = "--tray"
-        shortcut.WorkingDirectory = ntpath.dirname(exe_path) or exe_path
-        shortcut.IconLocation = exe_path
-        shortcut.Save()
-        return True
-    except Exception as exc:
-        log(f"Startup shortcut create failed: {exc}", "WARNING")
-        return False
 
 
 def delete_startup_shortcut(

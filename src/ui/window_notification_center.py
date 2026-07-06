@@ -74,6 +74,8 @@ class WindowNotificationCenter(QObject):
         text = str(message or "").strip()
         if not text:
             return
+        if self._is_handled_global_error_notification(text):
+            return
 
         self.notify_threadsafe(
             advisory_notification(
@@ -88,6 +90,35 @@ class WindowNotificationCenter(QObject):
                 dedupe_window_ms=GLOBAL_ERROR_DEDUPE_WINDOW_MS,
             )
         )
+
+    @staticmethod
+    def _strip_log_level_prefix(text: str) -> str:
+        stripped = str(text or "").strip()
+        if stripped.startswith("[") and "]" in stripped:
+            return stripped.split("]", 1)[1].strip()
+        return stripped
+
+    @classmethod
+    def _is_handled_global_error_notification(cls, message: str) -> bool:
+        """Не дублирует ошибки, для которых уже есть отдельное UI-уведомление."""
+        text = " ".join(cls._strip_log_level_prefix(message).split()).casefold()
+        if not text:
+            return False
+
+        if text.startswith("preset содержит ссылки на отсутствующие файлы"):
+            return True
+        if text.startswith("- --") and "(ожидается:" in text:
+            return True
+        if text.startswith("... и еще ") and "файл" in text:
+            return True
+        if text.startswith("ошибка preset mode switch"):
+            return True
+        if text.startswith("ошибка асинхронного запуска dpi:"):
+            return True
+        if text.startswith("не удалось запустить пресет:"):
+            return True
+
+        return False
 
     def notify_threadsafe(self, payload: dict | None) -> None:
         normalized = normalize_notification_payload(payload)
@@ -776,7 +807,6 @@ class WindowNotificationCenter(QObject):
             title = self._resolve_title(payload)
             content = str(payload.get("content") or "").strip()
             duration = int(payload.get("duration", 12000) or 12000)
-            orient = Qt.Orientation.Vertical if len(content) > 120 or "\n" in content else Qt.Orientation.Horizontal
             position = (
                 _IBPos.TOP
                 if str(payload.get("source") or "").startswith(("launch.", "global_logger"))
@@ -793,13 +823,11 @@ class WindowNotificationCenter(QObject):
             bar = factory(
                 title=title,
                 content=content,
-                orient=orient,
                 isClosable=True,
                 position=position,
                 duration=duration,
                 parent=self._parent,
             )
-            self._apply_infobar_layout_limits(bar, content=content)
             self._set_infobar_accessibility(bar, level=level, title=title, content=content)
 
             for action in payload.get("buttons") or []:
@@ -827,39 +855,6 @@ class WindowNotificationCenter(QObject):
                 bar.addWidget(btn)
         except Exception as e:
             log(f"Не удалось показать InfoBar уведомление: {e}", "DEBUG")
-
-    def _apply_infobar_layout_limits(self, bar, *, content: str) -> None:
-        if bar is None:
-            return
-
-        try:
-            parent_width = 0
-            width_fn = getattr(self._parent, "width", None)
-            if callable(width_fn):
-                parent_width = int(width_fn() or 0)
-            max_width = 760
-            if parent_width > 0:
-                max_width = max(420, min(max_width, parent_width - 96))
-
-            if callable(getattr(bar, "setMaximumWidth", None)):
-                bar.setMaximumWidth(max_width)
-            if callable(getattr(bar, "setMinimumWidth", None)):
-                bar.setMinimumWidth(min(420, max_width))
-
-            for label_name in ("contentLabel", "titleLabel"):
-                label = getattr(bar, label_name, None)
-                if label is None:
-                    continue
-                if callable(getattr(label, "setWordWrap", None)):
-                    label.setWordWrap(True)
-                if callable(getattr(label, "setMaximumWidth", None)):
-                    label.setMaximumWidth(max(260, max_width - 96))
-
-            text = str(content or "")
-            if len(text) > 160 and callable(getattr(bar, "adjustSize", None)):
-                bar.adjustSize()
-        except Exception:
-            return
 
     def _set_infobar_accessibility(self, bar, *, level: str, title: str, content: str) -> None:
         level_text = {

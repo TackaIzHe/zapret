@@ -14,7 +14,6 @@ from PyQt6.QtWidgets import QApplication, QMenu, QMessageBox, QWidget
 from qfluentwidgets import RoundMenu, Action, FluentIcon
 
 from ui.message_box_accessibility import set_message_box_button_accessibility
-from ui.popup_menu_style import suppress_round_menu_hairline
 
 try:
     from log.log import log
@@ -165,15 +164,51 @@ if sys.platform == "win32":
         ]
 
 
+    kernel32.GetModuleHandleW.argtypes = [wintypes.LPCWSTR]
+    kernel32.GetModuleHandleW.restype = wintypes.HMODULE
     user32.CreatePopupMenu.restype = wintypes.HMENU
     user32.TrackPopupMenu.restype = wintypes.UINT
     user32.RegisterWindowMessageW.restype = wintypes.UINT
+    user32.LoadImageW.argtypes = [
+        wintypes.HINSTANCE,
+        wintypes.LPCWSTR,
+        wintypes.UINT,
+        ctypes.c_int,
+        ctypes.c_int,
+        wintypes.UINT,
+    ]
+    user32.LoadImageW.restype = wintypes.HANDLE
+    user32.LoadIconW.argtypes = [wintypes.HINSTANCE, wintypes.LPCWSTR]
+    user32.LoadIconW.restype = wintypes.HICON
+    user32.DestroyIcon.argtypes = [wintypes.HICON]
+    user32.DestroyIcon.restype = wintypes.BOOL
+    user32.RegisterClassExW.argtypes = [ctypes.POINTER(WNDCLASSEXW)]
+    user32.RegisterClassExW.restype = wintypes.ATOM
+    user32.CreateWindowExW.argtypes = [
+        wintypes.DWORD,
+        wintypes.LPCWSTR,
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        wintypes.HWND,
+        wintypes.HMENU,
+        wintypes.HINSTANCE,
+        wintypes.LPVOID,
+    ]
+    user32.CreateWindowExW.restype = wintypes.HWND
+    user32.DestroyWindow.argtypes = [wintypes.HWND]
+    user32.DestroyWindow.restype = wintypes.BOOL
     user32.DefWindowProcW.argtypes = [wintypes.HWND, wintypes.UINT, WPARAM, LPARAM]
     user32.DefWindowProcW.restype = LRESULT
     user32.GetAsyncKeyState.argtypes = [ctypes.c_int]
     user32.GetAsyncKeyState.restype = ctypes.c_short
     user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, WPARAM, LPARAM]
     user32.PostMessageW.restype = wintypes.BOOL
+    shell32.Shell_NotifyIconW.argtypes = [wintypes.DWORD, ctypes.POINTER(NOTIFYICONDATAW)]
+    shell32.Shell_NotifyIconW.restype = wintypes.BOOL
 
 
 def _make_int_resource(identifier: int):
@@ -644,7 +679,6 @@ class SystemTrayManager:
 
     def _apply_menu_style(self, menu: QMenu):
         if isinstance(menu, RoundMenu):
-            suppress_round_menu_hairline(menu)
             return
 
         try:

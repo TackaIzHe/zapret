@@ -44,6 +44,20 @@ class ZapretFluentWindow(FluentWindow):
         # Theme mode (DARK/LIGHT) is set in main.py via _sync_theme_mode_to_qfluent()
         # before the window is created, so no hardcoded setTheme(DARK) here.
 
+    def _updateStackedBackground(self) -> None:  # noqa: N802 (qfluentwidgets override)
+        """Чинит сломанный гвард библиотеки: там `bool(...) == None` всегда ложь,
+        из-за чего setStyle (полная переполировка стека, ~180ms) гонялся на каждом
+        переключении страницы. Нормализуем обе стороны к bool.
+        """
+        current = self.stackedWidget.currentWidget()
+        if current is None:
+            return
+        is_transparent = bool(current.property("isStackedTransparent"))
+        if bool(self.stackedWidget.property("isTransparent")) == is_transparent:
+            return
+        self.stackedWidget.setProperty("isTransparent", is_transparent)
+        self.stackedWidget.setStyle(QApplication.style())
+
     def _schedule_app_icon_after_interactive(self) -> None:
         try:
             self.startup_interactive_ready.connect(lambda *_args: QTimer.singleShot(0, self._apply_app_icon_deferred))
@@ -117,19 +131,6 @@ class ZapretFluentWindow(FluentWindow):
     # ------------------------------------------------------------------
     # Navigation helpers
     # ------------------------------------------------------------------
-
-    def addPageToNav(self, page: QWidget, icon, text: str,
-                     position=NavigationItemPosition.SCROLL,
-                     parent=None, is_transparent=True):
-        """Wrapper for addSubInterface that ensures objectName is set."""
-        if not page.objectName():
-            page.setObjectName(page.__class__.__name__)
-        return self.addSubInterface(
-            page, icon, text,
-            position=position,
-            parent=parent,
-            isTransparent=is_transparent,
-        )
 
     def addSeparatorToNav(self):
         """Add a separator line in the navigation."""

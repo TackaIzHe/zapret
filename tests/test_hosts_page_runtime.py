@@ -594,6 +594,28 @@ class HostsPageRuntimeTests(unittest.TestCase):
         page._start_services_catalog_worker.assert_not_called()
         self.assertEqual(page._catalog_sig, ("hosts_catalog", 1, 2))
 
+    def test_hosts_page_builds_services_ui_hidden_when_catalog_worker_finishes_before_first_open(self) -> None:
+        from hosts.ui.page import HostsPage
+
+        catalog_plan = SimpleNamespace(selection_changed=False, new_selection={})
+        page = HostsPage.__new__(HostsPage)
+        page._cleanup_in_progress = False
+        page._services_catalog_runtime = SimpleNamespace(is_current=Mock(return_value=True))
+        page._catalog_sig = None
+        page._services_catalog_plan = None
+        page._services_ui_mounted = False
+        page.isVisible = Mock(return_value=False)
+        page._build_services_selectors = Mock(side_effect=lambda plan, **_kwargs: setattr(page, "_services_catalog_plan", plan))
+        page._update_ui = Mock()
+        page._request_user_selection_save = Mock()
+
+        HostsPage._on_services_catalog_loaded(page, 3, catalog_plan, ("hosts_catalog", 1, 2))
+
+        page._build_services_selectors.assert_called_once_with(catalog_plan, sync_selection=True)
+        page._update_ui.assert_not_called()
+        self.assertIs(page._services_catalog_plan, catalog_plan)
+        self.assertEqual(page._catalog_sig, ("hosts_catalog", 1, 2))
+
     def test_hosts_page_builds_large_dns_service_list_as_one_matrix(self) -> None:
         import hosts.ui.page as hosts_page
         from PyQt6.QtWidgets import QApplication

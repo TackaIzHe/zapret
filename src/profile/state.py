@@ -51,7 +51,9 @@ class ProfileListItem:
     group: str
     group_name: str
     order: int
-    order_is_manual: bool = False
+    # Исходный порядок из файла пресета/шаблонов — вход резолвера порядка.
+    source_order: int = 0
+    group_rank: int = 10_000
     group_collapsed: bool = False
     user_profile_id: str = ""
     profile_name: str = ""

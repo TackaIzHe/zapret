@@ -368,7 +368,14 @@ class PresetRuntimeCoordinator(QObject):
         try:
             store = self._ui_state_store
             if store is not None:
-                store.bump_active_preset_revision()
+                last_key = self._last_active_preset_key
+                file_name = str(last_key[1] or "") if isinstance(last_key, tuple) and len(last_key) > 1 else ""
+                try:
+                    store.bump_active_preset_revision(file_name=file_name)
+                except TypeError as exc:
+                    if "file_name" not in str(exc):
+                        raise
+                    store.bump_active_preset_revision()
         except Exception:
             pass
 
@@ -407,6 +414,11 @@ class PresetRuntimeCoordinator(QObject):
         if runtime.is_running():
             self._active_preset_file_watcher_setup_pending = True
             return
+        # Свежий прямой старт делает возможный старый "нужен перезапуск" флаг
+        # неактуальным: без сброса результат нового worker-а был бы отброшен
+        # в _on_active_preset_watch_path_loaded, а перезапуск ушёл бы уже без
+        # pending и повесил watcher на устаревший путь.
+        self._active_preset_file_watcher_setup_pending = False
         self._start_active_preset_watch_worker()
 
     def _start_active_preset_watch_worker(self) -> None:
@@ -414,6 +426,10 @@ class PresetRuntimeCoordinator(QObject):
         if runtime is None:
             runtime = OneShotWorkerRuntime()
             self._active_preset_watch_runtime = runtime
+        if runtime.is_running():
+            # Уже работающий worker запущен более поздним прямым стартом и
+            # несёт самый свежий pending — отложенный перезапуск не нужен.
+            return
         pending = self._pending_active_preset_watch
         self._pending_active_preset_watch = None
         try:

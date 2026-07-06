@@ -6,6 +6,7 @@ from config.build_info import APP_VERSION, CHANNEL
 
 
 from updater.ui.main_build import (
+    rebuild_servers_breadcrumb,
     set_active_server_legend_accessibility,
     set_servers_page_title_accessibility,
     set_servers_section_title_accessibility,
@@ -46,13 +47,7 @@ def apply_servers_page_language(
     update_card.set_ui_language(ui_language)
     changelog_card.set_ui_language(ui_language)
 
-    breadcrumb.blockSignals(True)
-    try:
-        breadcrumb.clear()
-        breadcrumb.addItem("about", tr_fn("page.servers.breadcrumb.about", "О программе"))
-        breadcrumb.addItem("servers", tr_fn("page.servers.title", "Серверы"))
-    finally:
-        breadcrumb.blockSignals(False)
+    rebuild_servers_breadcrumb(breadcrumb, tr_fn=tr_fn)
     page_title_label.setText(tr_fn("page.servers.title", "Серверы"))
     servers_title_label.setText(tr_fn("page.servers.section.update_servers", "Серверы обновлений"))
     legend_active_label.setText(tr_fn("page.servers.legend.active", "⭐ активный"))

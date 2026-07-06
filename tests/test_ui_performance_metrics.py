@@ -12,9 +12,9 @@ from app.page_names import PageName
 
 class UiPerformanceMetricsTests(unittest.TestCase):
     def test_ui_metric_format_is_single_central_format(self) -> None:
-        from ui.performance_metrics import UI_PERFORMANCE_LOG_LEVEL, log_ui_timing
+        from app.performance_metrics import UI_PERFORMANCE_LOG_LEVEL, log_ui_timing
 
-        with patch("ui.performance_metrics.log") as logger:
+        with patch("app.performance_metrics.log") as logger:
             log_ui_timing(
                 "page",
                 PageName.ZAPRET2_PRESET_SETUP,
@@ -58,6 +58,7 @@ class UiPerformanceMetricsTests(unittest.TestCase):
         page._page_open_metric_started_at = 10.0
         page._page_open_metric_first_show = True
         page._resolve_page_budget = Mock(return_value=200)
+        page.isVisible = Mock(return_value=True)
 
         with (
             patch("ui.pages.base_page._time.perf_counter", return_value=10.125),
@@ -74,6 +75,23 @@ class UiPerformanceMetricsTests(unittest.TestCase):
             important=True,
             threshold_ms=0,
         )
+
+    def test_base_page_skips_content_ready_metric_when_hidden(self) -> None:
+        """Готовность, пришедшая после ухода со страницы, не должна логироваться
+        (артефакт вида content.ready 28067ms)."""
+        from ui.pages.base_page import BasePage
+
+        page = BasePage.__new__(BasePage)
+        page._page_registry_name = PageName.ZAPRET2_PRESET_SETUP
+        page._page_open_metric_started_at = 10.0
+        page._page_open_metric_first_show = True
+        page._resolve_page_budget = Mock(return_value=200)
+        page.isVisible = Mock(return_value=False)
+
+        with patch("ui.pages.base_page.log_page_timing") as metric:
+            BasePage.mark_content_ready(page, extra="late worker")
+
+        metric.assert_not_called()
 
     def test_base_page_marks_content_ready_after_target_paint_event(self) -> None:
         from ui.pages.base_page import BasePage
@@ -101,6 +119,7 @@ class UiPerformanceMetricsTests(unittest.TestCase):
         page._content_paint_metric_targets = {}
         page._content_paint_metric_next_token = 0
         page._resolve_page_budget = Mock(return_value=200)
+        page.isVisible = Mock(return_value=True)
 
         with (
             patch("ui.pages.base_page.QTimer.singleShot") as single_shot,

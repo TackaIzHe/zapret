@@ -4,12 +4,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from PyQt6.QtCore import QEvent, Qt, QTimer
-from PyQt6.QtGui import QTextCursor, QTextDocument
-from PyQt6.QtWidgets import QApplication, QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget, QFileDialog
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtWidgets import QApplication, QHBoxLayout, QVBoxLayout, QWidget, QFileDialog
 
 from ui.pages.base_page import BasePage
-from ui.fluent_widgets import set_tooltip, style_semantic_caption_label
+from ui.fluent_widgets import style_semantic_caption_label
 from ui.theme import get_themed_qta_icon
 from ui.accessibility import (
     remove_line_edit_buttons_from_tab_order,
@@ -22,7 +21,7 @@ from ui.latest_value_worker_state import LatestValueWorkerState
 from ui.message_box_accessibility import set_message_box_button_accessibility
 from ui.queued_worker_state import QueuedWorkerState
 from ui.popup_menu import exec_popup_menu
-from ui.smooth_scroll import apply_editor_smooth_scroll_preference
+from presets.ui.common.raw_preset_text_editor import RawPresetTextEditor
 from presets.ui.common.preset_status_bar import (
     PresetStatusBar,
     build_runtime_preset_status_plan,
@@ -37,14 +36,15 @@ from qfluentwidgets import (
     LineEdit,
     MessageBox,
     MessageBoxBase,
-    PlainTextEdit,
     PushButton,
     RoundMenu,
-    SearchLineEdit,
     SimpleCardWidget,
     StrongBodyLabel,
     TransparentToolButton,
 )
+
+
+EXTERNAL_RAW_PRESET_RELOAD_COALESCE_MS = 150
 
 
 def _fluent_icon(name: str):
@@ -346,23 +346,30 @@ class PresetRawEditorPage(BasePage):
         self._create_raw_preset_save_worker_fn = create_raw_preset_save_worker
         self._create_raw_preset_activate_worker_fn = create_raw_preset_activate_worker
         self._create_raw_preset_action_worker_fn = create_raw_preset_action_worker
-        self._save_timer = QTimer(self)
-        self._save_timer.setSingleShot(True)
-        self._save_timer.timeout.connect(self._save_file)
-        self._commit_timer = QTimer(self)
-        self._commit_timer.setSingleShot(True)
-        self._commit_timer.timeout.connect(self._commit_pending_content_change)
+        self._raw_text_editor = RawPresetTextEditor(
+            self,
+            request_save=lambda *, publish_content_changed=False: self._save_file(
+                publish_content_changed=bool(publish_content_changed),
+            ),
+            set_footer=self._set_footer,
+            cleanup_in_progress=lambda: bool(self.__dict__.get("_cleanup_in_progress", False))
+            or bool(self.__dict__.get("_is_loading", False)),
+        )
+        self._sync_raw_text_editor_state_from_legacy()
+        self.searchInput = self._raw_text_editor.search_input
+        self.editor = self._raw_text_editor.editor
+        self._save_timer = self._raw_text_editor.save_timer
+        self._commit_timer = self._raw_text_editor.commit_timer
 
         self._build_ui()
         self.editor.installEventFilter(self)
+        self.searchInput.installEventFilter(self)
         try:
             self.editor.viewport().installEventFilter(self)
         except Exception:
             pass
-        app = QApplication.instance()
-        if app is not None:
-            app.installEventFilter(self)
-            self._app_event_filter_installed = True
+        # App-wide фильтр (коммит правок по клику вне редактора) ставится только
+        # пока страница видима — см. on_page_activated/on_page_hidden.
         self.bind_ui_state_store(ui_state_store)
 
     def _raw_worker_runtime(self, attr: str) -> OneShotWorkerRuntime:
@@ -371,6 +378,102 @@ class PresetRawEditorPage(BasePage):
             runtime = OneShotWorkerRuntime()
             setattr(self, attr, runtime)
         return runtime
+
+    _RAW_TEXT_STATE_LEGACY_KEYS = (
+        ("_raw_editor_text_snapshot", "text_snapshot", None),
+        ("_raw_preset_content_loaded_once", "content_loaded_once", False),
+        ("_raw_preset_content_dirty", "content_dirty", True),
+        ("_raw_editor_text_cache_update_suspended", "cache_update_suspended", False),
+        ("_raw_editor_show_scheduled", "show_scheduled", False),
+        ("_content_publish_pending", "content_publish_pending", False),
+    )
+
+    def _sync_raw_text_editor_state_from_legacy(self) -> None:
+        """Переносит состояние в редактор и удаляет legacy-копии.
+
+        После этого единственный владелец состояния текста — RawPresetTextEditor;
+        properties ниже только делегируют (dict-ветка остаётся для окна до
+        создания редактора и для тестов, конструирующих страницу через __new__).
+        """
+        text_editor = self.__dict__.get("_raw_text_editor")
+        if text_editor is None:
+            return
+        for legacy_key, editor_attr, default in self._RAW_TEXT_STATE_LEGACY_KEYS:
+            if legacy_key in self.__dict__:
+                value = self.__dict__.pop(legacy_key)
+            else:
+                value = default
+            if editor_attr == "text_snapshot":
+                setattr(text_editor, editor_attr, None if value is None else str(value))
+            else:
+                setattr(text_editor, editor_attr, bool(value))
+
+    def _raw_text_state_get(self, legacy_key: str, editor_attr: str, default):
+        text_editor = self.__dict__.get("_raw_text_editor")
+        if text_editor is not None:
+            return getattr(text_editor, editor_attr)
+        return self.__dict__.get(legacy_key, default)
+
+    def _raw_text_state_set(self, legacy_key: str, editor_attr: str, value) -> None:
+        text_editor = self.__dict__.get("_raw_text_editor")
+        if text_editor is not None:
+            setattr(text_editor, editor_attr, value)
+            return
+        self.__dict__[legacy_key] = value
+
+    @property
+    def _raw_editor_text_snapshot(self):
+        return self._raw_text_state_get("_raw_editor_text_snapshot", "text_snapshot", None)
+
+    @_raw_editor_text_snapshot.setter
+    def _raw_editor_text_snapshot(self, value) -> None:
+        self._raw_text_state_set(
+            "_raw_editor_text_snapshot",
+            "text_snapshot",
+            None if value is None else str(value),
+        )
+
+    @property
+    def _raw_preset_content_loaded_once(self) -> bool:
+        return bool(self._raw_text_state_get("_raw_preset_content_loaded_once", "content_loaded_once", False))
+
+    @_raw_preset_content_loaded_once.setter
+    def _raw_preset_content_loaded_once(self, value: bool) -> None:
+        self._raw_text_state_set("_raw_preset_content_loaded_once", "content_loaded_once", bool(value))
+
+    @property
+    def _raw_preset_content_dirty(self) -> bool:
+        return bool(self._raw_text_state_get("_raw_preset_content_dirty", "content_dirty", True))
+
+    @_raw_preset_content_dirty.setter
+    def _raw_preset_content_dirty(self, value: bool) -> None:
+        self._raw_text_state_set("_raw_preset_content_dirty", "content_dirty", bool(value))
+
+    @property
+    def _raw_editor_text_cache_update_suspended(self) -> bool:
+        return bool(
+            self._raw_text_state_get("_raw_editor_text_cache_update_suspended", "cache_update_suspended", False)
+        )
+
+    @_raw_editor_text_cache_update_suspended.setter
+    def _raw_editor_text_cache_update_suspended(self, value: bool) -> None:
+        self._raw_text_state_set("_raw_editor_text_cache_update_suspended", "cache_update_suspended", bool(value))
+
+    @property
+    def _raw_editor_show_scheduled(self) -> bool:
+        return bool(self._raw_text_state_get("_raw_editor_show_scheduled", "show_scheduled", False))
+
+    @_raw_editor_show_scheduled.setter
+    def _raw_editor_show_scheduled(self, value: bool) -> None:
+        self._raw_text_state_set("_raw_editor_show_scheduled", "show_scheduled", bool(value))
+
+    @property
+    def _content_publish_pending(self) -> bool:
+        return bool(self._raw_text_state_get("_content_publish_pending", "content_publish_pending", False))
+
+    @_content_publish_pending.setter
+    def _content_publish_pending(self, value: bool) -> None:
+        self._raw_text_state_set("_content_publish_pending", "content_publish_pending", bool(value))
 
     def _raw_worker_runtime_is_running(self, attr: str) -> bool:
         runtime = self.__dict__.get(attr)
@@ -538,14 +641,40 @@ class PresetRawEditorPage(BasePage):
         return self._title
 
     def on_page_activated(self) -> None:
-        if self.__dict__.get("_raw_preset_content_loaded_once", False):
+        self._install_app_event_filter()
+        if self._raw_preset_content_loaded_once:
             self._schedule_raw_editor_show_after_page_switch()
 
     def on_page_hidden(self) -> None:
         self._commit_pending_content_change()
+        self._remove_app_event_filter()
         self._hide_raw_editor_for_next_switch()
 
+    def _install_app_event_filter(self) -> None:
+        if bool(self.__dict__.get("_app_event_filter_installed", False)):
+            return
+        app = QApplication.instance()
+        if app is None:
+            return
+        app.installEventFilter(self)
+        self._app_event_filter_installed = True
+
+    def _remove_app_event_filter(self) -> None:
+        if not bool(self.__dict__.get("_app_event_filter_installed", False)):
+            return
+        app = QApplication.instance()
+        if app is not None:
+            try:
+                app.removeEventFilter(self)
+            except Exception:
+                pass
+        self._app_event_filter_installed = False
+
     def _hide_raw_editor_for_next_switch(self) -> None:
+        text_editor = self.__dict__.get("_raw_text_editor")
+        if text_editor is not None:
+            text_editor.hide_for_next_switch()
+            return
         editor = self.__dict__.get("editor")
         if editor is None:
             return
@@ -556,11 +685,15 @@ class PresetRawEditorPage(BasePage):
         self._raw_editor_show_scheduled = False
 
     def _schedule_raw_editor_show_after_page_switch(self) -> None:
+        text_editor = self.__dict__.get("_raw_text_editor")
+        if text_editor is not None:
+            text_editor.schedule_show_after_page_switch()
+            return
         if self.__dict__.get("_cleanup_in_progress", False):
             return
         if self.__dict__.get("editor") is None:
             return
-        if self.__dict__.get("_raw_editor_show_scheduled", False):
+        if self._raw_editor_show_scheduled:
             return
         self._raw_editor_show_scheduled = True
         try:
@@ -569,6 +702,10 @@ class PresetRawEditorPage(BasePage):
             self._show_raw_editor_after_page_switch()
 
     def _show_raw_editor_after_page_switch(self) -> None:
+        text_editor = self.__dict__.get("_raw_text_editor")
+        if text_editor is not None:
+            text_editor.show_after_page_switch()
+            return
         self._raw_editor_show_scheduled = False
         if self.__dict__.get("_cleanup_in_progress", False):
             return
@@ -617,7 +754,17 @@ class PresetRawEditorPage(BasePage):
             self._breadcrumb_parent_text(),
             self._breadcrumb_current_text(),
         )
-        if self.__dict__.get("_last_breadcrumb_key") == breadcrumb_key:
+        # Совпадения ключа недостаточно: клик по крошке заставляет BreadcrumbBar
+        # физически удалить элементы правее выбранного, а ключ при этом не
+        # меняется — без проверки count() крошки пропадали бы навсегда.
+        try:
+            breadcrumb_count = int(breadcrumb.count())
+        except Exception:
+            breadcrumb_count = 0
+        if (
+            self.__dict__.get("_last_breadcrumb_key") == breadcrumb_key
+            and breadcrumb_count == len(breadcrumb_key)
+        ):
             return
         try:
             breadcrumb.blockSignals(True)
@@ -764,42 +911,9 @@ class PresetRawEditorPage(BasePage):
         actions_layout.addWidget(self.runtimeToggleButton)
 
         actions_layout.addStretch(1)
-        self.searchInput = SearchLineEdit(self)
-        self.searchInput.setPlaceholderText("Поиск по тексту пресета")
-        set_tooltip(self.searchInput, "Найти строку в тексте открытого пресета.")
-        search_input_name = "Поиск по тексту пресета"
-        set_control_accessibility(
-            self.searchInput,
-            name=search_input_name,
-            description=(
-                "Введите текст, чтобы найти строку внутри открытого пресета. "
-                "После ввода перейдите к тексту пресета клавишей Tab или нажмите Стрелка вниз."
-            ),
-        )
-        set_state_text(self.searchInput, search_input_name)
-        self.searchInput.setClearButtonEnabled(True)
-        remove_line_edit_buttons_from_tab_order(self.searchInput)
-        self.searchInput.setFixedHeight(34)
-        self.searchInput.setMinimumWidth(320)
-        self.searchInput.setMaximumWidth(460)
-        self.searchInput.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.searchInput.setProperty("noDrag", True)
-        self.searchInput.textChanged.connect(self._search_preset_text)
-        self.searchInput.installEventFilter(self)
         actions_layout.addWidget(self.searchInput, 1)
         self.add_widget(actions)
 
-        self.editor = PlainTextEdit(self)
-        editor_name = "Текст открытого пресета"
-        set_control_accessibility(
-            self.editor,
-            name=editor_name,
-            description="Здесь можно читать и редактировать содержимое открытого пресета.",
-        )
-        set_state_text(self.editor, editor_name)
-        apply_editor_smooth_scroll_preference(self.editor)
-        self.editor.document().contentsChange.connect(self._on_raw_editor_contents_changed)
-        self.editor.textChanged.connect(self._on_text_changed)
         self.add_widget(self.editor, 1)
 
         self.footerStatusBar = PresetStatusBar(self)
@@ -827,9 +941,9 @@ class PresetRawEditorPage(BasePage):
         requested = str(file_name or "").strip().lower()
         if not current or not requested or current != requested:
             return False
-        if not bool(self.__dict__.get("_raw_preset_content_loaded_once", False)):
+        if not self._raw_preset_content_loaded_once:
             return False
-        return not bool(self.__dict__.get("_raw_preset_content_dirty", True))
+        return not self._raw_preset_content_dirty
 
     def handle_page_command(self, command: str, payload: dict) -> bool:
         if command == "open_raw_preset":
@@ -935,9 +1049,10 @@ class PresetRawEditorPage(BasePage):
             parent=parent,
         )
 
-    def _request_raw_preset_text(self) -> None:
+    def _request_raw_preset_text(self, *, reason: str = "normal") -> None:
         runtime = self._raw_worker_runtime("_raw_load_runtime")
         state = self._raw_load_state_obj()
+        self.__dict__["_raw_load_request_reason"] = str(reason or "normal").strip() or "normal"
         if state.is_busy():
             self._raw_load_request_id += 1
             state.pending = True
@@ -963,6 +1078,10 @@ class PresetRawEditorPage(BasePage):
     def _on_raw_preset_text_loaded(self, request_id: int, result) -> None:
         if request_id != self._raw_load_request_id:
             return
+        self.__dict__["_pending_raw_text_apply_reason"] = self.__dict__.get(
+            "_raw_load_request_reason",
+            "normal",
+        )
         self._schedule_raw_preset_text_apply(result)
 
     def _schedule_raw_preset_text_apply(self, result) -> None:
@@ -995,6 +1114,16 @@ class PresetRawEditorPage(BasePage):
             getattr(result, "active_file_name", ""),
             getattr(result, "active_name", ""),
         )
+        load_reason = str(self.__dict__.pop("_pending_raw_text_apply_reason", "") or "").strip()
+        if (
+            load_reason == "external"
+            and self.__dict__.get("_raw_text_editor") is not None
+            and self._raw_text_editor.has_local_unpublished_changes()
+        ):
+            self._raw_text_editor.report_external_update_skipped()
+            self._is_loading = False
+            self._refresh_header()
+            return
         self._apply_raw_editor_text(result.text)
         self._raw_preset_content_loaded_once = True
         self._raw_preset_content_dirty = False
@@ -1003,16 +1132,21 @@ class PresetRawEditorPage(BasePage):
         self._refresh_header()
         self._schedule_raw_editor_show_after_page_switch()
 
-    def _apply_raw_editor_text(self, text: str) -> None:
+    def _apply_raw_editor_text(self, text: str) -> bool:
+        text_editor = self.__dict__.get("_raw_text_editor")
+        if text_editor is not None:
+            return bool(text_editor.apply_loaded_text(text))
         value = str(text or "")
-        if self.__dict__.get("_raw_editor_text_snapshot") == value:
-            return
-        self._raw_editor_text_cache_update_suspended = True
-        try:
-            self.editor.setPlainText(value)
-        finally:
-            self._raw_editor_text_cache_update_suspended = False
+        if self._current_raw_editor_text() == value:
+            return False
+        editor = self.__dict__.get("editor")
+        if editor is not None and callable(getattr(editor, "setPlainText", None)):
+            try:
+                editor.setPlainText(value)
+            except Exception:
+                pass
         self._raw_editor_text_snapshot = value
+        return True
 
     def _apply_raw_preset_active_state(self, file_name: str, name: str = "") -> None:
         active_file_name = str(file_name or "").strip()
@@ -1116,24 +1250,19 @@ class PresetRawEditorPage(BasePage):
         self._raw_load_state_obj().start_scheduled = bool(value)
 
     def _search_preset_text(self, text: str) -> None:
-        editor = getattr(self, "editor", None)
-        if editor is None:
-            return
-        query = str(text or "")
-        cursor = editor.textCursor()
-        if not query.strip():
-            cursor.clearSelection()
-            editor.setTextCursor(cursor)
-            return
-
-        cursor.movePosition(QTextCursor.MoveOperation.Start)
-        editor.setTextCursor(cursor)
-        editor.find(query, QTextDocument.FindFlag(0))
+        text_editor = self.__dict__.get("_raw_text_editor")
+        if text_editor is not None:
+            text_editor.search_text(text)
 
     def _on_text_changed(self) -> None:
-        if self._cleanup_in_progress:
+        text_editor = self.__dict__.get("_raw_text_editor")
+        if text_editor is not None:
+            text_editor.on_text_changed()
             return
-        if self._is_loading:
+        # Правка инвалидирует мемо: текст перечитывается из документа целиком
+        # при следующем обращении (_current_raw_editor_text).
+        self._raw_editor_text_snapshot = None
+        if self._cleanup_in_progress or self._is_loading:
             return
         self._raw_preset_content_dirty = True
         self._content_publish_pending = True
@@ -1142,31 +1271,29 @@ class PresetRawEditorPage(BasePage):
         self._save_timer.start(900)
         self._set_footer("Изменения...")
 
-    def _on_raw_editor_contents_changed(self, position: int, chars_removed: int, chars_added: int) -> None:
-        if self._cleanup_in_progress or self._is_loading:
-            return
-        if bool(self.__dict__.get("_raw_editor_text_cache_update_suspended", False)):
-            return
-        current = str(self.__dict__.get("_raw_editor_text_snapshot") or "")
-        start = max(0, min(int(position or 0), len(current)))
-        removed = max(0, int(chars_removed or 0))
-        inserted = self._raw_editor_inserted_text(start, max(0, int(chars_added or 0)))
-        self._raw_editor_text_snapshot = f"{current[:start]}{inserted}{current[start + removed:]}"
+    def _current_raw_editor_text(self) -> str:
+        """Текущий текст raw-редактора пресета.
 
-    def _raw_editor_inserted_text(self, position: int, chars_added: int) -> str:
-        if chars_added <= 0:
-            return ""
+        Документ QPlainTextEdit — единственный источник правды; снапшот — только
+        мемоизация с инвалидацией по textChanged. Инкрементального патчинга по
+        contentsChange здесь быть не должно: Qt учитывает финальный разделитель
+        блока в charsAdded/charsRemoved, и позиционная математика молча теряла
+        вставленный из буфера текст."""
+        text_editor = self.__dict__.get("_raw_text_editor")
+        if text_editor is not None:
+            return text_editor.current_text()
+        snapshot = self._raw_editor_text_snapshot
+        if snapshot is not None:
+            return str(snapshot or "")
         editor = self.__dict__.get("editor")
         if editor is None:
             return ""
         try:
-            document = editor.document()
-            cursor = QTextCursor(document)
-            cursor.setPosition(max(0, int(position or 0)))
-            cursor.setPosition(max(0, int(position or 0)) + int(chars_added or 0), QTextCursor.MoveMode.KeepAnchor)
-            return str(cursor.selectedText() or "").replace("\u2029", "\n")
+            text = str(editor.toPlainText() or "")
         except Exception:
             return ""
+        self._raw_editor_text_snapshot = text
+        return text
 
     def _save_file(self, *, publish_content_changed: bool = False) -> bool:
         if self._cleanup_in_progress:
@@ -1241,27 +1368,12 @@ class PresetRawEditorPage(BasePage):
         )
 
     def _resolve_raw_preset_save_text(self, source_text) -> str:
+        text_editor = self.__dict__.get("_raw_text_editor")
+        if text_editor is not None:
+            return text_editor.resolve_save_text(source_text)
         if source_text is not None:
-            text = str(source_text or "")
-        else:
-            snapshot = self.__dict__.get("_raw_editor_text_snapshot")
-            if snapshot is not None:
-                text = str(snapshot or "")
-                if text:
-                    return text
-                editor = self.__dict__.get("editor")
-                if editor is not None and callable(getattr(editor, "toPlainText", None)):
-                    try:
-                        text = str(editor.toPlainText() or "")
-                    except Exception:
-                        text = ""
-                    if text:
-                        self._raw_editor_text_snapshot = text
-                        return text
-                return text
-            text = ""
-        self._raw_editor_text_snapshot = text
-        return text
+            return str(source_text or "")
+        return self._current_raw_editor_text()
 
     def _on_raw_preset_save_finished(
         self,
@@ -1396,6 +1508,10 @@ class PresetRawEditorPage(BasePage):
         self._raw_preset_save_state_obj().start_scheduled = bool(value)
 
     def _commit_pending_content_change(self) -> None:
+        text_editor = self.__dict__.get("_raw_text_editor")
+        if text_editor is not None:
+            text_editor.commit_pending_content_change()
+            return
         if self._cleanup_in_progress or not self._content_publish_pending:
             return
         if self._save_timer.isActive():
@@ -1403,35 +1519,24 @@ class PresetRawEditorPage(BasePage):
         self._save_file(publish_content_changed=True)
 
     def _schedule_pending_content_commit(self) -> None:
+        text_editor = self.__dict__.get("_raw_text_editor")
+        if text_editor is not None:
+            text_editor.schedule_pending_content_commit()
+            return
         if self._cleanup_in_progress or not self._content_publish_pending:
             return
         self._commit_timer.start(0)
 
     def _is_editor_object(self, obj) -> bool:
-        editor = getattr(self, "editor", None)
-        if editor is None or obj is None:
-            return False
-        current = obj
-        while current is not None:
-            if current is editor:
-                return True
-            try:
-                current = current.parent()
-            except Exception:
-                return False
+        text_editor = self.__dict__.get("_raw_text_editor")
+        if text_editor is not None:
+            return bool(text_editor.is_editor_object(obj))
         return False
 
     def eventFilter(self, obj, event):
-        event_type = event.type()
-        if obj is getattr(self, "searchInput", None) and event_type == QEvent.Type.KeyPress:
-            if event.key() == Qt.Key.Key_Down:
-                self.editor.setFocus(Qt.FocusReason.OtherFocusReason)
-                event.accept()
-                return True
-        if event_type in {QEvent.Type.FocusOut, QEvent.Type.Leave} and self._is_editor_object(obj):
-            self._schedule_pending_content_commit()
-        elif event_type == QEvent.Type.MouseButtonPress and not self._is_editor_object(obj):
-            self._schedule_pending_content_commit()
+        text_editor = self.__dict__.get("_raw_text_editor")
+        if text_editor is not None and text_editor.handle_event(obj, event):
+            return True
         return super().eventFilter(obj, event)
 
     def bind_ui_state_store(self, store) -> None:
@@ -1516,6 +1621,41 @@ class PresetRawEditorPage(BasePage):
             content_revision_changed = False
         if content_revision_changed or bool(changed & {"preset_structure_revision"}):
             self._raw_preset_content_dirty = True
+        if content_revision_changed:
+            self._handle_external_raw_preset_content_changed()
+
+    def _handle_external_raw_preset_content_changed(self) -> None:
+        # Коалесинг: серия внешних bump-ов в пределах окна даёт одну перезагрузку.
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        if self.__dict__.get("_external_raw_reload_scheduled", False):
+            return
+        self._external_raw_reload_scheduled = True
+        try:
+            QTimer.singleShot(
+                EXTERNAL_RAW_PRESET_RELOAD_COALESCE_MS,
+                self._run_scheduled_external_raw_preset_reload,
+            )
+        except Exception:
+            self._external_raw_reload_scheduled = False
+            self._run_external_raw_preset_reload_now()
+
+    def _run_scheduled_external_raw_preset_reload(self) -> None:
+        self._external_raw_reload_scheduled = False
+        self._run_external_raw_preset_reload_now()
+
+    def _run_external_raw_preset_reload_now(self) -> None:
+        if self.__dict__.get("_cleanup_in_progress", False):
+            return
+        if not str(self.__dict__.get("_preset_file_name", "") or "").strip():
+            return
+        if not self._raw_preset_content_loaded_once:
+            return
+        text_editor = self.__dict__.get("_raw_text_editor")
+        if text_editor is not None and text_editor.has_local_unpublished_changes():
+            text_editor.report_external_update_skipped()
+            return
+        self._request_raw_preset_text(reason="external")
 
     def _render_runtime_toggle(self, state=None) -> None:
         button = getattr(self, "runtimeToggleButton", None)
@@ -1604,7 +1744,7 @@ class PresetRawEditorPage(BasePage):
     def _is_redundant_active_preset_activation(self) -> bool:
         if not self._is_current_selected_file():
             return False
-        if bool(self.__dict__.get("_content_publish_pending", False)):
+        if self._content_publish_pending:
             return False
         if self._raw_preset_save_state_obj().has_pending():
             return False
@@ -1683,7 +1823,7 @@ class PresetRawEditorPage(BasePage):
             "_raw_activate_request_id",
             worker,
         )
-        if not accepted:
+        if not accepted and getattr(worker, "_request_id", None) is not None:
             return
         if scheduled:
             return
@@ -1789,37 +1929,37 @@ class PresetRawEditorPage(BasePage):
         if self._raw_preset_write_state_obj().has_pending():
             return
         if action == "rename":
-            updated, path = result
+            updated, path, load_result = result
             self._notify_preset_structure_changed()
             self._preset_name = updated.name
             self._preset_file_name = updated.file_name
             self._preset_path = path
             self._preset_origin = str(getattr(updated, "kind", "") or "user").strip().lower() or "user"
             self._preset_can_reset_to_builtin = False
-            self._load_file()
+            self._apply_raw_preset_action_result(load_result)
             self._refresh_header()
             self._show_success(f"Пресет переименован: {payload.get('new_name') or updated.name}")
         elif action == "duplicate":
-            duplicated, path = result
+            duplicated, path, load_result = result
             self._notify_preset_structure_changed()
             self._preset_name = duplicated.name
             self._preset_file_name = duplicated.file_name
             self._preset_path = path
             self._preset_origin = str(getattr(duplicated, "kind", "") or "user").strip().lower() or "user"
             self._preset_can_reset_to_builtin = False
-            self._load_file()
+            self._apply_raw_preset_action_result(load_result)
             self._refresh_header()
             self._show_success(f"Создан дубликат: {payload.get('new_name') or duplicated.name}")
         elif action == "export":
             self._show_success(f"Пресет экспортирован: {result}")
         elif action == "reset":
-            updated, path = result
+            updated, path, load_result = result
             self._preset_name = updated.name
             self._preset_file_name = updated.file_name
             self._preset_path = path
             self._preset_origin = str(getattr(updated, "kind", "") or "builtin").strip().lower() or "builtin"
             self._preset_can_reset_to_builtin = False
-            self._load_file()
+            self._apply_raw_preset_action_result(load_result)
             self._refresh_header()
             self._show_success(f"Восстановлен встроенный пресет «{self._preset_name}»")
         elif action == "delete":
@@ -1827,6 +1967,21 @@ class PresetRawEditorPage(BasePage):
             self._notify_preset_structure_changed()
             self._open_back_callback()
             self._show_success(f"Пресет «{name}» удалён")
+
+    def _apply_raw_preset_action_result(self, load_result) -> None:
+        """Применяет содержимое, прочитанное action-worker-ом в его же потоке.
+
+        Диск после действия не перечитывается отдельным load-worker-ом; полный
+        перезапрос остаётся только страховкой на случай, если worker не смог
+        прочитать итоговый файл.
+        """
+        if load_result is None:
+            self._load_file()
+            return
+        self.__dict__["_pending_raw_text_apply_reason"] = "action"
+        self._pending_raw_text_apply = load_result
+        self._raw_text_apply_scheduled = False
+        self._run_scheduled_raw_preset_text_apply()
 
     def _on_raw_preset_action_failed(self, request_id: int, _action: str, error: str, _payload) -> None:
         if request_id != self._raw_action_request_id:
@@ -2091,6 +2246,12 @@ class PresetRawEditorPage(BasePage):
             app = QApplication.instance()
             if app is not None and self._app_event_filter_installed:
                 app.removeEventFilter(self)
+        except Exception:
+            pass
+        try:
+            text_editor = self.__dict__.get("_raw_text_editor")
+            if text_editor is not None:
+                text_editor.cleanup()
         except Exception:
             pass
         self._ui_state_store = None

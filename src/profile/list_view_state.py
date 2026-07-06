@@ -60,22 +60,151 @@ def apply_profile_folder_state_to_items(
     if not isinstance(folder_state, dict):
         return tuple(items or ())
 
-    from profile.folders import profile_folder_collapsed, profile_folder_for_profile
+    from profile.ordering import live_items_from_display_items, resolve_profile_order_view
 
+    view = resolve_profile_order_view(live_items_from_display_items(tuple(items or ())), folder_state)
+    rank_by_folder = {key: rank for rank, key in enumerate(view.folder_keys)}
     next_items: list[ProfileDisplayItem] = []
     for item in tuple(items or ()):
-        folder_key, folder_name, order = profile_folder_for_profile(item, folder_state)
+        persistent_key = str(item.persistent_key or "")
+        folder_key = view.folder_by_item.get(persistent_key, str(item.group or "common"))
         next_items.append(
             replace(
                 item,
                 group=folder_key,
-                group_name=folder_name,
-                order=int(order) if order is not None else int(item.order or 0),
-                order_is_manual=order is not None,
-                group_collapsed=profile_folder_collapsed(folder_key, folder_state),
+                group_name=view.folder_names.get(folder_key, str(item.group_name or "Общие")),
+                order=view.position_by_item.get(persistent_key, int(item.order or 0)),
+                group_rank=rank_by_folder.get(folder_key, 10_000),
+                group_collapsed=view.collapsed.get(folder_key, False),
             )
         )
     return tuple(sorted(next_items, key=profile_display_sort_key))
+
+
+def moved_profile_display_items(
+    items: tuple[Any, ...],
+    source_profile_key: str,
+    destination_kind: str,
+    destination_profile_key: str = "",
+    destination_group_key: str = "",
+    *,
+    folder_state: dict[str, Any] | None = None,
+) -> tuple[Any, ...] | None:
+    """Единственная реализация оптимистичного перемещения в UI.
+
+    Строит каноническое представление из отображаемых item-ов и применяет к
+    нему ту же `plan_view_move`, что использует персист, поэтому показанный
+    порядок всегда совпадает с сохраняемым.
+    """
+    from folders.ordering import FolderOrderView, plan_view_move
+
+    action_by_kind = {"profile": "before", "profile_after": "after", "end": "end", "folder": "folder"}
+    action = action_by_kind.get(str(destination_kind or "").strip())
+    if action is None:
+        return None
+    items = tuple(items or ())
+    by_key: dict[str, Any] = {}
+    grouped: dict[str, list[Any]] = {}
+    for item in items:
+        key = str(getattr(item, "key", "") or "")
+        if not key:
+            continue
+        by_key[key] = item
+        grouped.setdefault(str(getattr(item, "group", "") or "common"), []).append(item)
+
+    folder_names: dict[str, str] = {}
+    collapsed: dict[str, bool] = {}
+    rank_by_folder: dict[str, int] = {}
+    items_by_folder: dict[str, tuple[str, ...]] = {}
+    folder_by_item: dict[str, str] = {}
+    for group_key, group_items in grouped.items():
+        ordered = tuple(
+            str(getattr(item, "key", "") or "")
+            for item in sorted(group_items, key=profile_display_sort_key)
+        )
+        items_by_folder[group_key] = ordered
+        for key in ordered:
+            folder_by_item[key] = group_key
+        first = group_items[0]
+        folder_names[group_key] = str(getattr(first, "group_name", "") or "")
+        collapsed[group_key] = bool(getattr(first, "group_collapsed", False))
+        rank_by_folder[group_key] = min(_item_group_rank(item) for item in group_items)
+    if isinstance(folder_state, dict):
+        state_folders = folder_state.get("folders")
+        if isinstance(state_folders, dict):
+            ordered_state_keys = sorted(
+                (str(key) for key, folder in state_folders.items() if isinstance(folder, dict)),
+                key=lambda key: (
+                    _folder_order(state_folders.get(key, {}).get("order")),
+                    str(state_folders.get(key, {}).get("name") or key).lower(),
+                    key,
+                ),
+            )
+            for rank, key in enumerate(ordered_state_keys):
+                folder = state_folders.get(key, {})
+                folder_names.setdefault(key, str(folder.get("name") or key))
+                collapsed.setdefault(key, bool(folder.get("collapsed", False)))
+                rank_by_folder.setdefault(key, rank)
+                items_by_folder.setdefault(key, ())
+
+    view = FolderOrderView(
+        folder_keys=tuple(sorted(items_by_folder, key=lambda key: (rank_by_folder.get(key, 10_000), key.lower()))),
+        folder_names=folder_names,
+        collapsed=collapsed,
+        items_by_folder=items_by_folder,
+        folder_by_item=folder_by_item,
+        position_by_item={},
+    )
+    planned = plan_view_move(
+        view,
+        action=action,
+        source_key=str(source_profile_key or "").strip(),
+        destination_key=str(destination_profile_key or "").strip(),
+        destination_folder_key=str(destination_group_key or "").strip(),
+    )
+    if planned is None:
+        return None
+    target_folder, sequence = planned
+    target_name = folder_names.get(target_folder) or group_name_for_key(target_folder, items)
+    target_rank = rank_by_folder.get(target_folder, 10_000)
+    target_collapsed = collapsed.get(target_folder, False)
+    position_by_key = {key: index for index, key in enumerate(sequence)}
+
+    next_items: list[Any] = []
+    for item in items:
+        key = str(getattr(item, "key", "") or "")
+        if key in position_by_key:
+            next_items.append(
+                _display_item_with(
+                    item,
+                    group=target_folder,
+                    group_name=target_name,
+                    order=position_by_key[key],
+                    group_rank=target_rank,
+                    group_collapsed=target_collapsed,
+                )
+            )
+        else:
+            next_items.append(item)
+    return tuple(next_items)
+
+
+def _item_group_rank(item: Any) -> int:
+    try:
+        return int(getattr(item, "group_rank"))
+    except Exception:
+        return 10_000
+
+
+def _display_item_with(item: Any, **changes: Any) -> Any:
+    try:
+        return replace(item, **changes)
+    except Exception:
+        from types import SimpleNamespace
+
+        data = dict(getattr(item, "__dict__", {}) or {})
+        data.update(changes)
+        return SimpleNamespace(**data)
 
 
 def row_for_profile(item: ProfileDisplayItem) -> dict[str, Any]:
@@ -226,14 +355,15 @@ def initial_group_expanded(items: tuple[ProfileDisplayItem, ...]) -> dict[str, b
 
 
 def ordered_group_keys(grouped: dict[str, list[ProfileDisplayItem]]) -> list[str]:
-    default_state = build_default_profile_folders()
-    folders = default_state.get("folders", {})
-    order_by_key = {
-        str(key): folder_order(folder.get("order"))
-        for key, folder in folders.items()
-        if isinstance(folder, dict)
-    }
-    return sorted(grouped, key=lambda key: (order_by_key.get(str(key), 10_000), str(key).lower()))
+    # Ранг папки назначает единый резолвер (profile.ordering) из СОХРАНЁННОГО
+    # состояния папок; дефолты сюда больше не подмешиваются.
+    def group_rank(group_key: str) -> int:
+        group_items = grouped.get(group_key) or []
+        if not group_items:
+            return 10_000
+        return min(_item_group_rank(item) for item in group_items)
+
+    return sorted(grouped, key=lambda key: (group_rank(str(key)), str(key).lower()))
 
 
 def group_name_for_key(group_key: str, items: tuple[ProfileDisplayItem, ...]) -> str:
@@ -305,6 +435,7 @@ __all__ = [
     "group_name_for_key",
     "grouped_items",
     "initial_group_expanded",
+    "moved_profile_display_items",
     "normalized_profile_types",
     "normalized_search_query",
     "ordered_group_keys",

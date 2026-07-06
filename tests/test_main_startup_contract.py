@@ -86,7 +86,7 @@ class StartupRuntimeSetupTests(unittest.TestCase):
             patch.object(
                 startup_coordinator,
                 "start_daemon_thread",
-                side_effect=lambda _name, target: background_targets.append(target),
+                side_effect=lambda name, target: background_targets.append((name, target)),
             ),
             patch("settings.dpi.strategy_settings.get_strategy_launch_method", return_value="zapret2_mode"),
         ):
@@ -95,8 +95,10 @@ class StartupRuntimeSetupTests(unittest.TestCase):
             while scheduled:
                 _delay_ms, callback = scheduled.pop(0)
                 callback()
-            self.assertEqual(len(background_targets), 1)
-            background_targets[0]()
+            step_targets = [t for name, t in background_targets if name.startswith("StartupStep-")]
+            self.assertEqual(len(step_targets), 1)
+            self.assertIn("GuiAutostartMigration", [name for name, _t in background_targets])
+            step_targets[0]()
             while scheduled:
                 _delay_ms, callback = scheduled.pop(0)
                 callback()
@@ -183,7 +185,7 @@ class StartupRuntimeSetupTests(unittest.TestCase):
             patch.object(
                 startup_coordinator,
                 "start_daemon_thread",
-                side_effect=lambda _name, target: background_targets.append(target),
+                side_effect=lambda name, target: background_targets.append((name, target)),
                 create=True,
             ),
             patch("settings.dpi.strategy_settings.get_strategy_launch_method", return_value="zapret2_mode"),
@@ -197,10 +199,11 @@ class StartupRuntimeSetupTests(unittest.TestCase):
                 runtime.calls,
                 ["runtime_api", "runtime", "autostart:zapret2_mode", "theme", "process_monitor"],
             )
-            self.assertEqual(len(background_targets), 1)
+            step_targets = [t for name, t in background_targets if name.startswith("StartupStep-")]
+            self.assertEqual(len(step_targets), 1)
             window_shell.mark_startup_post_init_done.assert_called_once()
 
-            background_targets[0]()
+            step_targets[0]()
             while scheduled:
                 _delay_ms, callback = scheduled.pop(0)
                 callback()
@@ -270,7 +273,7 @@ class StartupRuntimeSetupTests(unittest.TestCase):
             patch.object(
                 startup_coordinator,
                 "start_daemon_thread",
-                side_effect=lambda _name, target: background_targets.append(target),
+                side_effect=lambda name, target: background_targets.append((name, target)),
                 create=True,
             ),
             patch("settings.dpi.strategy_settings.get_strategy_launch_method", return_value="zapret2_mode"),
@@ -290,10 +293,11 @@ class StartupRuntimeSetupTests(unittest.TestCase):
                 "process_monitor",
             ],
         )
-        self.assertEqual(len(background_targets), 1)
+        step_targets = [t for name, t in background_targets if name.startswith("StartupStep-")]
+        self.assertEqual(len(step_targets), 1)
         window_shell.mark_startup_post_init_done.assert_called_once()
 
-        background_targets[0]()
+        step_targets[0]()
 
         self.assertEqual(runtime.calls[-1], "core_startup")
 
@@ -2680,19 +2684,14 @@ class StartupRuntimeSetupTests(unittest.TestCase):
         metric.assert_any_call("StartupNetworkDataWarmupQueued", "10000ms after interactive")
         metric.assert_any_call("StartupPostInitNetworkDataWarmupStarted", "backend_cache")
 
-    def test_profile_warmup_orders_current_method_first(self) -> None:
-        from main.post_startup_profile_warmup import profile_warmup_methods
+    def test_profile_warmup_targets_only_active_method(self) -> None:
+        from main.post_startup_profile_warmup import profile_warmup_method
 
-        self.assertEqual(
-            profile_warmup_methods("zapret1_mode"),
-            ("zapret1_mode", "zapret2_mode"),
-        )
-        self.assertEqual(
-            profile_warmup_methods("orchestra"),
-            ("zapret2_mode", "zapret1_mode"),
-        )
+        self.assertEqual(profile_warmup_method("zapret1_mode"), "zapret1_mode")
+        self.assertEqual(profile_warmup_method("zapret2_mode"), "zapret2_mode")
+        self.assertEqual(profile_warmup_method("orchestra"), "zapret2_mode")
 
-    def test_profile_warmup_staggers_current_and_secondary_methods_after_interactive_ready(self) -> None:
+    def test_profile_warmup_warms_only_current_method_after_interactive_ready(self) -> None:
         from app.page_names import PageName
         from main import post_startup_profile_warmup
         from main.post_startup_profile_warmup import install_profile_warmup
@@ -2747,22 +2746,21 @@ class StartupRuntimeSetupTests(unittest.TestCase):
             )
             signal.emit("interactive")
 
-        self.assertEqual(delays, [0, 1800, 1000, 2200])
+        self.assertEqual(delays, [0, 1000, 2200])
         self.assertEqual(
             queued_tasks,
-            [("profile", "ProfileWarmup-zapret1_mode"), ("profile", "ProfileWarmup-zapret2_mode")],
+            [("profile", "ProfileWarmup-zapret1_mode")],
         )
-        self.assertEqual(ready_methods, ["zapret1_mode", "zapret2_mode"])
+        self.assertEqual(ready_methods, ["zapret1_mode"])
         self.assertEqual(
             [recorded_call.args[0] for recorded_call in profile_feature.warm_profile_list.call_args_list],
-            ["zapret1_mode", "zapret2_mode"],
+            ["zapret1_mode"],
         )
         metric.assert_any_call(
             "StartupProfileWarmupQueued",
-            "0ms current after interactive; 1800ms secondary after interactive",
+            "0ms current after interactive",
         )
         metric.assert_any_call("StartupProfileWarmupStarted", "zapret1_mode")
-        metric.assert_any_call("StartupProfileWarmupStarted", "zapret2_mode")
         startup_host.ensure_page.assert_has_calls(
             [
                 call(PageName.ZAPRET1_PROFILE_SETUP),
@@ -3257,12 +3255,9 @@ class WindowLifecycleEarlyEventTests(unittest.TestCase):
         calls: list[str] = []
         scheduled: list[tuple[int, object]] = []
         geometry_runtime = SimpleNamespace(
-            remembered_zoom_state=Mock(side_effect=lambda: calls.append("remember_zoom") or "normal"),
-            request_zoom_state=Mock(side_effect=lambda _state: calls.append("request_zoom")),
+            show_from_hidden=Mock(side_effect=lambda: calls.append("show_from_hidden")),
         )
         window = SimpleNamespace(
-            show=Mock(side_effect=lambda: calls.append("show")),
-            showNormal=Mock(side_effect=lambda: calls.append("show_normal")),
             window_geometry_runtime=geometry_runtime,
             raise_=Mock(side_effect=lambda: calls.append("raise")),
             activateWindow=Mock(side_effect=lambda: calls.append("activate")),
@@ -3299,10 +3294,7 @@ class WindowLifecycleEarlyEventTests(unittest.TestCase):
                 calls,
                 [
                     "sync_existing_nav",
-                    "show",
-                    "show_normal",
-                    "remember_zoom",
-                    "request_zoom",
+                    "show_from_hidden",
                     "raise",
                     "activate",
                 ],
@@ -3315,19 +3307,14 @@ class WindowLifecycleEarlyEventTests(unittest.TestCase):
             sync_nav_visibility.assert_called_once_with(window)
             self.assertEqual(calls[-2:], ["flush_theme", "sync_nav"])
 
-    def test_tray_show_window_reapplies_saved_geometry_before_showing_hidden_window(self) -> None:
+    def test_tray_show_window_delegates_window_state_restore_to_geometry_runtime(self) -> None:
         from ui.window_adapter import show_window
 
         calls: list[str] = []
         geometry_runtime = SimpleNamespace(
-            restore_geometry=Mock(side_effect=lambda: calls.append("restore_geometry")),
-            remembered_zoom_state=Mock(side_effect=lambda: calls.append("remember_zoom") or "normal"),
-            request_zoom_state=Mock(side_effect=lambda _state: calls.append("request_zoom")),
+            show_from_hidden=Mock(side_effect=lambda: calls.append("show_from_hidden")),
         )
         window = SimpleNamespace(
-            isVisible=Mock(return_value=False),
-            show=Mock(side_effect=lambda: calls.append("show")),
-            showNormal=Mock(side_effect=lambda: calls.append("show_normal")),
             window_geometry_runtime=geometry_runtime,
             raise_=Mock(side_effect=lambda: calls.append("raise")),
             activateWindow=Mock(side_effect=lambda: calls.append("activate")),
@@ -3342,11 +3329,7 @@ class WindowLifecycleEarlyEventTests(unittest.TestCase):
         self.assertEqual(
             calls,
             [
-                "restore_geometry",
-                "show",
-                "show_normal",
-                "remember_zoom",
-                "request_zoom",
+                "show_from_hidden",
                 "raise",
                 "activate",
             ],

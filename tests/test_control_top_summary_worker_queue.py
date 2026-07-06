@@ -34,17 +34,31 @@ class ControlTopSummaryWorkerQueueTests(unittest.TestCase):
         self.assertIn("top_summary_preset_switch_reload_state.reset()", cleanup_source)
         self.assertIn("additional_settings_preset_switch_reload_state.reset()", cleanup_source)
 
+        schedule_helper_source = inspect.getsource(
+            ModeControlRefreshRuntime._schedule_restartable_preset_switch_reload
+        )
+        self.assertIn("state.pending = True", schedule_helper_source)
+        self.assertIn("state.start_scheduled = True", schedule_helper_source)
+
         for page_cls in (Zapret1ModeControlPage, Zapret2ModeControlPage):
             with self.subTest(page=page_cls.__name__):
                 top_summary_source = inspect.getsource(page_cls._schedule_top_summary_reload_after_preset_switch)
                 additional_source = inspect.getsource(page_cls._schedule_additional_settings_reload_after_preset_switch)
+                run_top_summary_source = inspect.getsource(
+                    page_cls._run_scheduled_top_summary_reload_after_preset_switch
+                )
+                run_additional_source = inspect.getsource(
+                    page_cls._run_scheduled_additional_settings_reload_after_preset_switch
+                )
 
-                self.assertIn("top_summary_preset_switch_reload_state", top_summary_source)
-                self.assertIn("schedule_start", top_summary_source)
+                self.assertIn("schedule_top_summary_preset_switch_reload", top_summary_source)
                 self.assertNotIn("top_summary_reload_after_preset_switch_scheduled = True", top_summary_source)
-                self.assertIn("additional_settings_preset_switch_reload_state", additional_source)
-                self.assertIn("schedule_start", additional_source)
+                self.assertIn("schedule_additional_settings_preset_switch_reload", additional_source)
                 self.assertNotIn("additional_settings_reload_after_preset_switch_scheduled = True", additional_source)
+                self.assertIn("top_summary_preset_switch_reload_state", run_top_summary_source)
+                self.assertIn("take_pending_for_scheduled_start", run_top_summary_source)
+                self.assertIn("additional_settings_preset_switch_reload_state", run_additional_source)
+                self.assertIn("take_pending_for_scheduled_start", run_additional_source)
 
     def test_top_summary_profile_retry_state_lives_in_refresh_runtime(self) -> None:
         from ui.latest_value_worker_state import LatestValueWorkerState

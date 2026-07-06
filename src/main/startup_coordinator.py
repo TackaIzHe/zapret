@@ -379,6 +379,8 @@ class StartupCoordinator:
         t_total = _time.perf_counter()
 
         try:
+            start_daemon_thread("GuiAutostartMigration", self._run_gui_autostart_migration)
+
             # Быструю часть post-init оставляем в критическом пути,
             # а реальный автозапуск передаём в единый dispatcher после возврата в event loop.
             QTimer.singleShot(
@@ -405,6 +407,16 @@ class StartupCoordinator:
         finally:
             self._log_startup_step("StartupPostInitQuickPhase", f"{(_time.perf_counter() - t_total)*1000:.0f}ms")
             self.window_shell.mark_startup_post_init_done(post_init_metric_source)
+
+    def _run_gui_autostart_migration(self) -> None:
+        """Переводит автозапуск GUI со старого ярлыка на задачу Планировщика."""
+        try:
+            from autostart.public import ensure_gui_autostart_migrated
+
+            if ensure_gui_autostart_migrated():
+                log("Автозапуск GUI мигрирован на задачу Планировщика", "INFO")
+        except Exception as e:
+            log(f"Ошибка миграции автозапуска GUI: {e}", "DEBUG")
 
     def _run_deferred_post_init_launch(self, launch_method: str | None) -> None:
         """Запускает тяжёлую post-init часть позже, когда окно уже стабилизировалось."""

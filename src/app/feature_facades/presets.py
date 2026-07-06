@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from pathlib import Path
 from typing import Any
 
@@ -84,6 +85,39 @@ class PresetsFeature:
         _cached_signature, cached_metadata = cached
         return dict(cached_metadata)
 
+    def read_single_preset_list_metadata(self, launch_method: str, file_name: str):
+        from presets.lightweight_metadata import build_lightweight_preset_metadata
+        from settings.mode import engine_for_launch_method_or_none
+
+        candidate = self._normalize_preset_list_file_name(file_name)
+        if not candidate:
+            return None
+        engine = engine_for_launch_method_or_none(str(launch_method or "").strip())
+        if engine is None:
+            return None
+
+        engine_paths = self._preset_services().app_paths.engine_paths(engine).ensure_directories()
+        for storage_scope, presets_dir in (
+            ("user", engine_paths.user_presets_dir),
+            ("builtin", engine_paths.builtin_presets_dir),
+        ):
+            path = self._resolve_preset_list_path(presets_dir, candidate)
+            if path is None:
+                continue
+            file_name = path.name
+            is_builtin = storage_scope == "builtin"
+            builtin_path = engine_paths.builtin_presets_dir / file_name
+            metadata = build_lightweight_preset_metadata(
+                path,
+                display_name=path.stem.strip() or file_name,
+                kind="builtin" if is_builtin else "user",
+                is_builtin=is_builtin,
+                can_reset_to_builtin=False if is_builtin else self._preset_differs_from_builtin_paths(path, builtin_path),
+                read_headers=False,
+            )
+            return file_name, metadata
+        return None
+
     def _build_preset_list_metadata_snapshot(self, launch_method: str):
         from presets.lightweight_metadata import build_lightweight_preset_metadata
 
@@ -95,19 +129,21 @@ class PresetsFeature:
                 kind=kind,
                 is_builtin=is_builtin,
                 can_reset_to_builtin=can_reset_to_builtin,
+                read_headers=False,
+                stat_result=stat_result,
             )
-            for file_name, display_name, kind, is_builtin, can_reset_to_builtin, path, _stat_key in entries
+            for file_name, display_name, kind, is_builtin, can_reset_to_builtin, path, _stat_key, stat_result in entries
         }
         signature = tuple(
             (file_name, str(path), stat_key)
-            for file_name, _display, _kind, _builtin, _can_reset, path, stat_key in entries
+            for file_name, _display, _kind, _builtin, _can_reset, path, stat_key, _stat_result in entries
         )
         return signature, metadata
 
     def _build_preset_list_metadata_signature(self, launch_method: str):
         return tuple(
             (file_name, str(path), stat_key)
-            for file_name, _display, _kind, _builtin, _can_reset, path, stat_key in self._preset_list_metadata_entries(launch_method)
+            for file_name, _display, _kind, _builtin, _can_reset, path, stat_key, _stat_result in self._preset_list_metadata_entries(launch_method)
         )
 
     def _preset_list_metadata_entries(self, launch_method: str):
@@ -120,24 +156,100 @@ class PresetsFeature:
 
         services = self._preset_services()
         engine_paths = services.app_paths.engine_paths(engine).ensure_directories()
-        entries = []
-        for manifest in self.list_preset_manifests(method):
-            file_name = str(getattr(manifest, "file_name", "") or "").strip()
-            if not file_name:
-                continue
-            display_name = str(getattr(manifest, "name", "") or file_name).strip()
-            kind = str(getattr(manifest, "kind", "") or "user").strip() or "user"
-            storage_scope = str(getattr(manifest, "storage_scope", "") or "").strip().lower()
-            is_builtin = kind.lower() == "builtin" or storage_scope == "builtin"
-            path = (engine_paths.builtin_presets_dir if storage_scope == "builtin" else engine_paths.user_presets_dir) / file_name
-            builtin_path = engine_paths.builtin_presets_dir / file_name
-            can_reset_to_builtin = False if is_builtin else self._preset_differs_from_builtin_paths(path, builtin_path)
-            stat_key = (
-                self._preset_file_stat_key(path),
-                self._preset_file_stat_key(builtin_path) if not is_builtin else (0, 0),
+        entries_by_file_name = {}
+        builtin_stat_keys = {}
+        for storage_scope, presets_dir in (
+            ("builtin", engine_paths.builtin_presets_dir),
+            ("user", engine_paths.user_presets_dir),
+        ):
+            try:
+                with os.scandir(presets_dir) as scanner:
+                    dir_entries = sorted(
+                        (
+                            entry
+                            for entry in scanner
+                            if entry.is_file() and entry.name.lower().endswith(".txt")
+                        ),
+                        key=lambda item: item.name.lower(),
+                    )
+            except Exception:
+                dir_entries = ()
+            for dir_entry in dir_entries:
+                file_name = str(getattr(dir_entry, "name", "") or "").strip()
+                if not file_name:
+                    continue
+                is_builtin = storage_scope == "builtin"
+                path = Path(dir_entry.path)
+                builtin_path = engine_paths.builtin_presets_dir / file_name
+                display_name = Path(file_name).stem.strip() or file_name
+                kind = "builtin" if is_builtin else "user"
+                # Путь списка не читает содержимое файлов: can_reset вычисляется
+                # лениво через preset_differs_from_builtin_by_file_name при
+                # открытии меню конкретного пресета.
+                can_reset_to_builtin = False
+                try:
+                    stat_result = dir_entry.stat()
+                    path_stat_key = self._preset_file_stat_key_from_result(stat_result)
+                except Exception:
+                    stat_result = None
+                    path_stat_key = self._preset_file_stat_key(path)
+                if is_builtin:
+                    builtin_stat_keys[file_name.lower()] = path_stat_key
+                stat_key = (
+                    path_stat_key,
+                    builtin_stat_keys.get(file_name.lower(), self._preset_file_stat_key(builtin_path))
+                    if not is_builtin
+                    else (0, 0),
+                )
+                entries_by_file_name[file_name.lower()] = (
+                    file_name,
+                    display_name,
+                    kind,
+                    is_builtin,
+                    can_reset_to_builtin,
+                    path,
+                    stat_key,
+                    stat_result,
+                )
+        return tuple(
+            sorted(
+                entries_by_file_name.values(),
+                key=lambda item: (str(item[1]).lower(), str(item[0]).lower()),
             )
-            entries.append((file_name, display_name, kind, is_builtin, can_reset_to_builtin, path, stat_key))
-        return tuple(entries)
+        )
+
+    @staticmethod
+    def _normalize_preset_list_file_name(file_name: str) -> str:
+        candidate = str(file_name or "").strip()
+        if not candidate:
+            return ""
+        return candidate if candidate.lower().endswith(".txt") else f"{candidate}.txt"
+
+    @staticmethod
+    def _resolve_preset_list_path(presets_dir: Path, file_name: str) -> Path | None:
+        candidate = str(file_name or "").strip()
+        if not candidate:
+            return None
+        direct = Path(presets_dir) / candidate
+        try:
+            if direct.is_file():
+                return direct
+        except Exception:
+            pass
+        lowered = candidate.lower()
+        try:
+            with os.scandir(presets_dir) as scanner:
+                for entry in scanner:
+                    if entry.name.lower() != lowered:
+                        continue
+                    try:
+                        if entry.is_file():
+                            return Path(entry.path)
+                    except Exception:
+                        return None
+        except Exception:
+            return None
+        return None
 
     def preset_differs_from_builtin_by_file_name(self, launch_method: str, file_name: str) -> bool:
         from settings.mode import engine_for_launch_method_or_none
@@ -167,13 +279,16 @@ class PresetsFeature:
     @staticmethod
     def _preset_file_stat_key(path) -> tuple[int, int]:
         try:
-            stat_result = path.stat()
-            return (
-                int(getattr(stat_result, "st_mtime_ns", 0) or 0),
-                int(getattr(stat_result, "st_size", 0) or 0),
-            )
+            return PresetsFeature._preset_file_stat_key_from_result(path.stat())
         except Exception:
             return (0, 0)
+
+    @staticmethod
+    def _preset_file_stat_key_from_result(stat_result) -> tuple[int, int]:
+        return (
+            int(getattr(stat_result, "st_mtime_ns", 0) or 0),
+            int(getattr(stat_result, "st_size", 0) or 0),
+        )
 
     @classmethod
     def _preset_differs_from_builtin_paths(cls, user_path, builtin_path) -> bool:
@@ -357,6 +472,7 @@ class PresetsFeature:
             duplicate_raw_preset,
             export_raw_preset,
             get_raw_preset_source_path,
+            load_raw_preset_for_file,
             open_raw_preset_source_file,
             rename_raw_preset,
             reset_raw_preset_to_builtin,
@@ -413,6 +529,13 @@ class PresetsFeature:
                 file_name=file_name,
             )
 
+        def _load_preset(file_name: str):
+            return load_raw_preset_for_file(
+                presets_feature=self,
+                launch_method=clean_launch_method,
+                file_name=file_name,
+            )
+
         return RawPresetActionWorker(
             request_id,
             _open_source_file,
@@ -424,6 +547,7 @@ class PresetsFeature:
             _source_path,
             action=action,
             payload=payload,
+            load_preset=_load_preset,
             parent=parent,
         )
 
@@ -973,8 +1097,11 @@ class PresetsFeature:
         ) -> bool:
             if source_kind != "preset":
                 return False
+            live_items = _build_move_live_items()
             if destination_kind == "folder" and destination_id:
-                return bool(move_preset_to_folder(clean_scope, source_id, destination_id))
+                return bool(
+                    move_preset_to_folder(clean_scope, source_id, destination_id, live_items=live_items)
+                )
             if destination_kind == "preset" and destination_id:
                 return bool(
                     move_preset_before(
@@ -982,6 +1109,7 @@ class PresetsFeature:
                         source_id,
                         destination_id,
                         destination_folder_key=destination_folder_key,
+                        live_items=live_items,
                     )
                 )
             if destination_kind == "preset_after" and destination_id:
@@ -991,9 +1119,10 @@ class PresetsFeature:
                         source_id,
                         destination_id,
                         destination_folder_key=destination_folder_key,
+                        live_items=live_items,
                     )
                 )
-            return bool(move_preset_to_end(clean_scope, source_id))
+            return bool(move_preset_to_end(clean_scope, source_id, live_items=live_items))
 
         return UserPresetStorageActionWorker(
             request_id,

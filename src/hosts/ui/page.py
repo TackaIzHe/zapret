@@ -751,12 +751,8 @@ class HostsPage(BasePage):
         if not self._services_catalog_runtime.is_current(request_id, cleanup_in_progress=self._cleanup_in_progress):
             return
         self._catalog_sig = catalog_sig
-        self._services_catalog_plan = catalog_plan
         if not self.isVisible():
-            if catalog_plan.selection_changed:
-                self._service_dns_selection = dict(catalog_plan.new_selection)
-                self._request_user_selection_save(self._service_dns_selection)
-            self._services_ui_mounted = False
+            self._build_services_selectors(catalog_plan, sync_selection=True)
             return
         self._build_services_selectors(catalog_plan, sync_selection=True)
         self._update_ui()
@@ -1005,6 +1001,10 @@ class HostsPage(BasePage):
             return
         started_at = time.perf_counter()
         OFF_LABEL = self._tr("page.hosts.services.off", "Откл.")
+        if self._try_update_existing_services_selectors(catalog_plan, sync_selection=sync_selection):
+            self._log_ui_timing("hosts_ui.services.update_existing", started_at)
+            return
+
         self._services_catalog_plan = catalog_plan
         if sync_selection:
             self._service_dns_selection = dict(catalog_plan.new_selection)
@@ -1159,6 +1159,74 @@ class HostsPage(BasePage):
         model = self.__dict__.get("_services_matrix_model")
         if model is not None:
             model.update_selection(dict(self._service_dns_selection))
+
+    @staticmethod
+    def _services_catalog_shape_key(catalog_plan) -> tuple:
+        groups_key = []
+        for group_plan in getattr(catalog_plan, "groups", []) or []:
+            rows_key = []
+            for row_plan in getattr(group_plan, "rows", []) or []:
+                rows_key.append(
+                    (
+                        str(getattr(row_plan, "service_name", "") or ""),
+                        str(getattr(row_plan, "icon_name", "") or ""),
+                        str(getattr(row_plan, "icon_color", "") or ""),
+                        bool(getattr(row_plan, "direct_only", False)),
+                        tuple(getattr(row_plan, "available_profiles", []) or []),
+                        tuple(getattr(row_plan, "profile_items", []) or []),
+                    )
+                )
+            groups_key.append(
+                (
+                    str(getattr(group_plan, "title", "") or ""),
+                    bool(getattr(group_plan, "direct_only", False)),
+                    tuple(getattr(group_plan, "common_profiles", []) or []),
+                    tuple(rows_key),
+                )
+            )
+        return tuple(groups_key)
+
+    def _try_update_existing_services_selectors(self, catalog_plan, *, sync_selection: bool) -> bool:
+        previous_plan = self.__dict__.get("_services_catalog_plan")
+        if not self.__dict__.get("_services_ui_mounted", False):
+            return False
+        if previous_plan is None:
+            return False
+        if self._services_catalog_shape_key(previous_plan) != self._services_catalog_shape_key(catalog_plan):
+            return False
+
+        self._services_catalog_plan = catalog_plan
+        if sync_selection:
+            self._service_dns_selection = dict(catalog_plan.new_selection)
+            if catalog_plan.selection_changed:
+                self._request_user_selection_save(self._service_dns_selection)
+        self._update_existing_services_selector_state(catalog_plan)
+        return True
+
+    def _update_existing_services_selector_state(self, catalog_plan) -> None:
+        was_building = self._get_building_services_ui()
+        self._set_building_services_ui(True)
+        try:
+            for group_plan in getattr(catalog_plan, "groups", []) or []:
+                for row_plan in getattr(group_plan, "rows", []) or []:
+                    row_plan = self._service_row_plan_with_current_selection(row_plan)
+                    service_name = row_plan.service_name
+                    control = self.service_combos.get(service_name)
+                    if _is_fluent_combo(control):
+                        target_idx = control.findData(row_plan.selected_profile) if row_plan.selected_profile else 0
+                        if target_idx >= 0 and control.currentIndex() != target_idx:
+                            control.blockSignals(True)
+                            control.setCurrentIndex(target_idx)
+                            control.blockSignals(False)
+                    elif isinstance(control, SwitchButton):
+                        control.blockSignals(True)
+                        control.setEnabled(bool(row_plan.toggle_enabled))
+                        control.setChecked(bool(row_plan.toggle_checked))
+                        control.blockSignals(False)
+                    self._update_profile_row_visual(service_name)
+            self._sync_services_matrix_selection()
+        finally:
+            self._set_building_services_ui(was_building)
 
     def _update_profile_row_visual(self, service_name: str):
         combo = self.service_combos.get(service_name)

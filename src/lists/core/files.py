@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 
 
 def normalize_newlines(text: str) -> str:
@@ -27,11 +28,41 @@ def read_text_file_safe(path: str) -> str | None:
         return None
 
 
+def _file_content_matches(path: str, normalized: str) -> bool:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return normalize_newlines(f.read()) == normalized
+    except Exception:
+        return False
+
+
 def write_text_file(path: str, content: str) -> None:
     """Записывает текстовый файл в UTF-8 и создаёт родительскую папку при необходимости."""
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8", newline="\n") as f:
-        f.write(normalize_newlines(content))
+    normalized = normalize_newlines(content)
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    if _file_content_matches(path, normalized):
+        return
+
+    temp_path = ""
+    try:
+        fd, temp_path = tempfile.mkstemp(
+            prefix=f".{os.path.basename(path)}.",
+            suffix=".tmp",
+            dir=directory or None,
+            text=True,
+        )
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+            f.write(normalized)
+        os.replace(temp_path, path)
+    except Exception:
+        if temp_path:
+            try:
+                os.unlink(temp_path)
+            except FileNotFoundError:
+                pass
+        raise
 
 
 def ensure_user_file_exists(user_path: str) -> bool:

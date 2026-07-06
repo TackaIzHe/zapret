@@ -1,18 +1,12 @@
 from __future__ import annotations
 
 import time
-from collections import OrderedDict
-import threading
 from dataclasses import dataclass, field
 from typing import Any
 
-from log.log import log
 from profile.key_resolution import PresetProfileMoveResult
 from profile.state import StrategyApplyResult
 from ui.performance_metrics import log_ui_timing_since
-
-
-PROFILE_LIST_LOAD_RESULT_CACHE_LIMIT = 24
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,18 +14,6 @@ class ProfileFeature:
     _presets_feature: Any
     _app_paths: Any
     _preset_service_cache: dict[str, Any] = field(default_factory=dict, init=False, repr=False, compare=False)
-    _profile_list_load_result_cache: dict[str, OrderedDict[tuple[object, ...], Any]] = field(
-        default_factory=dict,
-        init=False,
-        repr=False,
-        compare=False,
-    )
-    _profile_list_load_result_lock: threading.RLock = field(
-        default_factory=threading.RLock,
-        init=False,
-        repr=False,
-        compare=False,
-    )
 
     @staticmethod
     def _commands():
@@ -67,66 +49,10 @@ class ProfileFeature:
         started_at = time.perf_counter()
         view_state = build_profile_list_view_state(tuple(getattr(payload, "items", ()) or ()))
         log_ui_timing_since("warmup", method, "profile_warmup.view_state", started_at, important=True)
-        result = ProfileListLoadResult(
+        return ProfileListLoadResult(
             payload=payload,
             view_state=view_state,
         )
-        started_at = time.perf_counter()
-        service.warm_profile_setups(
-            tuple(
-                str(getattr(item, "key", "") or "").strip()
-                for item in tuple(getattr(payload, "items", ()) or ())
-                if str(getattr(item, "key", "") or "").strip()
-            )
-        )
-        log_ui_timing_since("warmup", method, "profile_warmup.setup_payloads", started_at, important=True)
-        started_at = time.perf_counter()
-        cache_entry = service.get_cached_profile_list_entry()
-        if cache_entry is not None:
-            revision, current_payload = cache_entry
-            if current_payload is payload:
-                self._remember_profile_list_load_result(method, tuple(revision), result)
-        log_ui_timing_since("warmup", method, "profile_warmup.cache_store", started_at, important=True)
-        return result
-
-    def _remember_profile_list_load_result(self, method: str, revision: tuple[object, ...], result: Any) -> None:
-        with self._profile_list_load_result_lock:
-            method_cache = self._profile_list_load_result_cache.setdefault(method, OrderedDict())
-            method_cache[revision] = result
-            method_cache.move_to_end(revision)
-            limit = max(1, int(PROFILE_LIST_LOAD_RESULT_CACHE_LIMIT))
-            while len(method_cache) > limit:
-                method_cache.popitem(last=False)
-
-    def _profile_list_load_result(self, service, launch_method: str):
-        from settings.mode import normalize_launch_method
-
-        method = normalize_launch_method(launch_method)
-        try:
-            cache_entry = service.get_cached_profile_list_entry()
-        except Exception as exc:
-            log(f"кэш профилей не подошёл ({method}): не удалось проверить актуальность: {exc}", "DEBUG")
-            return None
-        if cache_entry is None:
-            log(f"кэш профилей не подошёл ({method}): нет актуального списка", "DEBUG")
-            return None
-        revision, current_payload = cache_entry
-        revision = tuple(revision)
-        with self._profile_list_load_result_lock:
-            method_cache = self._profile_list_load_result_cache.get(method)
-            result = method_cache.get(revision) if method_cache is not None else None
-        if result is None:
-            log(f"кэш профилей не подошёл ({method}): прогретый результат не найден", "DEBUG")
-            return None
-        if getattr(result, "payload", None) is not current_payload:
-            log(f"кэш профилей не подошёл ({method}): версия списка изменилась", "DEBUG")
-            return None
-        with self._profile_list_load_result_lock:
-            method_cache = self._profile_list_load_result_cache.get(method)
-            if method_cache is not None and revision in method_cache:
-                method_cache.move_to_end(revision)
-        log(f"кэш профилей использован ({method})", "DEBUG")
-        return result
 
     def list_preset_order_profiles(self, launch_method: str):
         return self._commands().list_preset_order_profiles(self, launch_method)
@@ -836,11 +762,7 @@ class ProfileFeature:
             )
 
         def _load_profile_list_result():
-            warmed = self._profile_list_load_result(service, launch_method)
-            if warmed is not None:
-                return _build_profile_list_result(getattr(warmed, "payload", None))
-            payload = service.list_profiles()
-            return _build_profile_list_result(payload)
+            return _build_profile_list_result(service.list_profiles())
 
         return ProfileListLoadWorker(request_id, _load_profile_list_result, None, parent)
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from settings.mode import normalize_launch_method
@@ -12,6 +12,7 @@ class RuntimeEventDispatcher(QObject):
     runner_failure = pyqtSignal(object)
     launch_error = pyqtSignal(str)
     active_preset_content_changed = pyqtSignal(str)
+    unexpected_process_exit = pyqtSignal()
 
 
 @dataclass(slots=True)
@@ -83,6 +84,7 @@ class RuntimeObjects:
     process_monitor_manager: Any = None
     launch_runtime_api: Any = None
     launch_runtime: Any = None
+    warned_foreign_pid_set: frozenset = frozenset()
 
     def snapshot(self):
         if self.runtime_service is None:
@@ -141,12 +143,55 @@ class RuntimeObjects:
             return snapshot_pid
         return None
 
+    def observe_foreign_processes(self, foreign: dict | None) -> None:
+        """Warns when a non-canonical winws runs next to our active DPI.
+
+        Two winws instances fight over the WinDivert filter, so this is a real
+        user-facing conflict. One warning per unique foreign pid-set; silent
+        while DPI is not running or an external scan (BlockCheck) is active.
+        """
+        normalized = {int(pid): str(path or "") for pid, path in dict(foreign or {}).items()}
+        pid_set = frozenset(normalized)
+        if not pid_set:
+            self.warned_foreign_pid_set = frozenset()
+            return
+        if pid_set == self.warned_foreign_pid_set:
+            return
+
+        try:
+            snapshot = self.runtime_service.snapshot()
+        except Exception:
+            return
+        if not bool(getattr(snapshot, "running", False)):
+            return
+
+        try:
+            from winws_runtime.runtime.scan_guard import is_external_winws_scan_active
+
+            if is_external_winws_scan_active():
+                return
+        except Exception:
+            pass
+
+        self.warned_foreign_pid_set = pid_set
+        from log.log import log
+
+        listed = "; ".join(
+            f"PID {pid}: {normalized[pid]}" for pid in sorted(normalized)
+        )
+        log(
+            "Обнаружен посторонний winws рядом с работающим Zapret — два обхода DPI "
+            f"конфликтуют за WinDivert. Закройте другую копию ({listed})",
+            "ERROR",
+        )
+
     def ensure_process_monitor_manager(self):
         if self.process_monitor_manager is None:
             from winws_runtime.monitoring import ProcessMonitorManager
 
             self.process_monitor_manager = ProcessMonitorManager(
                 observe_process_details=self.observe_process_details,
+                observe_foreign_processes=self.observe_foreign_processes,
             )
         return self.process_monitor_manager
 
@@ -156,6 +201,10 @@ class RuntimeObjects:
             manager.stop_monitoring()
 
 
+_AUTO_RESTART_WINDOW_SECONDS = 600.0
+_AUTO_RESTART_MAX_PER_WINDOW = 2
+
+
 @dataclass(slots=True)
 class RuntimeEvents:
     runtime_service: Any
@@ -163,6 +212,8 @@ class RuntimeEvents:
     ui_state: Any = None
     qt_parent: Any = None
     dispatcher: RuntimeEventDispatcher | None = None
+    command_port: Any = None
+    auto_restart_history: list = field(default_factory=list)
 
     def ensure_dispatcher(self) -> RuntimeEventDispatcher:
         if self.dispatcher is None:
@@ -177,6 +228,10 @@ class RuntimeEvents:
             )
             dispatcher.active_preset_content_changed.connect(
                 self.handle_active_preset_content_changed,
+                Qt.ConnectionType.QueuedConnection,
+            )
+            dispatcher.unexpected_process_exit.connect(
+                self.handle_unexpected_process_exit,
                 Qt.ConnectionType.QueuedConnection,
             )
             self.dispatcher = dispatcher
@@ -199,6 +254,10 @@ class RuntimeEvents:
         normalized_path = str(path or "").strip()
         if normalized_path:
             self.ensure_dispatcher().active_preset_content_changed.emit(normalized_path)
+
+    def publish_unexpected_process_exit(self) -> None:
+        """Thread-safe entry for the runner's exit watcher (queued to main thread)."""
+        self.ensure_dispatcher().unexpected_process_exit.emit()
 
     def handle_runner_failure(self, payload: object) -> None:
         if not isinstance(payload, dict):
@@ -231,6 +290,63 @@ class RuntimeEvents:
             self.ui_port.show_launch_error(str(error or ""))
         except Exception:
             pass
+
+    def handle_unexpected_process_exit(self) -> None:
+        """Main-thread reaction to the runner's instant exit event.
+
+        Resolution is None while a BlockCheck scan owns the winws lifecycle or
+        when there is nothing to diagnose — then the poll path (with the same
+        guards) remains the only detector and this handler does nothing.
+        """
+        from log.log import log
+        from winws_runtime.health.post_mortem import resolve_unexpected_exit
+
+        snapshot = self.runtime_service.snapshot()
+        if snapshot.phase not in {"starting", "running"}:
+            return
+
+        resolution = resolve_unexpected_exit()
+        if resolution is None:
+            return
+
+        if resolution.transient and self._try_reserve_auto_restart():
+            log(
+                f"{resolution.message} Выполняется автоматический перезапуск...",
+                "WARNING",
+            )
+            self.runtime_service.mark_start_failed(resolution.message)
+            if self._request_auto_restart():
+                return
+            log("Автоматический перезапуск не удалось запустить", "WARNING")
+
+        message = resolution.message
+        if resolution.transient:
+            message = f"{message} Автоперезапуск отключён до ручного запуска."
+        # Single user-facing publication for this death event (ERROR → toast).
+        log(message, "ERROR")
+        self.runtime_service.mark_start_failed(message)
+
+    def _try_reserve_auto_restart(self, *, now: float | None = None) -> bool:
+        import time
+
+        current = float(now if now is not None else time.monotonic())
+        window_start = current - _AUTO_RESTART_WINDOW_SECONDS
+        self.auto_restart_history = [
+            stamp for stamp in self.auto_restart_history if stamp > window_start
+        ]
+        if len(self.auto_restart_history) >= _AUTO_RESTART_MAX_PER_WINDOW:
+            return False
+        self.auto_restart_history.append(current)
+        return True
+
+    def _request_auto_restart(self) -> bool:
+        command_port = self.command_port
+        if command_port is None:
+            return False
+        try:
+            return bool(command_port.start())
+        except Exception:
+            return False
 
     def mark_start_failed_if_current(
         self,

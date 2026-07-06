@@ -70,7 +70,8 @@ class ProfileSetupEditorReadDeferTests(unittest.TestCase):
         page._cleanup_in_progress = False
         page._list_file_kind = "hostlist"
         page._list_file_text = _RawTextEditor("latest.example")
-        page._list_file_text_snapshot = "latest.example"
+        page._list_file_text_snapshot = "stale.example"
+        page._list_file_text_dirty = True
         page._list_file_validation_timer = None
         page._list_file_validation_runtime = _Runtime(running=True)
         page._list_file_validation_request_id = 0
@@ -99,7 +100,10 @@ class ProfileSetupEditorReadDeferTests(unittest.TestCase):
         page._list_file_validation_runtime = _StartRuntime()
         callbacks[0]()
 
-        self.assertEqual(page._list_file_text.read_calls, 0)
+        # Чтение редактора отложено до фактического старта воркера и
+        # выполняется ровно один раз — текст берётся живым из документа,
+        # а не из инкрементального кэша (его больше нет).
+        self.assertEqual(page._list_file_text.read_calls, 1)
         page.create_profile_list_file_validation_worker.assert_called_once_with(
             1,
             kind="hostlist",

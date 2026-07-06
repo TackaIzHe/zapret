@@ -1,15 +1,20 @@
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from winws_runtime.runtime.process_probe import get_canonical_winws_process_pids
+from winws_runtime.runtime.process_probe import (
+    find_foreign_winws_processes,
+    get_canonical_winws_process_pids,
+)
 
 
 class ProcessMonitorThread(QThread):
     """
     Следит за каноническими процессами winws.exe/winws2.exe через WinAPI.
     Шлёт сигнал когда состояние (запущен/остановлен) изменилось.
+    Параллельно замечает посторонние winws-процессы (то же имя, чужой путь).
     """
     processStatusChanged = pyqtSignal(bool)          # True / False
     processDetailsChanged = pyqtSignal(dict)         # имя exe -> список PID
+    foreignProcessesChanged = pyqtSignal(dict)       # pid -> путь чужого winws
     checkingStarted = pyqtSignal()                   # Начало проверки
     checkingFinished = pyqtSignal()                  # Конец проверки
 
@@ -23,7 +28,8 @@ class ProcessMonitorThread(QThread):
         self._running      = True
         self._cur_state: bool | None = None
         self._cur_details: dict[str, list[int]] | None = None
-        
+        self._cur_foreign: dict[int, str] | None = None
+
     def _check_processes_fast(self) -> dict[str, list[int]]:
         """
         Возвращает PID канонических winws.exe/winws2.exe.
@@ -34,6 +40,13 @@ class ProcessMonitorThread(QThread):
         """
         try:
             return get_canonical_winws_process_pids()
+        except Exception:
+            return {}
+
+    def _check_foreign_processes_fast(self) -> dict[int, str]:
+        """PID -> путь для winws-процессов с посторонним путём."""
+        try:
+            return {record.pid: record.exe_path for record in find_foreign_winws_processes()}
         except Exception:
             return {}
 
@@ -64,6 +77,11 @@ class ProcessMonitorThread(QThread):
                 if details != self._cur_details:
                     self._cur_details = details
                     self.processDetailsChanged.emit(details)
+
+                foreign = self._check_foreign_processes_fast()
+                if foreign != self._cur_foreign:
+                    self._cur_foreign = foreign
+                    self.foreignProcessesChanged.emit(foreign)
 
                 # Если состояние изменилось — отдаём сигнал в GUI
                 if is_running != self._cur_state:

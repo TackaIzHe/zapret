@@ -7,6 +7,7 @@ from PyQt6.QtGui import QDesktopServices
 
 from log.log import log
 from profile.match_filters import filter_values
+from profile.key_resolution import profile_reference_key
 from profile.list_apply_signature import profile_payload_apply_signature
 from profile.ui.profile_context_menu import ProfileContextMenuActions, show_profile_context_menu
 from profile.ui.profile_folder_menu import show_profile_folder_menu
@@ -146,6 +147,7 @@ class PresetSetupPageBase(BasePage):
         self._user_profile_delete_runtime = OneShotWorkerRuntime()
         self._profile_payload_loaded_once = False
         self._profile_payload_dirty = True
+        self._profile_payload_load_failed = False
         self._profile_load_refresh_state = LatestValueWorkerState(self._profile_load_runtime, empty_value=False)
         self._profile_payload_request_scheduled = False
         self._profile_payload_request_force = False
@@ -172,7 +174,7 @@ class PresetSetupPageBase(BasePage):
             "_profile_payload_dirty",
             True,
         ):
-            self._schedule_profiles_list_show_after_page_switch()
+            self._mark_profiles_list_ready_after_page_switch()
             return
         self._schedule_profiles_payload_request()
 
@@ -198,13 +200,6 @@ class PresetSetupPageBase(BasePage):
         self._hide_profiles_list_for_next_switch()
 
     def _hide_profiles_list_for_next_switch(self) -> None:
-        profile_list = self.__dict__.get("_profiles_list")
-        if profile_list is None:
-            return
-        try:
-            profile_list.setVisible(False)
-        except Exception:
-            pass
         self._profiles_list_show_scheduled = False
 
     def _schedule_profiles_list_show_after_page_switch(self) -> None:
@@ -221,16 +216,17 @@ class PresetSetupPageBase(BasePage):
             self._show_profiles_list_after_page_switch()
 
     def _show_profiles_list_after_page_switch(self) -> None:
+        if not self.__dict__.get("_profiles_list_show_scheduled", False):
+            return
         self._profiles_list_show_scheduled = False
+        self._mark_profiles_list_ready_after_page_switch()
+
+    def _mark_profiles_list_ready_after_page_switch(self) -> None:
         if self.__dict__.get("_cleanup_in_progress", False):
             return
         profile_list = self.__dict__.get("_profiles_list")
         if profile_list is None:
             return
-        try:
-            profile_list.setVisible(True)
-        except Exception:
-            pass
         self._mark_content_ready_safely(stage="content.profiles_list.visible", extra="list=visible")
         self._mark_content_paint_ready_safely(
             profile_list,
@@ -401,9 +397,19 @@ class PresetSetupPageBase(BasePage):
             self._profile_payload_dirty = True
             self._schedule_profiles_payload_request(force=True)
             return
+        if self._activation_targets_displayed_preset(_state):
+            return
         self._deferred_profile_payload_apply = None
         self._profile_payload_dirty = True
         self._schedule_profiles_payload_reload_after_preset_switch()
+
+    def _activation_targets_displayed_preset(self, state) -> bool:
+        """Активация уже отображаемого пресета не требует перегрузки списка."""
+        active_file_name = str(getattr(state, "active_preset_file_name", "") or "").strip().lower()
+        displayed = str(self.__dict__.get("_displayed_preset_file_name", "") or "").strip().lower()
+        if not active_file_name or not displayed:
+            return False
+        return active_file_name == displayed
 
     def _request_profiles_payload(self, *, force: bool = False) -> None:
         if self._cleanup_in_progress:
@@ -507,7 +513,6 @@ class PresetSetupPageBase(BasePage):
             payload, view_state, apply_signature_base = pending
             self._apply_payload(payload, view_state=view_state, apply_signature_base=apply_signature_base)
             self._profile_payload_dirty = False
-            self._hide_profiles_list_for_next_switch()
             return
         self._deferred_profile_payload_apply = None
         payload, view_state, apply_signature_base = pending
@@ -546,6 +551,9 @@ class PresetSetupPageBase(BasePage):
         ):
             return
         self._profile_payload_dirty = True
+        # Постоянная ошибка загрузки не должна перезапускаться из finish-обработчика:
+        # без этого флага dirty превращается в pending и цикл load→fail крутится вечно.
+        self._profile_payload_load_failed = True
         log(f"{self.__class__.__name__}: не удалось прочитать профили: {error}", "ERROR")
         self._show_empty_state(
             "Не удалось показать профили выбранного пресета. "
@@ -555,7 +563,9 @@ class PresetSetupPageBase(BasePage):
 
     def _on_profile_worker_finished(self, worker) -> None:
         state = self._profile_load_refresh_state_obj()
-        if self.__dict__.get("_profile_payload_dirty", False):
+        load_failed = bool(self.__dict__.get("_profile_payload_load_failed", False))
+        self._profile_payload_load_failed = False
+        if self.__dict__.get("_profile_payload_dirty", False) and not load_failed:
             state.pending = True
         state.schedule_pending_after_finish(
             worker,
@@ -751,6 +761,9 @@ class PresetSetupPageBase(BasePage):
             log(f"{self.__class__.__name__}: не удалось показать уведомление о разделении profile-ов: {exc}", "DEBUG")
 
     def _apply_selected_preset_title(self, payload) -> None:
+        self._displayed_preset_file_name = str(
+            getattr(payload, "selected_preset_file_name", "") or ""
+        ).strip()
         if self.title_label is None:
             return
         base_title = tr_catalog(self.title_key, language=self._ui_language, default=self.page_title)
@@ -778,7 +791,18 @@ class PresetSetupPageBase(BasePage):
         self._mark_content_ready_safely(stage="content.empty_state.visible", extra="empty_state=visible")
 
     def _on_profile_clicked(self, profile_key: str) -> None:
-        self._open_profile_setup(profile_key)
+        self._open_profile_setup_by_reference(profile_key)
+
+    def _profile_reference_for(self, profile_key: str) -> str:
+        """Стабильная ссылка вместо позиционного "profile:N": позиционный ключ
+        протухает, пока операция ждёт в очереди записи или пока открыт редактор."""
+        profiles_list = self.__dict__.get("_profiles_list")
+        item = profiles_list.profile_item_for_key(profile_key) if profiles_list is not None else None
+        reference = profile_reference_key(item) if item is not None else ""
+        return reference or str(profile_key or "").strip()
+
+    def _open_profile_setup_by_reference(self, profile_key: str) -> None:
+        self._open_profile_setup(self._profile_reference_for(profile_key))
 
     def _on_profile_context_requested(self, profile_key: str, global_pos) -> None:
         if self._profiles_list is None:
@@ -791,7 +815,7 @@ class PresetSetupPageBase(BasePage):
             item=item,
             global_pos=global_pos,
             actions=ProfileContextMenuActions(
-                open_profile=self._open_profile_setup,
+                open_profile=self._open_profile_setup_by_reference,
                 set_enabled=self._set_profile_enabled_from_menu,
                 duplicate_profile=self._duplicate_profile_from_menu,
                 delete_from_preset=self._delete_profile_from_menu,
@@ -827,7 +851,10 @@ class PresetSetupPageBase(BasePage):
         self._request_profile_context_action("delete", profile_key)
 
     def _request_profile_context_action(self, action: str, profile_key: str, *, enabled: bool | None = None) -> None:
-        profile_key = str(profile_key or "").strip()
+        # Ссылка вместо позиционного ключа: очередь записи не ремапит ключи,
+        # и "profile:N", захваченный при клике, после предыдущей операции
+        # указывал бы на чужой профиль.
+        profile_key = self._profile_reference_for(profile_key)
         if not profile_key:
             return
         if self._profile_preset_write_operation_running():
@@ -1336,7 +1363,15 @@ class PresetSetupPageBase(BasePage):
         requested_enabled = bool(
             self.__dict__.get("_profile_context_action_enabled_by_request", {}).pop(request_id, True)
         )
-        if target_key == str(profile_key or "") and self._apply_profile_enabled_locally(profile_key, requested_enabled):
+        held_item = (
+            self._profiles_list.profile_item_for_key(profile_key)
+            if self.__dict__.get("_profiles_list") is not None
+            else None
+        )
+        same_row = held_item is not None and str(getattr(held_item, "key", "") or "") == target_key
+        if (target_key == str(profile_key or "") or same_row) and self._apply_profile_enabled_locally(
+            profile_key, requested_enabled
+        ):
             self._profile_payload_dirty = True
             return True
         if target_item is not None and self._add_created_user_profile_locally(target_item):

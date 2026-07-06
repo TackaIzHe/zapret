@@ -88,6 +88,7 @@ from ui.message_box_accessibility import set_message_box_button_accessibility
 from ui.one_shot_worker_runtime import OneShotWorkerRuntime
 from ui.queued_worker_state import QueuedWorkerState
 from config.urls import PRESET_INFO_URL
+from app_notifications import advisory_notification
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +126,7 @@ class UserPresetsPageBase(BasePage):
         create_preset_storage_action_worker,
         load_preset_folder_state,
         open_preset_raw_editor,
+        notify=None,
         ui_state_store,
     ):
         self._config = self.page_config
@@ -146,6 +148,7 @@ class UserPresetsPageBase(BasePage):
         self._create_preset_storage_action_worker_fn = create_preset_storage_action_worker
         self._load_preset_folder_state_fn = load_preset_folder_state
         self._open_preset_raw_editor_callback = open_preset_raw_editor
+        self._notify = notify
         self._page_api = self._build_page_runtime().build_page_api()
         self._runtime_service = self._build_runtime_service()
         self._runtime_service.attach_page(self, self._build_runtime_adapter())
@@ -373,28 +376,22 @@ class UserPresetsPageBase(BasePage):
         return False
 
     def _can_reset_preset_to_builtin(self, name: str) -> bool:
+        # Ленивая проверка одного файла при открытии меню: кэш списка не хранит
+        # этот флаг (его вычисление требует чтения содержимого файлов).
         candidate = str(name or "").strip()
         if not candidate:
             return False
+        if self._is_builtin_preset_file(candidate):
+            return False
 
-        model = getattr(self, "_presets_model", None)
+        checker = getattr(self._preset_runtime_actions, "preset_differs_from_builtin_by_file_name", None)
+        if not callable(checker):
+            return False
+        file_name = candidate if candidate.lower().endswith(".txt") else f"{candidate}.txt"
         try:
-            reset_getter = getattr(model, "preset_can_reset_to_builtin", None)
-            if callable(reset_getter):
-                cached_reset = reset_getter(candidate)
-                if cached_reset is not None:
-                    return bool(cached_reset)
+            return bool(checker(self._config.launch_method, file_name))
         except Exception:
-            pass
-
-        cached_metadata = self._runtime_service.cached_presets_metadata()
-        metadata = cached_metadata.get(candidate)
-        if metadata is None and candidate and not candidate.lower().endswith(".txt"):
-            metadata = cached_metadata.get(f"{candidate}.txt")
-        if isinstance(metadata, dict):
-            return bool(metadata.get("can_reset_to_builtin", False))
-
-        return False
+            return False
 
     def _folder_scope_key(self) -> str:
         return self._config.folder_scope
@@ -413,7 +410,6 @@ class UserPresetsPageBase(BasePage):
             update_presets_view_height_fn=self._update_presets_view_height,
             schedule_layout_resync_fn=self._schedule_layout_resync,
         )
-        self._schedule_presets_list_show_after_page_switch()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -426,13 +422,6 @@ class UserPresetsPageBase(BasePage):
         self._hide_presets_list_for_next_switch()
 
     def _hide_presets_list_for_next_switch(self) -> None:
-        presets_list = self.__dict__.get("presets_list")
-        if presets_list is None:
-            return
-        try:
-            presets_list.setVisible(False)
-        except Exception:
-            pass
         self._presets_list_show_scheduled = False
 
     def _schedule_presets_list_show_after_page_switch(self) -> None:
@@ -449,16 +438,11 @@ class UserPresetsPageBase(BasePage):
             self._show_presets_list_after_page_switch()
 
     def _show_presets_list_after_page_switch(self) -> None:
+        if not self.__dict__.get("_presets_list_show_scheduled", False):
+            return
         self._presets_list_show_scheduled = False
         if self.__dict__.get("_cleanup_in_progress", False):
             return
-        presets_list = self.__dict__.get("presets_list")
-        if presets_list is None:
-            return
-        try:
-            presets_list.setVisible(True)
-        except Exception:
-            pass
 
     def _after_ui_built(self) -> None:
         after_user_presets_ui_built(
@@ -2326,12 +2310,54 @@ class UserPresetsPageBase(BasePage):
         if bool(getattr(result, "ok", False)) and getattr(result, "activated_file_name", None):
             return
         if str(getattr(result, "infobar_level", "") or "") == "error":
-            InfoBar.error(
+            self._show_preset_page_notification(
+                level="error",
                 title=str(getattr(result, "infobar_title", "") or self._tr("common.error.title", "Ошибка")),
                 content=str(getattr(result, "infobar_content", "") or ""),
-                parent=self.window(),
+                source="presets.user.activation",
+                duration=10000,
             )
         self._restore_preset_activation_marker()
+
+    def _show_preset_page_notification(
+        self,
+        *,
+        level: str,
+        title: str,
+        content: str,
+        source: str,
+        duration: int = 10000,
+    ) -> None:
+        title_text = str(title or "").strip() or self._tr("common.error.title", "Ошибка")
+        content_text = str(content or "").strip()
+        normalized_level = str(level or "warning").strip().lower()
+        normalized_source = str(source or "presets.user").strip() or "presets.user"
+
+        notify = self.__dict__.get("_notify")
+        if callable(notify):
+            notify(
+                advisory_notification(
+                    level=normalized_level,
+                    title=title_text,
+                    content=content_text,
+                    source=normalized_source,
+                    presentation="infobar",
+                    queue="immediate",
+                    duration=int(duration or 10000),
+                    dedupe_key=f"{normalized_source}:{' '.join(content_text.split()).casefold()}",
+                    dedupe_window_ms=10000,
+                )
+            )
+            return
+
+        if InfoBar is None:
+            return
+        if normalized_level == "error":
+            InfoBar.error(title=title_text, content=content_text, parent=self.window())
+        elif normalized_level == "warning":
+            InfoBar.warning(title=title_text, content=content_text, parent=self.window())
+        elif normalized_level == "success":
+            InfoBar.success(title=title_text, content=content_text, parent=self.window())
 
     def _on_preset_activation_failed(self, request_id: int, error: str) -> None:
         if request_id != int(getattr(self, "_preset_activate_request_id", 0) or 0):

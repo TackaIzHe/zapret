@@ -72,7 +72,9 @@ class NotificationBanner(QWidget):
 
     def _setup_ui(self):
         """Настройка UI элементов"""
-        self.setFixedHeight(48)
+        # Минимальная, а не фиксированная высота: длинный текст с wordWrap
+        # должен увеличивать баннер, а не обрезаться по 48px.
+        self.setMinimumHeight(48)
 
         # Основной layout
         layout = QHBoxLayout(self)

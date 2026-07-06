@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -11,26 +12,78 @@ if str(PROJECT_SRC) not in sys.path:
     sys.path.insert(0, str(PROJECT_SRC))
 
 
-class _FakeShortcut:
+class _FakeComObject:
+    """Пустышка с динамическими атрибутами для узлов COM-задачи."""
+
     def __init__(self):
-        self.TargetPath = ""
-        self.Arguments = ""
-        self.WorkingDirectory = ""
-        self.IconLocation = ""
-        self.saved = False
+        object.__setattr__(self, "attrs", {})
 
-    def Save(self):
-        self.saved = True
+    def __setattr__(self, name, value):
+        self.attrs[name] = value
+
+    def __getattr__(self, name):
+        try:
+            return object.__getattribute__(self, "attrs")[name]
+        except KeyError as exc:
+            raise AttributeError(name) from exc
 
 
-class _FakeShell:
+class _FakeComCollection:
     def __init__(self):
-        self.created_paths = []
-        self.shortcut = _FakeShortcut()
+        self.created: list[tuple[int, _FakeComObject]] = []
 
-    def CreateShortcut(self, path: str):
-        self.created_paths.append(path)
-        return self.shortcut
+    def Create(self, item_type: int):
+        item = _FakeComObject()
+        self.created.append((int(item_type), item))
+        return item
+
+
+class _FakeTaskDefinition:
+    def __init__(self):
+        self.RegistrationInfo = _FakeComObject()
+        self.Triggers = _FakeComCollection()
+        self.Actions = _FakeComCollection()
+        self.Principal = _FakeComObject()
+        self.Settings = _FakeComObject()
+
+
+class _FakeTaskFolder:
+    def __init__(self):
+        self.registered: list[tuple] = []
+        self.deleted: list[str] = []
+        self.tasks: dict[str, object] = {}
+
+    def RegisterTaskDefinition(self, name, definition, flags, user, password, logon_type):
+        self.registered.append((name, definition, flags, user, password, logon_type))
+
+    def GetTask(self, name):
+        try:
+            return self.tasks[name]
+        except KeyError as exc:
+            raise OSError(f"task not found: {name}") from exc
+
+    def DeleteTask(self, name, flags):
+        if name not in self.tasks:
+            raise OSError(f"task not found: {name}")
+        del self.tasks[name]
+        self.deleted.append(name)
+
+
+class _FakeScheduler:
+    def __init__(self):
+        self.folder = _FakeTaskFolder()
+        self.task_definitions: list[_FakeTaskDefinition] = []
+
+    def Connect(self):
+        pass
+
+    def GetFolder(self, path: str):
+        return self.folder
+
+    def NewTask(self, flags: int):
+        definition = _FakeTaskDefinition()
+        self.task_definitions.append(definition)
+        return definition
 
 
 class _FakeToggle:
@@ -47,46 +100,151 @@ class _FakeToggle:
 
 
 class GuiAutostartContractTests(unittest.TestCase):
-    def test_creates_user_startup_shortcut(self) -> None:
-        from autostart import startup_shortcut_api
+    def test_registers_elevated_logon_task_in_scheduler(self) -> None:
+        from autostart import scheduled_task_api
 
-        shell = _FakeShell()
+        scheduler = _FakeScheduler()
         exe_path = r"C:\Program Files\Zapret\Zapret.exe"
-        shortcut_path = (
-            r"C:\Users\Tester\AppData\Roaming\Microsoft\Windows\Start Menu"
-            r"\Programs\Startup\ZapretGUI.lnk"
-        )
 
         with patch.object(
-            startup_shortcut_api,
-            "_dispatch_shell",
-            return_value=shell,
+            scheduled_task_api,
+            "_connect_scheduler",
+            return_value=scheduler,
         ):
-            result = startup_shortcut_api.create_or_update_startup_shortcut(
-                exe_path,
-                shortcut_path=shortcut_path,
-            )
+            result = scheduled_task_api.create_or_update_autostart_task(exe_path)
 
         self.assertTrue(result)
-        self.assertEqual(shell.created_paths, [shortcut_path])
-        self.assertEqual(shell.shortcut.TargetPath, exe_path)
-        self.assertEqual(shell.shortcut.Arguments, "--tray")
-        self.assertEqual(shell.shortcut.WorkingDirectory, r"C:\Program Files\Zapret")
-        self.assertEqual(shell.shortcut.IconLocation, exe_path)
-        self.assertTrue(shell.shortcut.saved)
+
+        definition = scheduler.task_definitions[0]
+
+        # Триггер: вход текущего пользователя в систему
+        (trigger_type, trigger), = definition.Triggers.created
+        self.assertEqual(trigger_type, scheduled_task_api.TASK_TRIGGER_LOGON)
+
+        # Действие: запуск exe в трее
+        (action_type, action), = definition.Actions.created
+        self.assertEqual(action_type, scheduled_task_api.TASK_ACTION_EXEC)
+        self.assertEqual(action.Path, exe_path)
+        self.assertEqual(action.Arguments, "--tray")
+        self.assertEqual(action.WorkingDirectory, r"C:\Program Files\Zapret")
+
+        # Ключ решения: запуск с наивысшими правами без UAC-запроса.
+        # Ярлык автозагрузки для requireAdministrator-exe Windows молча игнорирует.
+        self.assertEqual(
+            definition.Principal.RunLevel,
+            scheduled_task_api.TASK_RUNLEVEL_HIGHEST,
+        )
+        self.assertEqual(
+            definition.Principal.LogonType,
+            scheduled_task_api.TASK_LOGON_INTERACTIVE_TOKEN,
+        )
+
+        # Дефолты планировщика ломают GUI: батарея и лимит времени выполнения
+        self.assertFalse(definition.Settings.DisallowStartIfOnBatteries)
+        self.assertFalse(definition.Settings.StopIfGoingOnBatteries)
+        self.assertEqual(definition.Settings.ExecutionTimeLimit, "PT0S")
+
+        (name, registered_def, flags, _user, _password, logon_type), = scheduler.folder.registered
+        self.assertEqual(name, scheduled_task_api.AUTOSTART_TASK_NAME)
+        self.assertIs(registered_def, definition)
+        self.assertEqual(flags, scheduled_task_api.TASK_CREATE_OR_UPDATE)
+        self.assertEqual(logon_type, scheduled_task_api.TASK_LOGON_INTERACTIVE_TOKEN)
+
+    def test_enable_gui_autostart_creates_task_and_removes_legacy_shortcut(self) -> None:
+        from autostart.public import enable_gui_autostart
+
+        with (
+            patch("autostart.startup_shortcut_api.delete_startup_shortcut", return_value=True) as delete_shortcut,
+            patch("autostart.scheduled_task_api.create_or_update_autostart_task", return_value=True) as create_task,
+        ):
+            result = enable_gui_autostart()
+
+        self.assertTrue(result.success)
+        delete_shortcut.assert_called_once()
+        create_task.assert_called_once_with(sys.executable)
 
     def test_enable_gui_autostart_returns_readable_error_message(self) -> None:
         from autostart.public import enable_gui_autostart
 
         with (
             patch("autostart.startup_shortcut_api.delete_startup_shortcut", return_value=False),
-            patch("autostart.startup_shortcut_api.create_or_update_startup_shortcut", return_value=False),
+            patch("autostart.scheduled_task_api.create_or_update_autostart_task", return_value=False),
         ):
             result = enable_gui_autostart()
 
         self.assertFalse(result.success)
         self.assertFalse(result.restart_requested)
         self.assertIn("Не удалось включить автозапуск", result.message)
+
+    def test_disable_gui_autostart_removes_task_and_legacy_shortcut(self) -> None:
+        from autostart.public import disable_gui_autostart
+
+        with (
+            patch("autostart.scheduled_task_api.delete_autostart_task", return_value=True),
+            patch("autostart.startup_shortcut_api.delete_startup_shortcut", return_value=True),
+        ):
+            result = disable_gui_autostart()
+
+        self.assertTrue(result.success)
+        self.assertEqual(result.removed_count, 2)
+
+    def test_migration_is_noop_when_autostart_disabled(self) -> None:
+        from autostart.public import ensure_gui_autostart_migrated
+
+        with (
+            patch("settings.store.get_gui_autostart_enabled", return_value=False),
+            patch("autostart.scheduled_task_api.create_or_update_autostart_task") as create_task,
+        ):
+            migrated = ensure_gui_autostart_migrated()
+
+        self.assertFalse(migrated)
+        create_task.assert_not_called()
+
+    def test_migration_is_noop_when_task_matches_and_no_shortcut(self) -> None:
+        from autostart.public import ensure_gui_autostart_migrated
+
+        shortcut_path = Path(r"C:\nonexistent\ZapretGUI.lnk")
+        with (
+            patch("settings.store.get_gui_autostart_enabled", return_value=True),
+            patch(
+                "autostart.scheduled_task_api.get_autostart_task_action",
+                return_value=(sys.executable, "--tray"),
+            ),
+            patch(
+                "autostart.startup_shortcut_api.get_startup_shortcut_path",
+                return_value=shortcut_path,
+            ),
+            patch("autostart.scheduled_task_api.create_or_update_autostart_task") as create_task,
+        ):
+            migrated = ensure_gui_autostart_migrated()
+
+        self.assertFalse(migrated)
+        create_task.assert_not_called()
+
+    def test_migration_replaces_legacy_shortcut_with_task(self) -> None:
+        from autostart.public import ensure_gui_autostart_migrated
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            legacy_shortcut = Path(tmp_dir) / "ZapretGUI.lnk"
+            legacy_shortcut.write_bytes(b"legacy")
+
+            with (
+                patch("settings.store.get_gui_autostart_enabled", return_value=True),
+                patch("autostart.scheduled_task_api.get_autostart_task_action", return_value=None),
+                patch(
+                    "autostart.startup_shortcut_api.get_startup_shortcut_path",
+                    return_value=legacy_shortcut,
+                ),
+                patch(
+                    "autostart.scheduled_task_api.create_or_update_autostart_task",
+                    return_value=True,
+                ) as create_task,
+            ):
+                migrated = ensure_gui_autostart_migrated()
+
+            self.assertTrue(migrated)
+            create_task.assert_called_once_with(sys.executable)
+            self.assertFalse(legacy_shortcut.exists())
 
     def test_autostart_error_notification_payload_is_user_readable(self) -> None:
         from autostart.ui.notifications import build_autostart_error_notification
