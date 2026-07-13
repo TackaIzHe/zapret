@@ -9,7 +9,7 @@
   <a href="https://discord.com/invite/kkcBDG2uws"><img alt="Discord" src="https://img.shields.io/badge/Discord-сообщество-5865F2?style=for-the-badge&logo=discord&logoColor=white"></a>
   <a href="https://t.me/zapretvpns_bot"><img alt="Поддержать донатами" src="https://img.shields.io/badge/Поддержать-донат-FF424D?style=for-the-badge&logo=telegram&logoColor=white"></a>
   <a href="https://publish.obsidian.md/zapret/Privacy/Zapret/home"><img alt="Вики" src="https://img.shields.io/badge/Вики-публичная-7C3AED?style=for-the-badge&logo=obsidian&logoColor=white"></a>
-  <a href="https://github.com/youtubediscord/zapret/issues/new"><img alt="Вопросы и баги" src="https://img.shields.io/badge/Вопросы_и_баги-GitHub-181717?style=for-the-badge&logo=github&logoColor=white"></a>
+  <a href="https://github.com/youtubediscord/zapret/issues/new/choose"><img alt="Вопросы и баги" src="https://img.shields.io/badge/Вопросы_и_баги-GitHub-181717?style=for-the-badge&logo=github&logoColor=white"></a>
 </p>
 
 Один из самых (_если не самый_) популярных GUI лаунчеров для программы Запрет.
