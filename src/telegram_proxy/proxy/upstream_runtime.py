@@ -48,6 +48,10 @@ class UpstreamConnectError(UpstreamRuntimeError):
         self.endpoint = endpoint
 
 
+class UpstreamTargetRejectedError(UpstreamConnectError):
+    """The proxy is alive, but its access rules rejected this target."""
+
+
 @dataclass(slots=True)
 class OpenedUpstream:
     reader: asyncio.StreamReader
@@ -149,6 +153,14 @@ class UpstreamConnectionExecutor:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
+                if (
+                    isinstance(exc, socks5.Socks5ReplyError)
+                    and exc.reply_code == socks5.REP_CONNECTION_NOT_ALLOWED
+                ):
+                    raise UpstreamTargetRejectedError(
+                        str(exc),
+                        endpoint=attempt.endpoint,
+                    ) from exc
                 transition = self._controller.record_connect_failure(
                     attempt,
                     f"{type(exc).__name__}: {exc}",
@@ -284,5 +296,6 @@ __all__ = [
     "UpstreamConnectionExecutor",
     "UpstreamRuntimeError",
     "UpstreamStaleError",
+    "UpstreamTargetRejectedError",
     "UpstreamUnavailableError",
 ]

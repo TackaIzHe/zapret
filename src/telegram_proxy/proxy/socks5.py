@@ -29,6 +29,7 @@ ATYP_DOMAIN = 0x03
 ATYP_IPV6 = 0x04
 REP_SUCCESS = 0x00
 REP_GENERAL_FAILURE = 0x01
+REP_CONNECTION_NOT_ALLOWED = 0x02
 REP_CONN_REFUSED = 0x05
 REP_CMD_NOT_SUPPORTED = 0x07
 REP_ATYP_NOT_SUPPORTED = 0x08
@@ -36,6 +37,17 @@ REP_ATYP_NOT_SUPPORTED = 0x08
 
 class Socks5Error(Exception):
     """SOCKS5 protocol error."""
+
+
+class Socks5ReplyError(Socks5Error):
+    """A valid SOCKS5 server rejected the requested command or target."""
+
+    def __init__(self, command_name: str, reply_code: int) -> None:
+        self.command_name = str(command_name)
+        self.reply_code = int(reply_code)
+        super().__init__(
+            f"Upstream proxy {self.command_name} failed (REP=0x{self.reply_code:02X})"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -326,7 +338,7 @@ async def _read_socks5_reply_address(
     if ver != SOCKS_VER:
         raise Socks5Error(f"Upstream proxy bad reply version: {ver}")
     if rep != REP_SUCCESS:
-        raise Socks5Error(f"Upstream proxy {command_name} failed (REP=0x{rep:02X})")
+        raise Socks5ReplyError(command_name, rep)
 
     return await _read_address(reader, atyp)
 
@@ -481,7 +493,7 @@ async def connect_via_socks5(
         if ver != SOCKS_VER:
             raise Socks5Error(f"Upstream proxy bad reply version: {ver}")
         if rep != REP_SUCCESS:
-            raise Socks5Error(f"Upstream proxy CONNECT failed (REP=0x{rep:02X})")
+            raise Socks5ReplyError("CONNECT", rep)
 
         # Consume bound address (we don't need it but must read it)
         if atyp == ATYP_IPV4:

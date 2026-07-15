@@ -81,6 +81,7 @@ from telegram_proxy.proxy.upstream_runtime import (
     UpstreamConnectError,
     UpstreamConnectionExecutor,
     UpstreamStaleError,
+    UpstreamTargetRejectedError,
     UpstreamUnavailableError,
 )
 
@@ -429,6 +430,32 @@ class TelegramWSProxy:
                 route="внешний SOCKS5",
                 status="пропуск",
                 reason=str(exc),
+            )
+            return None
+        except UpstreamTargetRejectedError as exc:
+            failed_endpoint = getattr(exc, "endpoint", None)
+            endpoint_name = endpoint_display_name(failed_endpoint) or "текущий сервер"
+            self.stats.failed_connections += 1
+            self._log(
+                f"[{label}] {prefix}DC{dc}{media_tag} upstream {endpoint_name} "
+                f"target rejected; active server kept: {type(exc).__name__}: {exc}"
+            )
+            self._log_route_detail(
+                label,
+                route="upstream SOCKS5",
+                dc=dc,
+                is_media=is_media,
+                target=f"{upstream_host}:{upstream_port} via {endpoint_name}",
+                result="error",
+                reason=self._route_error(exc),
+                next_step="текущий сервер сохранён; проверяются правила доступа к адресу",
+            )
+            self._record_route(
+                dc=dc,
+                is_media=is_media,
+                route="внешний SOCKS5",
+                status="ошибка",
+                reason=self._route_error(exc),
             )
             return None
         except (UpstreamConnectError, UpstreamStaleError) as exc:

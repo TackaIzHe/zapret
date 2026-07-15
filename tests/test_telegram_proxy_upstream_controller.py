@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import unittest
 
+from telegram_proxy.proxy import socks5
 from telegram_proxy.proxy.routing import UpstreamProxyConfig, UpstreamProxyEndpoint
 from telegram_proxy.proxy.upstream_controller import (
     RETRY_DELAYS,
@@ -17,6 +18,7 @@ from telegram_proxy.proxy.upstream_runtime import (
     UpstreamBusyError,
     UpstreamConnectError,
     UpstreamConnectionExecutor,
+    UpstreamTargetRejectedError,
 )
 from telegram_proxy.ui.runtime_helpers import format_upstream_runtime_state
 
@@ -194,6 +196,25 @@ class UpstreamStateControllerTests(unittest.TestCase):
 
 
 class UpstreamConnectionExecutorTests(unittest.IsolatedAsyncioTestCase):
+    async def test_access_rule_rejection_does_not_switch_the_global_server(self) -> None:
+        calls: list[str] = []
+
+        async def rejected_connector(proxy_host, *_args, **_kwargs):
+            calls.append(proxy_host)
+            raise socks5.Socks5ReplyError("CONNECT", socks5.REP_CONNECTION_NOT_ALLOWED)
+
+        runtime = UpstreamConnectionExecutor(
+            _config(fallbacks=(_endpoint("uk", "Великобритания", "144.31.213.98"),)),
+            connector=rejected_connector,
+        )
+        for _ in range(8):
+            with self.assertRaises(UpstreamTargetRejectedError):
+                await runtime.open_connection("91.105.192.100", 443)
+
+        self.assertEqual(calls, ["95.128.157.251"] * 8)
+        self.assertEqual(runtime.snapshot().active_name, "Германия 1")
+        self.assertEqual(runtime.snapshot().generation, 1)
+
     async def test_each_connection_dials_only_the_global_active_server_once(self) -> None:
         calls: list[str] = []
 
