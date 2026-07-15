@@ -1,11 +1,5 @@
 name: Linux Build
-
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-  workflow_dispatch:
+on: [push, workflow_dispatch]
 
 env:
   PYTHON_VERSION: "3.12"
@@ -28,12 +22,22 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
 
-      - name: Install dependencies
+      - name: Install dependencies (Linux only)
         run: |
           python -m pip install --upgrade pip
-          pip install --upgrade pyinstaller PyQt6 PyQt6-Fluent-Widgets PySocks psutil requests pywin32 wmi httpx qtawesome PyQt6-Frameless-Window darkdetect
+          pip install --upgrade \
+            pyinstaller \
+            PyQt6 \
+            PyQt6-Fluent-Widgets \
+            PySocks \
+            psutil \
+            requests \
+            qtawesome \
+            PyQt6-Frameless-Window \
+            darkdetect \
+            httpx
 
-      # Создаем необходимые файлы конфигурации
+      # pywin32 и winreg не нужны на Linux — их можно не устанавливать
       - name: Prepare config files
         run: |
           mkdir -p src/config
@@ -51,14 +55,13 @@ jobs:
           PREMIUM_API_BASE_URL = ''
           EOF
 
-      - name: Build with PyInstaller
+      - name: Build with PyInstaller (Linux)
         run: |
           cd src
           pyinstaller --onefile --windowed --clean \
             --name=${{ env.APP_NAME }} \
             --icon=app_icon_resources.py \
             --add-data="app_icon_resources.py:." \
-            --hidden-import=winreg \
             main.py
           cd ..
 
