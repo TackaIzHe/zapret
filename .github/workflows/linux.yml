@@ -1,5 +1,8 @@
-name: Linux Build
-on: [push, workflow_dispatch]
+name: Build Zapret (Linux)
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
 
 env:
   PYTHON_VERSION: "3.12"
@@ -11,13 +14,9 @@ jobs:
     timeout-minutes: 60
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
@@ -32,42 +31,49 @@ jobs:
             PySocks \
             psutil \
             requests \
+            urllib3 \
+            tgcrypto \
             qtawesome \
-            PyQt6-Frameless-Window \
             darkdetect \
-            httpx
+            httpx \
+            packaging
 
-      # pywin32 и winreg не нужны на Linux — их можно не устанавливать
-      - name: Prepare config files
+      - name: Generate build files
         run: |
-          mkdir -p src/config
-          cat > src/config/build_info.py << 'EOF'
-          CHANNEL = 'stable'
-          APP_VERSION = '0.0.0.0'
-          EOF
-          cat > src/config/_build_secrets.py << 'EOF'
-          TG_UPDATE_BOT_TOKEN = ''
-          GITHUB_UPDATE_TOKEN = ''
-          TG_LOG_BOT_TOKEN_PROD = ''
-          TG_LOG_BOT_TOKEN_DEV = ''
-          TG_LOG_CHAT_ID = 0
-          UPDATE_SERVERS = []
-          PREMIUM_API_BASE_URL = ''
-          EOF
+          python - << 'PY'
+          import os, pathlib
+          cfg = pathlib.Path("src/config")
+          cfg.mkdir(exist_ok=True)
 
-      - name: Build with PyInstaller (Linux)
+          (cfg / "build_info.py").write_text(
+              "CHANNEL='stable'\nAPP_VERSION='0.0.0.0'\n",
+              encoding="utf-8-sig")
+
+          (cfg / "_build_secrets.py").write_text(
+              "TG_UPDATE_BOT_TOKEN=''\n"
+              "GITHUB_UPDATE_TOKEN=''\n"
+              "TG_LOG_BOT_TOKEN_PROD=''\n"
+              "TG_LOG_BOT_TOKEN_DEV=''\n"
+              "TG_LOG_CHAT_ID=0\n"
+              "UPDATE_SERVERS=[]\n"
+              "PREMIUM_API_BASE_URL=''\n",
+              encoding="utf-8-sig")
+          PY
+
+      - name: Build Linux binary
         run: |
           cd src
-          pyinstaller --onefile --windowed --clean \
-            --name=${{ env.APP_NAME }} \
-            --icon=app_icon_resources.py \
-            --add-data="app_icon_resources.py:." \
+          pyinstaller --noconfirm \
+            --name ${{ env.APP_NAME }} \
+            --onefile \
+            --clean \
+            --windowed \
             main.py
-          cd ..
+          ls -lh dist/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.APP_NAME }}-Linux-x86_64
+          name: Zapret-Linux-x86_64-${{ github.sha }}
           path: src/dist/${{ env.APP_NAME }}
-          retention-days: 7
+          retention-days: 30
