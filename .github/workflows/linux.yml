@@ -1,0 +1,70 @@
+name: Linux Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.12"
+  APP_NAME: "Zapret"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --upgrade pyinstaller PyQt6 PyQt6-Fluent-Widgets PySocks psutil requests pywin32 wmi httpx qtawesome PyQt6-Frameless-Window darkdetect
+
+      # Создаем необходимые файлы конфигурации
+      - name: Prepare config files
+        run: |
+          mkdir -p src/config
+          cat > src/config/build_info.py << 'EOF'
+          CHANNEL = 'stable'
+          APP_VERSION = '0.0.0.0'
+          EOF
+          cat > src/config/_build_secrets.py << 'EOF'
+          TG_UPDATE_BOT_TOKEN = ''
+          GITHUB_UPDATE_TOKEN = ''
+          TG_LOG_BOT_TOKEN_PROD = ''
+          TG_LOG_BOT_TOKEN_DEV = ''
+          TG_LOG_CHAT_ID = 0
+          UPDATE_SERVERS = []
+          PREMIUM_API_BASE_URL = ''
+          EOF
+
+      - name: Build with PyInstaller
+        run: |
+          cd src
+          pyinstaller --onefile --windowed --clean \
+            --name=${{ env.APP_NAME }} \
+            --icon=app_icon_resources.py \
+            --add-data="app_icon_resources.py:." \
+            --hidden-import=winreg \
+            main.py
+          cd ..
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-Linux-x86_64
+          path: src/dist/${{ env.APP_NAME }}
+          retention-days: 7
